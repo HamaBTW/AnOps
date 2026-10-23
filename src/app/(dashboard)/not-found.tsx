@@ -1,4 +1,4 @@
-import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { DashboardShell } from "@/shared/components/layout/dashboard-shell";
 
 export default function NotFound() {
   return (

@@ -1,4 +1,4 @@
-import { AuthCard, Field, Button } from "@/components/auth/auth-form";
+import { AuthCard, Field, Button } from "@/features/auth/components/auth-form";
 import Link from "next/link";
 
 export default function LoginPage() {

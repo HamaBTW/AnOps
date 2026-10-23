@@ -1,5 +1,5 @@
-import { Sidebar } from "@/components/layout/sidebar";
-import { Topbar } from "@/components/layout/topbar";
+import { Sidebar } from "@/shared/components/layout/sidebar";
+import { Topbar } from "@/shared/components/layout/topbar";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (

@@ -3,7 +3,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import clientPromise from "@/lib/mongodb";
+import clientPromise from "@/server/db/client";
 
 const credentialsSchema = z.object({
   email: z.string().email(),

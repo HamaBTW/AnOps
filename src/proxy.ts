@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/server/auth";
 import { NextResponse } from "next/server";
 
 const protectedRoutes = ["/", "/crm", "/sales", "/finance", "/inventory", "/purchasing", "/hr", "/projects", "/documents", "/notifications", "/admin"];

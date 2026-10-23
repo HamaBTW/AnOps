@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { IconArrowRight } from "@/shared/components/ui/brand-icons";
 import Link from "next/link";
 
 const kpis = [
@@ -56,7 +56,7 @@ export default function Page() {
               className="group flex items-center justify-between rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-4 py-3.5 transition-all hover:border-[var(--color-border-control)]"
             >
               <span className="text-sm font-medium text-[var(--color-text-primary)]">{module.name}</span>
-              <ArrowRight className="h-4 w-4 text-[var(--color-text-secondary)] transition-transform group-hover:translate-x-1" />
+              <IconArrowRight size={16} className="text-[var(--color-text-secondary)] transition-transform group-hover:translate-x-1" />
             </Link>
           ))}
         </div>

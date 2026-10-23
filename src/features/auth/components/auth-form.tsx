@@ -14,7 +14,16 @@ export function AuthCard({
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <a href="/" className="inline-flex items-center justify-center mb-6">
-            <img src="/anops-horizontal-logo.svg" alt="AnOps" className="h-8" />
+            <img
+              src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-dark.svg"
+              alt="AnOps"
+              className="h-8 block dark:hidden"
+            />
+            <img
+              src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-white.svg"
+              alt="AnOps"
+              className="h-8 hidden dark:block"
+            />
           </a>
           <h1 className="text-2xl font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">{title}</h1>
           {description && <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{description}</p>}

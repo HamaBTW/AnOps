@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Bell, Menu } from "lucide-react";
+import { IconSearch, IconNotification, IconMenu } from "@/shared/components/ui/brand-icons";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -10,15 +10,18 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <button
           type="button"
           onClick={onMenuClick}
-          className="lg:hidden h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)]"
+          className="lg:hidden h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
           aria-label="Open navigation"
         >
-          <Menu className="h-5 w-5 text-[var(--color-text-secondary)]" />
+          <IconMenu size={18} />
         </button>
       )}
       <div className="flex-1">
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-secondary)]" />
+          <IconSearch
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"
+          />
           <input
             type="search"
             placeholder="Search..."
@@ -28,10 +31,10 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
       <ThemeToggle />
       <button
-        className="relative h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)]"
+        className="relative h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
         aria-label="Notifications"
       >
-        <Bell className="h-4 w-4 text-[var(--color-text-secondary)]" />
+        <IconNotification size={18} />
         <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[var(--color-action-primary)] ring-2 ring-[var(--color-bg-surface)]" />
       </button>
     </header>

@@ -38,17 +38,17 @@
 
 :root.dark,
 html.dark {
-  --color-bg-canvas: #0f1413;
-  --color-bg-surface: #161c1b;
-  --color-bg-subtle: #1f2725;
-  --color-text-primary: #f7f7f2;
-  --color-text-secondary: #9aa5a0;
-  --color-border-subtle: #2a3532;
-  --color-border-control: #3a4542;
-  --color-action-primary: #c8f03e;
-  --color-action-on-primary: #111f1d;
-  --color-action-hover: #d8ff4d;
-  --color-focus-ring: #9db4ff;
+  --color-bg-canvas: #111F1D;
+  --color-bg-surface: #192B27;
+  --color-bg-subtle: #223832;
+  --color-text-primary: #F7F7F2;
+  --color-text-secondary: #B4BFB7;
+  --color-border-subtle: #476158;
+  --color-border-control: #81978B;
+  --color-action-primary: #C8F03E;
+  --color-action-on-primary: #111F1D;
+  --color-action-hover: #B9DE36;
+  --color-focus-ring: #A7C5FF;
   --color-warning-bg: #3a3200;
   --color-warning-border: #d9a800;
   --color-warning-text: #f5e7a3;

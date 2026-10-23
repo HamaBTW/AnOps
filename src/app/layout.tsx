@@ -14,8 +14,11 @@ export const metadata: Metadata = {
     title: "AnOps",
   },
   icons: {
-    icon: "/anops-master-symbol.svg",
-    apple: "/anops-master-symbol.svg",
+    icon: [
+      { url: "/brand-kit/02-app-icons/anops-favicon-32x32.svg", sizes: "32x32", type: "image/svg+xml" },
+      { url: "/brand-kit/02-app-icons/anops-favicon-24x24.svg", sizes: "24x24", type: "image/svg+xml" },
+    ],
+    apple: "/brand-kit/02-app-icons/anops-app-icon-ios-192x192.svg",
   },
 };
 

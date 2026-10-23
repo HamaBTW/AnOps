@@ -4,36 +4,37 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  LayoutGrid,
-  Users,
-  ReceiptText,
-  Wallet,
-  Package,
-  ShoppingCart,
-  FolderKanban,
-  FileText,
-  Bell,
-  Settings,
-  ChevronDown,
-  LogOut,
-  User,
-  HelpCircle,
-  X,
-} from "lucide-react";
+  IconGrid,
+  IconUsers,
+  IconReceipt,
+  IconWallet,
+  IconPackage,
+  IconShoppingCart,
+  IconBarChart,
+  IconDocument,
+  IconNotification,
+  IconSettings,
+  IconChevronDown,
+  IconLogOut,
+  IconUser,
+  IconHelpCircle,
+  IconClose,
+  IconProfileCard,
+} from "@/shared/components/ui/brand-icons";
 import { cn } from "@/shared/lib/utils";
 import { logoutAction } from "@/features/auth/actions/auth.action";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutGrid },
-  { name: "CRM", href: "/crm", icon: Users },
-  { name: "Sales", href: "/sales", icon: ReceiptText },
-  { name: "Finance", href: "/finance", icon: Wallet },
-  { name: "Inventory", href: "/inventory", icon: Package },
-  { name: "Purchasing", href: "/purchasing", icon: ShoppingCart },
-  { name: "Projects", href: "/projects", icon: FolderKanban },
-  { name: "Documents", href: "/documents", icon: FileText },
-  { name: "Notifications", href: "/notifications", icon: Bell },
-  { name: "Administration", href: "/admin", icon: Settings },
+  { name: "Dashboard", href: "/", icon: IconGrid },
+  { name: "CRM", href: "/crm", icon: IconUsers },
+  { name: "Sales", href: "/sales", icon: IconReceipt },
+  { name: "Finance", href: "/finance", icon: IconWallet },
+  { name: "Inventory", href: "/inventory", icon: IconPackage },
+  { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
+  { name: "Projects", href: "/projects", icon: IconBarChart },
+  { name: "Documents", href: "/documents", icon: IconDocument },
+  { name: "Notifications", href: "/notifications", icon: IconNotification },
+  { name: "Administration", href: "/admin", icon: IconSettings },
 ];
 
 type SidebarUser = {
@@ -80,16 +81,26 @@ export function Sidebar({
     >
       <div className="flex h-[72px] items-center justify-between px-4 sm:px-5">
         <Link href="/" className="flex items-center" onClick={onMobileClose}>
-          <img src="/anops-horizontal-logo.svg" alt="AnOps" className="h-7" />
+          {/* Light mode: dark logo; Dark mode: white logo */}
+          <img
+            src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-dark.svg"
+            alt="AnOps"
+            className="h-7 block dark:hidden"
+          />
+          <img
+            src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-white.svg"
+            alt="AnOps"
+            className="h-7 hidden dark:block"
+          />
         </Link>
         {onMobileClose && (
           <button
             type="button"
             onClick={onMobileClose}
-            className="lg:hidden h-10 w-10 flex items-center justify-center rounded-[var(--radius-control)] hover:bg-[var(--color-bg-subtle)]"
+            className="lg:hidden h-10 w-10 flex items-center justify-center rounded-[var(--radius-control)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
             aria-label="Close menu"
           >
-            <X className="h-5 w-5 text-[var(--color-text-secondary)]" />
+            <IconClose size={14} />
           </button>
         )}
       </div>
@@ -114,11 +125,13 @@ export function Sidebar({
                   )}
                 >
                   <item.icon
+                    size={16}
                     className={cn(
-                      "h-4 w-4",
-                      active ? "text-[var(--color-action-on-primary)]" : "text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)]"
+                      "shrink-0",
+                      active
+                        ? "text-[var(--color-action-on-primary)]"
+                        : "text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)]"
                     )}
-                    strokeWidth={1.8}
                   />
                   <span className="truncate">{item.name}</span>
                 </Link>
@@ -134,18 +147,19 @@ export function Sidebar({
           className="group flex w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2.5 min-h-[44px] text-left hover:bg-[var(--color-bg-subtle)]"
         >
           <div className="relative">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[var(--color-bg-subtle)] to-[var(--color-border-subtle)] flex items-center justify-center text-xs font-semibold">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[var(--color-bg-subtle)] to-[var(--color-border-subtle)] flex items-center justify-center text-xs font-semibold text-[var(--color-text-primary)]">
               {initials(user.name)}
             </div>
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#22c55e] ring-2 ring-[var(--color-bg-surface)]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user.name}</p>
+            <p className="text-sm font-medium truncate text-[var(--color-text-primary)]">{user.name}</p>
             <p className="text-xs text-[var(--color-text-secondary)] truncate">{user.email}</p>
           </div>
-          <ChevronDown
+          <IconChevronDown
+            size={14}
             className={cn(
-              "h-4 w-4 text-[var(--color-text-secondary)] transition-transform",
+              "text-[var(--color-text-secondary)] transition-transform shrink-0",
               open && "rotate-180"
             )}
           />
@@ -153,16 +167,16 @@ export function Sidebar({
 
         {open && (
           <div className="mt-1 space-y-0.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-1 shadow-[0_10px_40px_-10px_rgba(17,31,29,0.25)]">
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm hover:bg-[var(--color-bg-subtle)]">
-              <User className="h-4 w-4" />
+            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
+              <IconProfileCard size={16} className="text-[var(--color-text-secondary)]" />
               Profile
             </button>
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm hover:bg-[var(--color-bg-subtle)]">
-              <Settings className="h-4 w-4" />
+            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
+              <IconSettings size={16} className="text-[var(--color-text-secondary)]" />
               Settings
             </button>
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm hover:bg-[var(--color-bg-subtle)]">
-              <HelpCircle className="h-4 w-4" />
+            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
+              <IconHelpCircle size={16} className="text-[var(--color-text-secondary)]" />
               Help
             </button>
             <div className="my-1 h-px bg-[var(--color-border-subtle)]" />
@@ -171,7 +185,7 @@ export function Sidebar({
                 type="submit"
                 className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
               >
-                <LogOut className="h-4 w-4" />
+                <IconLogOut size={16} className="text-[var(--color-text-secondary)]" />
                 Sign out
               </button>
             </form>

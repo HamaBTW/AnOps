@@ -7,6 +7,7 @@ import type { AccountStatus } from "@/server/auth/types";
  * the adapter + credentials provider.
  */
 export const authConfig = {
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [],

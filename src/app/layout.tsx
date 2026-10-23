@@ -118,6 +118,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-theme="light" className="h-full" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('anops:theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className="h-full antialiased bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]"
         style={{

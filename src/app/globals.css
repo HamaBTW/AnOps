@@ -36,6 +36,24 @@
   --radius-pill: 999px;
 }
 
+:root.dark,
+html.dark {
+  --color-bg-canvas: #0f1413;
+  --color-bg-surface: #161c1b;
+  --color-bg-subtle: #1f2725;
+  --color-text-primary: #f7f7f2;
+  --color-text-secondary: #9aa5a0;
+  --color-border-subtle: #2a3532;
+  --color-border-control: #3a4542;
+  --color-action-primary: #c8f03e;
+  --color-action-on-primary: #111f1d;
+  --color-action-hover: #d8ff4d;
+  --color-focus-ring: #9db4ff;
+  --color-warning-bg: #3a3200;
+  --color-warning-border: #d9a800;
+  --color-warning-text: #f5e7a3;
+}
+
 * {
   box-sizing: border-box;
 }

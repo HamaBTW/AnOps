@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, Bell } from "lucide-react";
+import { ThemeToggle } from "@/shared/components/theme-toggle";
 
 export function Topbar() {
   return (
@@ -15,6 +16,7 @@ export function Topbar() {
           />
         </div>
       </div>
+      <ThemeToggle />
       <button
         className="relative h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)]"
         aria-label="Notifications"

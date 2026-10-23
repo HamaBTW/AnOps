@@ -24,6 +24,7 @@ const envSchema = z.object({
   EMAIL_SERVER_USER: z.string().optional(),
   EMAIL_SERVER_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().min(1).optional(),
+  EMAIL_LOGO_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -40,6 +41,7 @@ function loadEnv(): Env {
     EMAIL_SERVER_USER: process.env.EMAIL_SERVER_USER,
     EMAIL_SERVER_PASSWORD: process.env.EMAIL_SERVER_PASSWORD,
     EMAIL_FROM: process.env.EMAIL_FROM,
+    EMAIL_LOGO_URL: process.env.EMAIL_LOGO_URL,
   });
 
   if (!parsed.success) {

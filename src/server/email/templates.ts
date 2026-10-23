@@ -1,4 +1,4 @@
-import { getAppUrl } from "@/config/env";
+import { env, getAppUrl } from "@/config/env";
 
 const COLORS = {
   canvas: "#f7f7f2",
@@ -15,10 +15,11 @@ type RenderedEmail = {
   text: string;
 };
 
-const LOGO_URL = "https://i.ibb.co/dwVPDPVh/anops-horizontal-logo.png";
+const DEFAULT_LOGO_URL = "https://i.ibb.co/dwVPDPVh/anops-horizontal-logo.png";
 
 function layout(heading: string, body: string, ctaLabel: string, ctaUrl: string): string {
-  const logoMarkup = `<img src="${LOGO_URL}" alt="AnOps" width="212" height="64" style="display:block;margin:0 auto;width:212px;height:64px;border:0;outline:none;text-decoration:none;" />`;
+  const logoUrl = env.EMAIL_LOGO_URL ?? DEFAULT_LOGO_URL;
+  const logoMarkup = `<img src="${escapeHtml(logoUrl)}" alt="AnOps" width="212" height="64" style="display:block;margin:0 auto;width:212px;height:64px;border:0;outline:none;text-decoration:none;" />`;
 
   return `<!doctype html>
 <html lang="en">

@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-theme="light" className="h-full" suppressHydrationWarning>
-      <body className="h-full antialiased">
+      <body className="h-full antialiased bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]">
         <DashboardShell>{children}</DashboardShell>
       </body>
     </html>

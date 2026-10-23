@@ -1,10 +1,10 @@
 "use server";
 
-import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import clientPromise from "@/server/db/client";
 import { registerSchema } from "@/features/auth/schemas/auth.schema";
+import { sendVerificationEmail } from "@/server/email";
 
 export type RegisterResult = {
   ok: boolean;
@@ -45,9 +45,10 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
       updatedAt: new Date(),
     });
 
-    if (process.env.NODE_ENV !== "production") {
-      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-      console.info(`[auth] Verify email for ${normalizedEmail}: ${baseUrl}/verify?token=${verificationToken}`);
+    try {
+      await sendVerificationEmail(normalizedEmail, name.trim(), verificationToken);
+    } catch (mailError) {
+      console.error("sendVerificationEmail error", mailError);
     }
 
     return { ok: true, message: "Account created. Check your email to verify." };

@@ -3,6 +3,7 @@
 import { randomBytes } from "crypto";
 import clientPromise from "@/server/db/client";
 import { forgotPasswordSchema } from "@/features/auth/schemas/auth.schema";
+import { sendPasswordResetEmail } from "@/server/email";
 
 export type ForgotPasswordResult = {
   ok: boolean;
@@ -36,9 +37,10 @@ export async function requestPasswordReset(data: unknown): Promise<ForgotPasswor
         }
       );
 
-      if (process.env.NODE_ENV !== "production") {
-        const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-        console.info(`[auth] Password reset for ${email}: ${baseUrl}/reset-password?token=${token}`);
+      try {
+        await sendPasswordResetEmail(email, (user.name as string) || email, token);
+      } catch (mailError) {
+        console.error("sendPasswordResetEmail error", mailError);
       }
     }
 

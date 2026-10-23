@@ -149,6 +149,15 @@ Every form validates on **both** sides using the **same Zod schema** (single sou
 - **Server errors**: actions return `{ error }` / `{ success }`; forms surface them as a root alert.
 - **Rules**: trim strings, enforce password strength (min 8, letter + number, max 72), validate tokens (`/verify`, `/reset-password`), and normalize email to lowercase before DB use.
 
+## Email (Verification + Password Reset)
+
+- **Module**: `src/server/email/` — `client.ts` (nodemailer transport), `templates.ts` (branded HTML/text), `index.ts` (`sendVerificationEmail`, `sendPasswordResetEmail`).
+- **Config**: `src/config/env.ts` validates `EMAIL_SERVER_HOST`, `EMAIL_SERVER_PORT`, `EMAIL_SERVER_SECURE` (`"true"`/`"false"`), `EMAIL_SERVER_USER`, `EMAIL_SERVER_PASSWORD`, `EMAIL_FROM`. All optional.
+- **Dev fallback**: when `EMAIL_SERVER_HOST` or `EMAIL_FROM` is unset, `sendMail` logs the email to the server console (including the link) instead of sending. In production it throws.
+- **Never block auth**: registration/reset actions wrap sends in `try/catch` and log failures, so a mail outage can't break sign-up or reset requests.
+- **Links** use `NEXTAUTH_URL` via `getAppUrl()`: `/verify?token=…` (24h) and `/reset-password?token=…` (1h).
+- Requires `nodemailer` (installed) and `@types/nodemailer` (dev).
+
 ## PWA
 
 - `public/manifest.json` - icons, standalone display, theme color.

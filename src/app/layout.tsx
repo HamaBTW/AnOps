@@ -27,25 +27,87 @@ export const viewport: Viewport = {
 };
 
 const devRecoveryShim = `(function () {
-  var KEY = "anops:last-recovery";
-  function shouldRecover() {
-    if (document.documentElement.dataset.hydrated === "true") return false;
-    var last = Number(sessionStorage.getItem(KEY) || "0");
-    if (Date.now() - last < 2000) return false;
-    sessionStorage.setItem(KEY, String(Date.now()));
+  var RECOVERY_KEY = "anops:last-recovery";
+  var HIDDEN_KEY = "anops:hidden-at";
+  var ATTEMPTS_KEY = "anops:recovery-attempts";
+
+  function hydrated() {
+    return document.documentElement.dataset.hydrated === "true";
+  }
+
+  function shouldRecover(reason) {
+    if (hydrated()) return false;
+    var now = Date.now();
+    var last = Number(sessionStorage.getItem(RECOVERY_KEY) || "0");
+    if (now - last < 1500) return false;
+    var attempts = Number(sessionStorage.getItem(ATTEMPTS_KEY) || "0");
+    if (attempts >= 2) return false;
+    sessionStorage.setItem(RECOVERY_KEY, String(now));
+    sessionStorage.setItem(ATTEMPTS_KEY, String(attempts + 1));
+    try { console.warn("[anops:dev-recovery] white screen detected, reloading (" + reason + ")"); } catch (e) {}
     return true;
   }
-  function recover() {
-    if (shouldRecover()) location.reload();
-  }
-  window.addEventListener("pageshow", function (e) {
-    var nav = performance.getEntriesByType("navigation")[0] || {};
-    if (e.persisted || nav.type === "back_forward") recover();
-  });
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") {
-      setTimeout(recover, 250);
+
+  function recover(reason) {
+    if (shouldRecover(reason)) {
+      location.reload();
     }
+  }
+
+  window.addEventListener("pagehide", function (e) {
+    try { sessionStorage.setItem(HIDDEN_KEY, String(Date.now())); } catch (err) {}
+    if (e.persisted) {
+      try { sessionStorage.setItem("anops:bfcache", "1"); } catch (err) {}
+    }
+  });
+
+  window.addEventListener("pageshow", function (e) {
+    try { sessionStorage.removeItem(ATTEMPTS_KEY); } catch (err) {}
+    var nav = performance.getEntriesByType("navigation")[0] || {};
+    var navType = nav.type || "";
+    var bfcache = false;
+    try { bfcache = sessionStorage.getItem("anops:bfcache") === "1"; sessionStorage.removeItem("anops:bfcache"); } catch (err) {}
+    var hiddenAt = Number(sessionStorage.getItem(HIDDEN_KEY) || "0");
+    var wasHiddenRecently = hiddenAt && Date.now() - hiddenAt < 10000;
+
+    if (e.persisted || bfcache || navType === "back_forward" || navType === "reload") {
+      if (!hydrated()) {
+        setTimeout(function () { recover("bfcache/pageshow"); }, 150);
+        return;
+      }
+    }
+
+    if (wasHiddenRecently && !hydrated()) {
+      setTimeout(function () { recover("return-from-app"); }, 200);
+    }
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      try { sessionStorage.setItem(HIDDEN_KEY, String(Date.now())); } catch (err) {}
+      return;
+    }
+
+    if (document.visibilityState === "visible") {
+      setTimeout(function () {
+        if (!hydrated()) recover("visibility-visible");
+      }, 200);
+      setTimeout(function () {
+        if (!hydrated()) recover("visibility-visible-late");
+      }, 800);
+    }
+  });
+
+  window.addEventListener("focus", function () {
+    setTimeout(function () {
+      if (!hydrated()) recover("focus");
+    }, 150);
+  });
+
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      if (!hydrated()) recover("onload-check");
+    }, 1000);
   });
 })();`;
 

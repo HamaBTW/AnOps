@@ -1,5 +1,3 @@
-import { readFileSync } from "fs";
-import { join } from "path";
 import { getAppUrl } from "@/config/env";
 
 const COLORS = {
@@ -17,25 +15,10 @@ type RenderedEmail = {
   text: string;
 };
 
-function getLogoSvg(): string {
-  try {
-    const logoPath = join(process.cwd(), "public", "anops-horizontal-logo.svg");
-    const svg = readFileSync(logoPath, "utf8")
-      .replace(/\r?\n/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    return svg;
-  } catch {
-    return "";
-  }
-}
-
-const LOGO_SVG = getLogoSvg();
+const LOGO_URL = "https://i.ibb.co/dwVPDPVh/anops-horizontal-logo.png";
 
 function layout(heading: string, body: string, ctaLabel: string, ctaUrl: string): string {
-  const logoMarkup = LOGO_SVG
-    ? `<div style="display:inline-block;line-height:0;">${LOGO_SVG.replace(/width="[^"]*"/, 'width="106"').replace(/height="[^"]*"/, 'height="32"')}</div>`
-    : '<span style="font-family:Manrope, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;font-size:22px;font-weight:800;letter-spacing:-0.03em;color:#111f1d;">AnOps</span>';
+  const logoMarkup = `<img src="${LOGO_URL}" alt="AnOps" width="212" height="64" style="display:block;margin:0 auto;width:212px;height:64px;border:0;outline:none;text-decoration:none;" />`;
 
   return `<!doctype html>
 <html lang="en">
@@ -55,7 +38,7 @@ function layout(heading: string, body: string, ctaLabel: string, ctaUrl: string)
               </td>
             </tr>
             <tr>
-              <td style="background:${COLORS.surface};border:1px solid ${COLORS.border};border-radius:12px;padding:32px;text-align:left;">
+              <td align="left" style="background:${COLORS.surface};border:1px solid ${COLORS.border};border-radius:12px;padding:32px;text-align:left;">
                 <h1 style="margin:0 0 12px 0;font-family:Manrope, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;font-size:20px;line-height:28px;font-weight:800;letter-spacing:-0.03em;color:${COLORS.ink};text-align:left;">${escapeHtml(heading)}</h1>
                 <div style="font-size:14px;line-height:22px;color:${COLORS.ink};text-align:left;">${body}</div>
                 <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:24px auto 0 auto;">

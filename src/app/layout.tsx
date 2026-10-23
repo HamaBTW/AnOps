@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { DashboardShell } from "@/components/layout/dashboard-shell";
 
 export const metadata: Metadata = {
   title: "AnOps | One platform. Every operation.",
@@ -15,7 +14,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="light" className="h-full" suppressHydrationWarning>
       <body className="h-full antialiased bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]">
-        <DashboardShell>{children}</DashboardShell>
+        {children}
       </body>
     </html>
   );

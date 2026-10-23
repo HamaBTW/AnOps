@@ -84,7 +84,7 @@ export function Sidebar({ className }: { className?: string }) {
         </ul>
       </nav>
 
-      <div className="border-t border-[var(--color-border-subtle)] p-2">
+      <div className="mt-auto border-t border-[var(--color-border-subtle)] p-2">
         <button
           onClick={() => setOpen(!open)}
           className="group flex w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2 text-left hover:bg-[var(--color-bg-subtle)]"
@@ -108,7 +108,7 @@ export function Sidebar({ className }: { className?: string }) {
         </button>
 
         {open && (
-          <div className="mt-1 space-y-0.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-1 shadow-[var(--shadow-raised)]">
+          <div className="mt-1 space-y-0.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-1 shadow-[0_10px_40px_-10px_rgba(17,31,29,0.25)]">
             <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm hover:bg-[var(--color-bg-subtle)]">
               <User className="h-4 w-4" />
               Profile
@@ -122,7 +122,7 @@ export function Sidebar({ className }: { className?: string }) {
               Help
             </button>
             <div className="my-1 h-px bg-[var(--color-border-subtle)]" />
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-status-error)] hover:bg-[var(--color-status-error-bg)]">
+            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
               <LogOut className="h-4 w-4" />
               Sign out
             </button>

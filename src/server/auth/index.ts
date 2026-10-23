@@ -2,9 +2,11 @@ import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import type { ObjectId } from "mongodb";
 import clientPromise from "@/server/db/client";
 import { loginSchema } from "@/features/auth/schemas/auth.schema";
 import { authConfig } from "@/server/auth/config";
+import { issueVerificationEmail } from "@/server/auth/verification";
 import type { AccountStatus } from "@/server/auth/types";
 
 class BannedError extends CredentialsSignin {
@@ -54,6 +56,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           (user.emailVerified ? "active" : "unverified");
 
         console.info(`[auth] sign-in authorized for ${normalizedEmail} (status=${status})`);
+
+        if (status === "unverified") {
+          const outcome = await issueVerificationEmail(
+            {
+              _id: user._id as ObjectId,
+              email: user.email,
+              name: user.name,
+              status: user.status,
+              emailVerified: user.emailVerified,
+              verificationSentAt: user.verificationSentAt,
+            },
+            { force: false }
+          );
+
+          if (outcome.status === "sent") {
+            console.info(`[auth] auto verification email sent to ${normalizedEmail}`);
+          } else if (outcome.status === "throttled") {
+            console.info(
+              `[auth] auto verification email skipped for ${normalizedEmail} (one was sent less than 1 minute ago)`
+            );
+          }
+        }
 
         return {
           id: user._id.toString(),

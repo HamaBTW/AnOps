@@ -1,10 +1,13 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
 import clientPromise from "@/server/db/client";
 import { registerSchema } from "@/features/auth/schemas/auth.schema";
-import { sendVerificationEmail } from "@/server/email";
+import {
+  issueVerificationEmail,
+  type IssueVerificationOutcome,
+  type VerificationUser,
+} from "@/server/auth/verification";
 
 export type RegisterResult = {
   ok: boolean;
@@ -15,6 +18,13 @@ export type RegisterResult = {
     error?: string;
   };
 };
+
+function toEmailState(outcome: IssueVerificationOutcome): RegisterResult["email"] {
+  if (outcome.status === "failed") {
+    return { delivered: false, reason: outcome.reason, error: outcome.error };
+  }
+  return { delivered: true };
+}
 
 export async function registerUser(data: unknown): Promise<RegisterResult> {
   const parsed = registerSchema.safeParse(data);
@@ -33,46 +43,53 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
 
     const existing = await users.findOne({ email: normalizedEmail });
     if (existing) {
+      const isUnverified = existing.status === "unverified" || !existing.emailVerified;
+      if (isUnverified && existing.status !== "banned") {
+        console.warn(
+          `[auth] register: ${normalizedEmail} already exists but is unverified — resending verification`
+        );
+        const outcome = await issueVerificationEmail(existing as VerificationUser, { force: true });
+        return {
+          ok: true,
+          message: "This email is already registered but not verified. A new verification link has been sent.",
+          email: toEmailState(outcome),
+        };
+      }
+
       console.warn(`[auth] register blocked: ${normalizedEmail} already exists`);
       return { ok: false, message: "An account with this email already exists" };
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const verificationToken = randomBytes(32).toString("hex");
+    const now = new Date();
 
-    await users.insertOne({
+    const inserted = await users.insertOne({
       name: name.trim(),
       email: normalizedEmail,
       password: hashedPassword,
       emailVerified: null,
       status: "unverified",
-      verificationToken,
-      verificationTokenExpires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     });
 
-    let email: RegisterResult["email"];
-    try {
-      const mailResult = await sendVerificationEmail(
-        normalizedEmail,
-        name.trim(),
-        verificationToken
-      );
-      email = mailResult.delivered
-        ? { delivered: true }
-        : { delivered: false, reason: mailResult.reason, error: mailResult.error };
-    } catch (mailError) {
-      console.error("[auth] Unexpected error sending verification email", mailError);
-      email = { delivered: false, reason: "error", error: String(mailError) };
-    }
+    const outcome = await issueVerificationEmail(
+      {
+        _id: inserted.insertedId,
+        email: normalizedEmail,
+        name: name.trim(),
+        status: "unverified",
+      },
+      { force: true }
+    );
 
     return {
       ok: true,
-      message: email.delivered
-        ? "Account created. Check your email to verify."
-        : "Account created, but the verification email could not be sent.",
-      email,
+      message:
+        outcome.status === "sent"
+          ? "Account created. Check your email to verify."
+          : "Account created, but the verification email could not be sent.",
+      email: toEmailState(outcome),
     };
   } catch (error) {
     console.error("registerUser error", error);

@@ -1,9 +1,11 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import clientPromise from "@/server/db/client";
 import { forgotPasswordSchema } from "@/features/auth/schemas/auth.schema";
-import { sendVerificationEmail } from "@/server/email";
+import {
+  issueVerificationEmail,
+  type VerificationUser,
+} from "@/server/auth/verification";
 
 export type ResendVerificationResult = {
   error?: string;
@@ -47,29 +49,12 @@ export async function resendVerificationAction(
       return { success: GENERIC_SUCCESS };
     }
 
-    const token = randomBytes(32).toString("hex");
-    await users.updateOne(
-      { _id: user._id },
-      {
-        $set: {
-          status: "unverified",
-          verificationToken: token,
-          verificationTokenExpires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-          updatedAt: new Date(),
-        },
-      }
-    );
+    const outcome = await issueVerificationEmail(user as VerificationUser, { force: true });
 
-    const name = typeof user.name === "string" && user.name.length > 0 ? user.name : email;
-    const mailResult = await sendVerificationEmail(email, name, token);
-
-    if (!mailResult.delivered) {
-      console.error(
-        `[auth] verification email NOT delivered to ${email} (reason=${mailResult.reason ?? "unknown"}${mailResult.error ? `, error=${mailResult.error}` : ""})`
-      );
+    if (outcome.status === "failed") {
       return {
         warning:
-          mailResult.reason === "not_configured"
+          outcome.reason === "not_configured"
             ? "Email delivery is not configured on this server. In development, the verification link is printed in the server console."
             : "We couldn't send the verification email. Please check the server logs and try again.",
       };

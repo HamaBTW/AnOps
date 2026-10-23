@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { getAppUrl } from "@/config/env";
 
 const COLORS = {
@@ -15,8 +17,25 @@ type RenderedEmail = {
   text: string;
 };
 
+function getLogoSvg(): string {
+  try {
+    const logoPath = join(process.cwd(), "public", "anops-horizontal-logo.svg");
+    const svg = readFileSync(logoPath, "utf8")
+      .replace(/\r?\n/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return svg;
+  } catch {
+    return "";
+  }
+}
+
+const LOGO_SVG = getLogoSvg();
+
 function layout(heading: string, body: string, ctaLabel: string, ctaUrl: string): string {
-  const logoUrl = `${getAppUrl()}/anops-horizontal-logo.svg`;
+  const logoMarkup = LOGO_SVG
+    ? `<div style="display:inline-block;line-height:0;">${LOGO_SVG.replace(/width="[^"]*"/, 'width="106"').replace(/height="[^"]*"/, 'height="32"')}</div>`
+    : '<span style="font-family:Manrope, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;font-size:22px;font-weight:800;letter-spacing:-0.03em;color:#111f1d;">AnOps</span>';
 
   return `<!doctype html>
 <html lang="en">
@@ -26,34 +45,34 @@ function layout(heading: string, body: string, ctaLabel: string, ctaUrl: string)
     <title>AnOps</title>
   </head>
   <body style="margin:0;background:${COLORS.canvas};font-family:Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;color:${COLORS.ink};-webkit-font-smoothing:antialiased;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.canvas};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" align="center" style="background:${COLORS.canvas};">
       <tr>
         <td align="center" style="padding:32px 16px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" align="center" style="max-width:520px;margin:0 auto;">
             <tr>
-              <td align="center" style="padding:0 0 24px 0;">
-                <img src="${logoUrl}" alt="AnOps" height="32" style="display:block;height:32px;width:auto;border:0;" />
+              <td align="center" style="padding:0 0 24px 0;text-align:center;">
+                ${logoMarkup}
               </td>
             </tr>
             <tr>
-              <td style="background:${COLORS.surface};border:1px solid ${COLORS.border};border-radius:12px;padding:32px;">
-                <h1 style="margin:0 0 12px 0;font-family:Manrope, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;font-size:20px;line-height:28px;font-weight:800;letter-spacing:-0.03em;color:${COLORS.ink};">${escapeHtml(heading)}</h1>
-                <div style="font-size:14px;line-height:22px;color:${COLORS.ink};">${body}</div>
-                <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+              <td style="background:${COLORS.surface};border:1px solid ${COLORS.border};border-radius:12px;padding:32px;text-align:left;">
+                <h1 style="margin:0 0 12px 0;font-family:Manrope, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;font-size:20px;line-height:28px;font-weight:800;letter-spacing:-0.03em;color:${COLORS.ink};text-align:left;">${escapeHtml(heading)}</h1>
+                <div style="font-size:14px;line-height:22px;color:${COLORS.ink};text-align:left;">${body}</div>
+                <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:24px auto 0 auto;">
                   <tr>
                     <td align="center" style="border-radius:8px;background:${COLORS.citron};">
                       <a href="${ctaUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;line-height:20px;font-weight:700;color:${COLORS.ink};text-decoration:none;">${escapeHtml(ctaLabel)}</a>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:20px 0 0 0;font-size:12px;line-height:18px;color:${COLORS.secondary};word-break:break-all;">
+                <p style="margin:20px 0 0 0;font-size:12px;line-height:18px;color:${COLORS.secondary};word-break:break-all;text-align:left;">
                   If the button doesn&apos;t work, copy and paste this link into your browser:<br />
                   <a href="${ctaUrl}" style="color:${COLORS.secondary};text-decoration:underline;">${ctaUrl}</a>
                 </p>
               </td>
             </tr>
             <tr>
-              <td align="center" style="padding:20px 0 0 0;font-size:12px;line-height:18px;color:${COLORS.secondary};">
+              <td align="center" style="padding:20px 0 0 0;font-size:12px;line-height:18px;color:${COLORS.secondary};text-align:center;">
                 &copy; ${new Date().getFullYear()} AnOps. One platform. Every operation.
               </td>
             </tr>

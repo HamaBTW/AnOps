@@ -1,16 +1,23 @@
 "use server";
 
+import { z } from "zod";
 import clientPromise from "@/server/db/client";
+
+const verifySchema = z.object({
+  token: z.string().trim().min(16, "Invalid verification token"),
+});
 
 export type VerifyEmailResult = {
   ok: boolean;
   message: string;
 };
 
-export async function verifyEmail(token: string): Promise<VerifyEmailResult> {
-  if (!token) {
-    return { ok: false, message: "Missing verification token" };
+export async function verifyEmail(rawToken: string): Promise<VerifyEmailResult> {
+  const parsed = verifySchema.safeParse({ token: rawToken });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid verification token" };
   }
+  const token = parsed.data.token;
 
   try {
     const client = await clientPromise;

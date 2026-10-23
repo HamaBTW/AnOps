@@ -139,6 +139,16 @@ src/
 - `(dashboard)` routes call `requireActive()` in the layout (defense-in-depth) AND are guarded by `proxy.ts`.
 - Forms use client components with `useActionState` for inline errors; actions return `{ error?, success? }` or `redirect()`.
 
+## Validation (Client + Server)
+
+Every form validates on **both** sides using the **same Zod schema** (single source of truth).
+
+- **Schemas** live in `src/features/<feature>/schemas/*.schema.ts` and export inferred types.
+- **Client**: forms use `react-hook-form` + `zodResolver` (mode `onBlur`). Inputs use `TextField` (`src/shared/components/ui/text-field.tsx`) which renders accessible `aria-invalid`/`aria-describedby` errors. Forms use `noValidate` and never rely on native browser validation.
+- **Server**: server actions and `authorize()` re-run the identical schema. Never trust the client. Helpers live in `src/shared/lib/validation.ts` (`parseWithSchema`, `toFieldErrors`).
+- **Server errors**: actions return `{ error }` / `{ success }`; forms surface them as a root alert.
+- **Rules**: trim strings, enforce password strength (min 8, letter + number, max 72), validate tokens (`/verify`, `/reset-password`), and normalize email to lowercase before DB use.
+
 ## PWA
 
 - `public/manifest.json` - icons, standalone display, theme color.

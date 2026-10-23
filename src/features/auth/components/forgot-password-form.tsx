@@ -1,26 +1,61 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Field, Button } from "@/features/auth/components/auth-form";
-import { forgotPasswordAction, type FormState } from "@/features/auth/actions/auth.action";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { TextField } from "@/shared/components/ui/text-field";
+import { Button } from "@/features/auth/components/auth-form";
+import { forgotPasswordAction } from "@/features/auth/actions/auth.action";
+import { forgotPasswordSchema, type ForgotPasswordInput } from "@/features/auth/schemas/auth.schema";
 
 export function ForgotPasswordForm() {
-  const [state, action, pending] = useActionState<FormState, FormData>(forgotPasswordAction, {});
+  const [serverError, setServerError] = useState<string>();
+  const [success, setSuccess] = useState<string>();
+  const [pending, startTransition] = useTransition();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ForgotPasswordInput>({
+    resolver: zodResolver(forgotPasswordSchema),
+    mode: "onBlur",
+    defaultValues: { email: "" },
+  });
+
+  const onSubmit = (values: ForgotPasswordInput) => {
+    setServerError(undefined);
+    setSuccess(undefined);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("email", values.email);
+      const result = await forgotPasswordAction({}, formData);
+      if (result?.error) setServerError(result.error);
+      if (result?.success) setSuccess(result.success);
+    });
+  };
 
   return (
-    <form action={action} className="space-y-4">
-      {state.error && (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      {serverError && (
         <p role="alert" className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
-          {state.error}
+          {serverError}
         </p>
       )}
-      {state.success && (
+      {success && (
         <p role="status" className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
-          {state.success}
+          {success}
         </p>
       )}
-      <Field label="Email" name="email" type="email" placeholder="you@company.com" autoComplete="email" />
+      <TextField
+        {...register("email")}
+        label="Email"
+        type="email"
+        placeholder="you@company.com"
+        autoComplete="email"
+        error={errors.email?.message}
+      />
       <Button type="submit" variant="primary" className="w-full" disabled={pending}>
         {pending ? "Sending…" : "Send reset link"}
       </Button>

@@ -12,6 +12,7 @@ import { forgotPasswordSchema, type ForgotPasswordInput } from "@/features/auth/
 export function ForgotPasswordForm() {
   const [serverError, setServerError] = useState<string>();
   const [success, setSuccess] = useState<string>();
+  const [warning, setWarning] = useState<string>();
   const [pending, startTransition] = useTransition();
 
   const {
@@ -27,12 +28,14 @@ export function ForgotPasswordForm() {
   const onSubmit = (values: ForgotPasswordInput) => {
     setServerError(undefined);
     setSuccess(undefined);
+    setWarning(undefined);
     startTransition(async () => {
       const formData = new FormData();
       formData.set("email", values.email);
       const result = await forgotPasswordAction({}, formData);
       if (result?.error) setServerError(result.error);
       if (result?.success) setSuccess(result.success);
+      if (result?.warning) setWarning(result.warning);
     });
   };
 
@@ -46,6 +49,15 @@ export function ForgotPasswordForm() {
       {success && (
         <p role="status" className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
           {success}
+        </p>
+      )}
+      {warning && (
+        <p
+          role="alert"
+          className="rounded-[var(--radius-control)] border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-3 py-2 text-sm text-[var(--color-warning-text)]"
+        >
+          <span className="font-semibold">Email not sent. </span>
+          {warning}
         </p>
       )}
       <TextField

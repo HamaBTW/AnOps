@@ -10,7 +10,15 @@ import { resetPassword } from "@/features/auth/actions/password-reset.action";
 export type FormState = {
   error?: string;
   success?: string;
+  warning?: string;
 };
+
+function emailFailureWarning(reason: "not_configured" | "error" | undefined, kind: "reset" | "verify"): string {
+  if (reason === "not_configured") {
+    return `We couldn't send the ${kind === "reset" ? "reset" : "verification"} email because email delivery is not configured on this server. In development, the link is printed in the server console.`;
+  }
+  return `We couldn't send the ${kind === "reset" ? "reset" : "verification"} email. Please check the server logs and try again.`;
+}
 
 export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const email = formData.get("email") as string;
@@ -47,6 +55,10 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
     return { error: result.message };
   }
 
+  if (!result.email?.delivered) {
+    redirect(`/unverified?delivery=${result.email?.reason ?? "error"}`);
+  }
+
   redirect("/unverified");
 }
 
@@ -55,6 +67,10 @@ export async function forgotPasswordAction(_prev: FormState, formData: FormData)
 
   if (!result.ok) {
     return { error: result.message };
+  }
+
+  if (result.emailAttempted && !result.emailDelivered) {
+    return { warning: emailFailureWarning(result.emailReason, "reset") };
   }
 
   return { success: result.message };

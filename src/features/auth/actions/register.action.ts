@@ -9,6 +9,11 @@ import { sendVerificationEmail } from "@/server/email";
 export type RegisterResult = {
   ok: boolean;
   message: string;
+  email?: {
+    delivered: boolean;
+    reason?: "not_configured" | "error";
+    error?: string;
+  };
 };
 
 export async function registerUser(data: unknown): Promise<RegisterResult> {
@@ -19,6 +24,7 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
 
   const { name, email, password } = parsed.data;
   const normalizedEmail = email.toLowerCase().trim();
+  console.info(`[auth] register: creating account for ${normalizedEmail}`);
 
   try {
     const client = await clientPromise;
@@ -27,6 +33,7 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
 
     const existing = await users.findOne({ email: normalizedEmail });
     if (existing) {
+      console.warn(`[auth] register blocked: ${normalizedEmail} already exists`);
       return { ok: false, message: "An account with this email already exists" };
     }
 
@@ -45,13 +52,28 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
       updatedAt: new Date(),
     });
 
+    let email: RegisterResult["email"];
     try {
-      await sendVerificationEmail(normalizedEmail, name.trim(), verificationToken);
+      const mailResult = await sendVerificationEmail(
+        normalizedEmail,
+        name.trim(),
+        verificationToken
+      );
+      email = mailResult.delivered
+        ? { delivered: true }
+        : { delivered: false, reason: mailResult.reason, error: mailResult.error };
     } catch (mailError) {
-      console.error("sendVerificationEmail error", mailError);
+      console.error("[auth] Unexpected error sending verification email", mailError);
+      email = { delivered: false, reason: "error", error: String(mailError) };
     }
 
-    return { ok: true, message: "Account created. Check your email to verify." };
+    return {
+      ok: true,
+      message: email.delivered
+        ? "Account created. Check your email to verify."
+        : "Account created, but the verification email could not be sent.",
+      email,
+    };
   } catch (error) {
     console.error("registerUser error", error);
     return { ok: false, message: "Something went wrong. Please try again." };

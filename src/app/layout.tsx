@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { PwaRegister } from "@/shared/components/pwa-register";
+import { HydrationMarker } from "@/shared/components/hydration-marker";
 
 export const metadata: Metadata = {
   title: "AnOps | One platform. Every operation.",
@@ -24,6 +26,29 @@ export const viewport: Viewport = {
   themeColor: "#111f1d",
 };
 
+const devRecoveryShim = `(function () {
+  var KEY = "anops:last-recovery";
+  function shouldRecover() {
+    if (document.documentElement.dataset.hydrated === "true") return false;
+    var last = Number(sessionStorage.getItem(KEY) || "0");
+    if (Date.now() - last < 2000) return false;
+    sessionStorage.setItem(KEY, String(Date.now()));
+    return true;
+  }
+  function recover() {
+    if (shouldRecover()) location.reload();
+  }
+  window.addEventListener("pageshow", function (e) {
+    var nav = performance.getEntriesByType("navigation")[0] || {};
+    if (e.persisted || nav.type === "back_forward") recover();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") {
+      setTimeout(recover, 250);
+    }
+  });
+})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -39,6 +64,12 @@ export default function RootLayout({
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
+        {process.env.NODE_ENV === "development" && (
+          <Script id="anops-dev-recovery" strategy="beforeInteractive">
+            {devRecoveryShim}
+          </Script>
+        )}
+        <HydrationMarker />
         <PwaRegister />
         {children}
       </body>

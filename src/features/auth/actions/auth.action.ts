@@ -55,11 +55,14 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
     return { error: result.message };
   }
 
+  const params = new URLSearchParams();
+  const email = String(formData.get("email") ?? "").toLowerCase().trim();
+  if (email) params.set("email", email);
   if (!result.email?.delivered) {
-    redirect(`/unverified?delivery=${result.email?.reason ?? "error"}`);
+    params.set("delivery", result.email?.reason ?? "error");
   }
 
-  redirect("/unverified");
+  redirect(`/unverified?${params.toString()}`);
 }
 
 export async function forgotPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {

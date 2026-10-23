@@ -11,7 +11,14 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 
   // Email / SMTP (optional; when unset, dev falls back to console logging)
-  EMAIL_SERVER_HOST: z.string().min(1).optional(),
+  EMAIL_SERVER_HOST: z
+    .string()
+    .min(1)
+    .refine(
+      (value) => !value.includes("://"),
+      "EMAIL_SERVER_HOST must be a hostname (e.g. smtp.gmail.com), not a URL"
+    )
+    .optional(),
   EMAIL_SERVER_PORT: z.coerce.number().int().positive().optional(),
   EMAIL_SERVER_SECURE: booleanString.optional(),
   EMAIL_SERVER_USER: z.string().optional(),

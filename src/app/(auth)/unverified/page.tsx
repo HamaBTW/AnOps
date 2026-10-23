@@ -1,13 +1,16 @@
 import { AuthCard } from "@/features/auth/components/auth-form";
 import { ResendVerificationForm } from "@/features/auth/components/resend-verification-form";
+import { auth } from "@/server/auth";
 import Link from "next/link";
 
 export default async function UnverifiedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ delivery?: string }>;
+  searchParams: Promise<{ delivery?: string; email?: string }>;
 }) {
   const params = await searchParams;
+  const session = await auth();
+  const email = session?.user?.email ?? params.email;
   const delivery = params.delivery;
   const failed = delivery === "not_configured" || delivery === "error";
 
@@ -26,11 +29,16 @@ export default async function UnverifiedPage({
           </p>
         ) : (
           <p className="text-sm text-[var(--color-text-secondary)]">
-            We&apos;ve sent a verification link to your email. Please verify to activate your
-            account.
+            We&apos;ve sent a verification link to{" "}
+            {email ? (
+              <span className="font-semibold text-[var(--color-text-primary)]">{email}</span>
+            ) : (
+              "your email"
+            )}
+            . Please verify to activate your account.
           </p>
         )}
-        <ResendVerificationForm />
+        <ResendVerificationForm email={email} />
         <Link
           href="/login"
           className="inline-flex h-12 items-center justify-center w-full rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-sm font-semibold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)]"

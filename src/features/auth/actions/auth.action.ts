@@ -1,28 +1,41 @@
-import { auth, signIn } from "@/server/auth";
+"use server";
+
+import { auth, signIn, signOut } from "@/server/auth";
 import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
 import { registerUser } from "@/features/auth/actions/register.action";
-import { requestPasswordReset } from "@/features/auth/actions/password-reset.action";
+import { requestPasswordReset } from "@/features/auth/actions/password-reset-request.action";
 import { resetPassword } from "@/features/auth/actions/password-reset.action";
 
-export async function loginAction(formData: FormData) {
-  "use server";
+export type FormState = {
+  error?: string;
+  success?: string;
+};
+
+export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const callbackUrl = (formData.get("callbackUrl") as string) || "/";
 
   try {
-    await signIn("credentials", {
-      email,
-      password,
-      redirectTo: callbackUrl,
-    });
+    await signIn("credentials", { email, password, redirectTo: callbackUrl });
+    return {};
   } catch (error) {
+    if (error instanceof AuthError) {
+      const code = (error as AuthError & { code?: string }).code;
+      if (code === "banned") redirect("/banned");
+      if (code === "unverified") redirect("/unverified");
+      return { error: "Invalid email or password." };
+    }
     throw error;
   }
 }
 
-export async function registerAction(formData: FormData) {
-  "use server";
+export async function logoutAction() {
+  await signOut({ redirectTo: "/login" });
+}
+
+export async function registerAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const result = await registerUser({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -31,27 +44,23 @@ export async function registerAction(formData: FormData) {
   });
 
   if (!result.ok) {
-    throw new Error(result.message);
+    return { error: result.message };
   }
 
   redirect("/unverified");
 }
 
-export async function forgotPasswordAction(formData: FormData) {
-  "use server";
-  const result = await requestPasswordReset({
-    email: formData.get("email"),
-  });
+export async function forgotPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const result = await requestPasswordReset({ email: formData.get("email") });
 
   if (!result.ok) {
-    throw new Error(result.message);
+    return { error: result.message };
   }
 
-  redirect("/login?reset=sent");
+  return { success: result.message };
 }
 
-export async function resetPasswordAction(formData: FormData) {
-  "use server";
+export async function resetPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const result = await resetPassword({
     token: formData.get("token"),
     password: formData.get("password"),
@@ -59,7 +68,7 @@ export async function resetPasswordAction(formData: FormData) {
   });
 
   if (!result.ok) {
-    throw new Error(result.message);
+    return { error: result.message };
   }
 
   redirect("/login?reset=success");
@@ -75,8 +84,11 @@ export async function requireActive() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const client = (await import("@/server/db/client")).default;
-  const db = (await client).db();
+  /** Re-check live status from DB so bans/verification changes apply immediately
+   *  even though the JWT was issued earlier. */
+  const clientPromise = (await import("@/server/db/client")).default;
+  const client = await clientPromise;
+  const db = client.db();
   const user = await db.collection("users").findOne({ email: session.user.email });
 
   if (!user) redirect("/login");

@@ -113,6 +113,39 @@ Use path aliases: `@/*` maps to `./src/*`
 - **not-found.tsx** - Root one is standalone (no shell). Dashboard routes can have their own in `(dashboard)/not-found.tsx`.
 - **Type extensions** - Global type augmentations go in `server/auth/types.ts` or appropriate places.
 
+## Auth Architecture
+
+The auth system is split into an **edge-safe config** and a **full server config** so `proxy.ts` can run on the edge without importing MongoDB.
+
+```
+src/
+├── server/auth/
+│   ├── config.ts   # Edge-safe: JWT callbacks, pages, empty providers (NO db)
+│   ├── index.ts    # Full: spreads config + MongoDB adapter + Credentials provider
+│   └── types.ts    # Session/JWT augmentation (id, status, emailVerified)
+├── server/db/
+│   └── client.ts   # MongoDB client (imports "server-only")
+├── features/auth/
+│   ├── actions/    # Server actions (login, register, reset, verify, guards)
+│   ├── components/ # AuthCard, Field, Button, client forms (useActionState)
+│   └── schemas/    # Zod schemas
+└── app/(auth)/     # login, register, forgot-password, reset-password, verify, unverified, banned
+```
+
+**Rules:**
+- `proxy.ts` imports ONLY `server/auth/config.ts` (edge-safe). Never import `server/auth/index.ts` in proxy.
+- Route handlers/actions import the full `server/auth/index.ts`.
+- Account status: `active | unverified | banned`. Store on the user document and mirror into JWT/session.
+- `(dashboard)` routes call `requireActive()` in the layout (defense-in-depth) AND are guarded by `proxy.ts`.
+- Forms use client components with `useActionState` for inline errors; actions return `{ error?, success? }` or `redirect()`.
+
+## PWA
+
+- `public/manifest.json` - icons, standalone display, theme color.
+- `public/sw.js` - static asset cache + `/offline` navigation fallback.
+- `src/shared/components/pwa-register.tsx` - registers SW in production only.
+- `/offline` route - clean offline fallback page.
+
 ## Adding New Features
 
 1. Create `src/features/[feature-name]/` with subfolders as needed

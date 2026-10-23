@@ -20,6 +20,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { logoutAction } from "@/features/auth/actions/auth.action";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutGrid },
@@ -34,7 +35,25 @@ const navigation = [
   { name: "Administration", href: "/admin", icon: Settings },
 ];
 
-export function Sidebar({ className }: { className?: string }) {
+type SidebarUser = {
+  name: string;
+  email: string;
+};
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function Sidebar({
+  className,
+  user,
+}: {
+  className?: string;
+  user: SidebarUser;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -91,13 +110,13 @@ export function Sidebar({ className }: { className?: string }) {
         >
           <div className="relative">
             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[var(--color-bg-subtle)] to-[var(--color-border-subtle)] flex items-center justify-center text-xs font-semibold">
-              AU
+              {initials(user.name)}
             </div>
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#22c55e] ring-2 ring-[var(--color-bg-surface)]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Admin User</p>
-            <p className="text-xs text-[var(--color-text-secondary)] truncate">Operations</p>
+            <p className="text-sm font-medium truncate">{user.name}</p>
+            <p className="text-xs text-[var(--color-text-secondary)] truncate">{user.email}</p>
           </div>
           <ChevronDown
             className={cn(
@@ -122,10 +141,15 @@ export function Sidebar({ className }: { className?: string }) {
               Help
             </button>
             <div className="my-1 h-px bg-[var(--color-border-subtle)]" />
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </form>
           </div>
         )}
       </div>

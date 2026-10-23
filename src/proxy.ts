@@ -1,13 +1,41 @@
-import { auth } from "@/server/auth";
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/server/auth/config";
 
-const protectedRoutes = ["/", "/crm", "/sales", "/finance", "/inventory", "/purchasing", "/hr", "/projects", "/documents", "/notifications", "/admin"];
+const { auth } = NextAuth(authConfig);
+
+const protectedRoutes = [
+  "/",
+  "/crm",
+  "/sales",
+  "/finance",
+  "/inventory",
+  "/purchasing",
+  "/hr",
+  "/projects",
+  "/documents",
+  "/notifications",
+  "/admin",
+];
+
+const authRoutes = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/verify",
+  "/unverified",
+  "/banned",
+];
 
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
-  const isProtected = protectedRoutes.some((route) => nextUrl.pathname === route || (route !== "/" && nextUrl.pathname.startsWith(route + "/")));
-  const isAuthRoute = nextUrl.pathname.startsWith("/login") || nextUrl.pathname.startsWith("/register") || nextUrl.pathname.startsWith("/forgot-password");
+  const status = req.auth?.user?.status;
+  const isProtected = protectedRoutes.some(
+    (route) => nextUrl.pathname === route || (route !== "/" && nextUrl.pathname.startsWith(route + "/"))
+  );
+  const isAuthRoute = authRoutes.some((route) => nextUrl.pathname === route);
 
   if (isProtected && !isLoggedIn) {
     const loginUrl = new URL("/login", nextUrl.origin);
@@ -15,7 +43,15 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthRoute && isLoggedIn) {
+  if (isLoggedIn && status === "banned" && nextUrl.pathname !== "/banned") {
+    return NextResponse.redirect(new URL("/banned", nextUrl.origin));
+  }
+
+  if (isLoggedIn && status === "unverified" && isProtected && nextUrl.pathname !== "/unverified") {
+    return NextResponse.redirect(new URL("/unverified", nextUrl.origin));
+  }
+
+  if (isAuthRoute && isLoggedIn && status === "active") {
     return NextResponse.redirect(new URL("/", nextUrl.origin));
   }
 

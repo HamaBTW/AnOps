@@ -1,31 +1,25 @@
-import { AuthCard, Field, Button } from "@/features/auth/components/auth-form";
-import Link from "next/link";
+import { AuthCard } from "@/features/auth/components/auth-form";
+import { LoginForm } from "@/features/auth/components/login-form";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string; reset?: string }>;
+}) {
+  const params = await searchParams;
+
   return (
-    <AuthCard title="Sign in" description="Access your AnOps workspace">
-      <form className="space-y-4" action="/api/auth/callback/credentials" method="post">
-        <Field label="Email" type="email" placeholder="you@company.com" />
-        <Field label="Password" type="password" placeholder="Enter your password" />
-        <div className="flex items-center justify-between text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" className="rounded" />
-            <span>Remember me</span>
-          </label>
-          <Link href="/forgot-password" className="text-[var(--color-text-secondary)] hover:underline">
-            Forgot password?
-          </Link>
-        </div>
-        <Button type="submit" variant="primary" className="w-full">
-          Sign in
-        </Button>
-        <p className="text-center text-sm text-[var(--color-text-secondary)]">
-          Don't have an account?{" "}
-          <Link href="/register" className="text-[var(--color-text-primary)] font-medium hover:underline">
-            Create account
-          </Link>
-        </p>
-      </form>
+    <AuthCard
+      title="Sign in"
+      description={
+        params.reset === "success"
+          ? "Password updated. Please sign in."
+          : params.reset === "sent"
+          ? "If an account exists, a reset link has been sent."
+          : "Access your AnOps workspace"
+      }
+    >
+      <LoginForm callbackUrl={params.callbackUrl || "/"} />
     </AuthCard>
   );
 }

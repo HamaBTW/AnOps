@@ -45,6 +45,11 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
       updatedAt: new Date(),
     });
 
+    if (process.env.NODE_ENV !== "production") {
+      const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+      console.info(`[auth] Verify email for ${normalizedEmail}: ${baseUrl}/verify?token=${verificationToken}`);
+    }
+
     return { ok: true, message: "Account created. Check your email to verify." };
   } catch (error) {
     console.error("registerUser error", error);

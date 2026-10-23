@@ -21,7 +21,7 @@ const modules = [
 
 export default function Page() {
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 sm:space-y-10">
       <div>
         <h1 className="text-[40px] md:text-[48px] leading-[46px] md:leading-[55px] tracking-[-0.03em] text-[var(--color-text-primary)]">
           Dashboard
@@ -29,7 +29,7 @@ export default function Page() {
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">1–31 October 2026 · EUR</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
           <div
             key={kpi.label}

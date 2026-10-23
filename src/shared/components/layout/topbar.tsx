@@ -1,11 +1,21 @@
 "use client";
 
-import { Search, Bell } from "lucide-react";
+import { Search, Bell, Menu } from "lucide-react";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
-    <header className="sticky top-0 z-20 flex h-[72px] items-center gap-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/95 backdrop-blur px-4 md:px-6">
+    <header className="sticky top-0 z-20 flex h-[72px] items-center gap-2 sm:gap-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/95 backdrop-blur px-3 sm:px-4 md:px-6">
+      {onMenuClick && (
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="lg:hidden h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)]"
+          aria-label="Open navigation"
+        >
+          <Menu className="h-5 w-5 text-[var(--color-text-secondary)]" />
+        </button>
+      )}
       <div className="flex-1">
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-secondary)]" />

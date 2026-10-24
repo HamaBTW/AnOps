@@ -29,6 +29,7 @@ const navigation = [
   { name: "CRM", href: "/crm", icon: IconUsers },
   { name: "Sales", href: "/sales", icon: IconReceipt },
   { name: "Finance", href: "/finance", icon: IconWallet },
+  { name: "HR & Payroll", href: "/hr", icon: IconProfileCard },
   { name: "Inventory", href: "/inventory", icon: IconPackage },
   { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
   { name: "Projects", href: "/projects", icon: IconBarChart },

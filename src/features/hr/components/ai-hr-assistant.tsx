@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, ShieldCheck, BookOpen, X } from "lucide-react";
+import { Sparkles, ShieldCheck, BookOpen, X, Calendar, Plus } from "lucide-react";
 import { AgentChatPanel } from "@/shared/components/ai/agent-chat-panel";
 import type { ChatMessage } from "@/shared/components/ai/agent-chat-panel";
 import { chatWithHRAssistantAction } from "@/features/hr/actions/hr-assistant.action";
@@ -12,6 +12,10 @@ import { Portal } from "@/shared/components/ui/portal";
 type AIHRAssistantProps = {
   currentEmployee?: Employee | null;
   employees: Employee[];
+  /** Callback to switch tabs in the HR portal */
+  onNavigateTab?: (tab: "employees" | "leave" | "attendance" | "payroll" | "ai") => void;
+  /** Callback to directly open the new leave request modal */
+  onOpenLeaveRequest?: () => void;
 };
 
 const SUGGESTED_PROMPTS = [
@@ -36,7 +40,12 @@ What would you like to know?`;
  * AI HR Assistant panel — uses AgentChatPanel (shared UI) wired to
  * HRAssistantAgent (extends BaseAgent) via chatWithHRAssistantAction.
  */
-export function AIHRAssistant({ currentEmployee, employees }: AIHRAssistantProps) {
+export function AIHRAssistant({
+  currentEmployee,
+  employees,
+  onNavigateTab,
+  onOpenLeaveRequest,
+}: AIHRAssistantProps) {
   const [activeEmployeeId, setActiveEmployeeId] = useState(
     currentEmployee?.id ?? employees[0]?.id ?? ""
   );
@@ -44,6 +53,21 @@ export function AIHRAssistant({ currentEmployee, employees }: AIHRAssistantProps
   const [selectedPolicyId, setSelectedPolicyId] = useState(COMPANY_POLICIES[0]?.id ?? "");
 
   const selectedPolicy = COMPANY_POLICIES.find((p) => p.id === selectedPolicyId);
+
+  const handleAction = (action: string) => {
+    const act = action.toLowerCase();
+    if (act.includes("submit") || act.includes("request")) {
+      onOpenLeaveRequest?.();
+    } else if (act.includes("leave") || act.includes("balance")) {
+      onNavigateTab?.("leave");
+    } else if (act.includes("attendance")) {
+      onNavigateTab?.("attendance");
+    } else if (act.includes("payroll") || act.includes("payslip")) {
+      onNavigateTab?.("payroll");
+    } else if (act.includes("employee")) {
+      onNavigateTab?.("employees");
+    }
+  };
 
   /** Bridge: AgentChatPanel → HR server action */
   const handleSend = async (
@@ -128,6 +152,7 @@ export function AIHRAssistant({ currentEmployee, employees }: AIHRAssistantProps
         inputPlaceholder="Ask about leave balance, salary deductions, working hours…"
         thinkingText="Checking HR policies and your personnel records…"
         toolbar={toolbar}
+        onAction={handleAction}
         onSendMessage={handleSend}
         renderMetadataCard={(metadata) => {
           // Leave balance card
@@ -138,18 +163,40 @@ export function AIHRAssistant({ currentEmployee, employees }: AIHRAssistantProps
           ) {
             const d = metadata.data as Record<string, number>;
             return (
-              <div className="mt-2 grid grid-cols-3 gap-2 rounded-[var(--radius-control)] bg-[var(--color-bg-surface)] p-2.5 border border-[var(--color-border-subtle)]">
-                <div className="text-center">
-                  <span className="text-[10px] text-[var(--color-text-secondary)]">Allowance</span>
-                  <div className="font-bold text-sm text-[var(--color-text-primary)]">{d.allowance} days</div>
+              <div className="mt-2.5 rounded-[var(--radius-control)] bg-[var(--color-bg-surface)] p-3 border border-[var(--color-border-subtle)] space-y-2.5 shadow-xs animate-in fade-in duration-200">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center p-2 rounded-md bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">
+                    <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Allowance</span>
+                    <div className="font-bold text-sm text-[var(--color-text-primary)]">{d.allowance}d</div>
+                  </div>
+                  <div className="text-center p-2 rounded-md bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">
+                    <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Used</span>
+                    <div className="font-bold text-sm text-[var(--color-text-secondary)]">{d.usedPaidDays ?? d.used ?? 0}d</div>
+                  </div>
+                  <div className="text-center p-2 rounded-md bg-[var(--color-status-success)]/10 border border-[var(--color-status-success)]/20">
+                    <span className="text-[10px] font-bold text-[var(--color-status-success)]">Remaining</span>
+                    <div className="font-black text-sm text-[var(--color-status-success)]">{d.remainingDays ?? d.remaining ?? 0}d</div>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <span className="text-[10px] text-[var(--color-text-secondary)]">Used</span>
-                  <div className="font-bold text-sm text-[var(--color-text-secondary)]">{d.usedPaidDays} days</div>
-                </div>
-                <div className="text-center">
-                  <span className="text-[10px] font-bold text-[var(--color-status-success)]">Remaining</span>
-                  <div className="font-black text-sm text-[var(--color-status-success)]">{d.remainingDays} days</div>
+
+                {/* Direct Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--color-border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab?.("leave")}
+                    className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] hover:bg-[var(--color-border-subtle)] text-[11px] font-bold text-[var(--color-text-primary)] transition-all border border-[var(--color-border-subtle)] hover:shadow-xs cursor-pointer"
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-[var(--color-action-primary)]" />
+                    <span>View Leave Balance</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenLeaveRequest?.()}
+                    className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] hover:bg-[var(--color-action-hover)] text-[11px] font-bold text-[var(--color-action-on-primary)] transition-all shadow-xs cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Submit Leave Request</span>
+                  </button>
                 </div>
               </div>
             );

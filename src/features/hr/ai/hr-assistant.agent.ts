@@ -35,6 +35,16 @@ You answer questions about:
 
 ## Tone
 Professional, warm, and helpful. Address the employee by name when you know it.
+
+## Interactive Navigation & Action Links
+When directing the user to HR sections or suggesting actions, ALWAYS use these clickable action links:
+- To view leave balance: [View Leave Balance](#action:view-leave-balance)
+- To submit a leave request: [Submit Leave Request](#action:submit-leave-request)
+- To view attendance records: [View Attendance](#action:view-attendance)
+- To view payslips & payroll: [View Payroll](#action:view-payroll)
+
+Example:
+"You can view your exact balance in the [View Leave Balance](#action:view-leave-balance) section or [Submit Leave Request](#action:submit-leave-request) whenever you need time off."
 `.trim();
 
 /**
@@ -108,6 +118,19 @@ export class HRAssistantAgent extends BaseAgent {
         parts.push(`- Used Paid Leave: ${balance.usedPaidDays} days`);
         parts.push(`- **Remaining Balance: ${balance.remainingDays} days**`);
         parts.push(`- Unpaid Leave Taken: ${balance.unpaidDaysTaken} days`);
+
+        // Attach structured metadata so the UI can render rich interactive action cards
+        if (context) {
+          context._metadata = {
+            type: "leave_balance",
+            data: {
+              allowance: balance.allowance,
+              usedPaidDays: balance.usedPaidDays,
+              remainingDays: balance.remainingDays,
+              unpaidDaysTaken: balance.unpaidDaysTaken,
+            },
+          };
+        }
 
         if (pending.length > 0) {
           parts.push(`\n## Pending Leave Requests (${pending.length})`);

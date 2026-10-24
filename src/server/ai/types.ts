@@ -42,6 +42,8 @@ export type AiCompletionResult = {
     completionTokens?: number;
     totalTokens?: number;
   };
+  /** Optional metadata attached by agent hooks or context */
+  metadata?: Record<string, unknown>;
 };
 
 /**

@@ -204,6 +204,7 @@ export abstract class BaseAgent {
       role: "assistant",
       content: result.text,
       timestamp: new Date().toISOString(),
+      metadata: result.metadata ?? context?._metadata,
     };
 
     return {

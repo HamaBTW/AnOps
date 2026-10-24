@@ -113,6 +113,8 @@ type AgentChatPanelProps = {
   toolbar?: React.ReactNode;
   /** Custom card renderer for messages with metadata */
   renderMetadataCard?: (metadata: Record<string, unknown>) => React.ReactNode;
+  /** Callback when user clicks an action link in agent response */
+  onAction?: (action: string) => void;
   /**
    * Called when the user submits a message — must return the assistant reply.
    * `selectedModel` is the model ID chosen by the user, or empty string for auto.
@@ -139,8 +141,26 @@ function initMessage(content: string): ChatMessage {
 }
 
 function renderMarkdown(text: string) {
-  // Very lightweight markdown: bold, inline code, headers, bullets
   return text
+    // 1. Action links: [Label](#action:action-name) or [Label](action:action-name)
+    .replace(
+      /\[(.*?)\]\(#?action:([^)]+)\)/g,
+      '<a href="#action:$2" data-action="$2" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] hover:opacity-90 transition-all shadow-xs my-1 mr-1.5 cursor-pointer no-underline"><span class="truncate">$1</span> <svg class="w-3 h-3 shrink-0 inline ml-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
+    )
+    // 2. Regular links: [Label](url)
+    .replace(
+      /\[(.*?)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer" class="font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity">$1</a>'
+    )
+    // 3. Auto-convert common action phrases to interactive links if the AI wrote plain text
+    .replace(
+      /(HR Portal\s*→\s*Leave\s*Balance\s*section|Leave\s*Balance\s*section)/gi,
+      '<a href="#action:view-leave-balance" data-action="view-leave-balance" class="inline-flex items-center gap-1 font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity cursor-pointer">$1 <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
+    )
+    .replace(
+      /(submit a (?:new )?leave request|submit a leave request|request (?:time off|leave))/gi,
+      '<a href="#action:submit-leave-request" data-action="submit-leave-request" class="inline-flex items-center gap-1 font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity cursor-pointer">$1 <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
+    )
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code class='bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-[0.85em] font-mono'>$1</code>")
     .replace(/^### (.+)$/gm, "<h3 class='text-sm font-bold mt-3 mb-1 text-[var(--color-text-primary)]'>$1</h3>")
@@ -162,6 +182,7 @@ export function AgentChatPanel({
   thinkingText = "Thinking…",
   toolbar,
   renderMetadataCard,
+  onAction,
   onSendMessage,
   className,
 }: AgentChatPanelProps) {
@@ -400,6 +421,14 @@ export function AgentChatPanel({
                   >
                     <div
                       className="prose prose-xs dark:prose-invert max-w-none"
+                      onClick={(e) => {
+                        const link = (e.target as HTMLElement).closest("a[data-action]");
+                        if (link) {
+                          e.preventDefault();
+                          const act = link.getAttribute("data-action");
+                          if (act && onAction) onAction(act);
+                        }
+                      }}
                       // eslint-disable-next-line react/no-danger
                       dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
                     />

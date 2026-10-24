@@ -78,6 +78,7 @@ export function HRDashboardClient({
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [jobTitlesModalOpen, setJobTitlesModalOpen] = useState(false);
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
+  const [leaveRequestModalOpen, setLeaveRequestModalOpen] = useState(false);
 
   const handleOpenAddEmployee = () => {
     setEditingEmployee(null);
@@ -298,6 +299,8 @@ export function HRDashboardClient({
           leaveBalance={initialLeaveBalance}
           onRefresh={handleRefresh}
           userRole={userRole}
+          requestModalOpen={leaveRequestModalOpen}
+          onRequestModalOpenChange={setLeaveRequestModalOpen}
         />
       )}
 
@@ -327,6 +330,11 @@ export function HRDashboardClient({
         <AIHRAssistant
           currentEmployee={currentEmployee}
           employees={initialEmployees}
+          onNavigateTab={setActiveTab}
+          onOpenLeaveRequest={() => {
+            setActiveTab("leave");
+            setLeaveRequestModalOpen(true);
+          }}
         />
       )}
 

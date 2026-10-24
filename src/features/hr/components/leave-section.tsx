@@ -26,6 +26,8 @@ type LeaveSectionProps = {
   leaveBalance: LeaveBalance;
   onRefresh: () => void;
   userRole?: "employee" | "manager" | "hr_admin";
+  requestModalOpen?: boolean;
+  onRequestModalOpenChange?: (open: boolean) => void;
 };
 
 export function LeaveSection({
@@ -35,9 +37,17 @@ export function LeaveSection({
   leaveBalance,
   onRefresh,
   userRole = "employee",
+  requestModalOpen: controlledModalOpen,
+  onRequestModalOpenChange,
 }: LeaveSectionProps) {
   const [isPending, startTransition] = useTransition();
-  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [internalModalOpen, setInternalModalOpen] = useState(false);
+  const isControlled = typeof controlledModalOpen === "boolean";
+  const requestModalOpen = isControlled ? controlledModalOpen : internalModalOpen;
+  const setRequestModalOpen = (open: boolean) => {
+    if (onRequestModalOpenChange) onRequestModalOpenChange(open);
+    if (!isControlled) setInternalModalOpen(open);
+  };
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const isAdmin = userRole === "hr_admin";
   const [activeTab, setActiveTab] = useState<"all" | "my">(isAdmin ? "all" : "my");

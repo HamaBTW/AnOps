@@ -25,3 +25,20 @@
 - Touch target sizes must be at least `44x44px`.
 - Handle notch and navigation safe areas (`env(safe-area-inset-*)`).
 - Multi-tenant company switcher must be accessible from mobile and desktop shells.
+
+## AI Provider Rules
+
+> Full reference: `docs/AI_PROVIDERS.md`
+
+- **Single entry point:** ALL AI features MUST import from `@/server/ai` only.
+  ```typescript
+  import { ai } from "@/server/ai"; // ✅ correct
+  import { GroqProvider } from "@/server/ai/providers/groq.provider"; // ❌ NEVER
+  ```
+- **Never call provider SDKs directly** — no `new Groq()`, `new GoogleGenerativeAI()`, or direct OpenRouter fetch.
+- **Never hardcode API keys** — keys are read from env vars by provider constructors.
+- **Server-only** — `@/server/ai` uses `import "server-only"`. Never import in client components or `proxy.ts`.
+- **Prefer `ai.ask()`** for simple prompts; use `ai.complete()` when you need provider/model/usage metadata.
+- **Always handle AI errors gracefully** — wrap calls in try/catch; AI outages must not break core features.
+- **Multi-tenancy:** AI calls operating on company data must still scope queries with `companyId` before passing to AI.
+- **Provider order (automatic):** Groq → OpenRouter → Gemini. Keys rotate on 429 automatically.

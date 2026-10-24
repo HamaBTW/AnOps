@@ -1,0 +1,97 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { getPageWorkspace } from "@/server/tenancy/workspace";
+import { listPurchaseOrders } from "@/server/purchasing/purchase-order.service";
+import { purchaseOrderListQuerySchema } from "@/features/purchasing/schemas/purchasing.schema";
+import { PageHeader } from "@/shared/components/data-display/page-header";
+import { EmptyState } from "@/shared/components/data-display/empty-state";
+import { Pagination } from "@/shared/components/data-display/pagination";
+import { StatusBadge } from "@/shared/components/data-display/status-badge";
+import { PO_STATUS } from "@/features/purchasing/labels";
+import { ButtonLink, Button, selectClass } from "@/shared/components/ui/button";
+import { formatDate, formatMoney } from "@/shared/lib/format";
+
+export const metadata: Metadata = { title: "Purchase orders | AnOps ERP" };
+
+export default async function PurchaseOrdersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const ctx = await getPageWorkspace();
+  const raw = await searchParams;
+  const parsed = purchaseOrderListQuerySchema.safeParse({
+    status: typeof raw.status === "string" ? raw.status : undefined,
+    q: typeof raw.q === "string" ? raw.q : undefined,
+    page: typeof raw.page === "string" ? raw.page : undefined,
+  });
+  const query = parsed.success ? parsed.data : purchaseOrderListQuerySchema.parse({});
+  const result = await listPurchaseOrders(ctx, query);
+  const canCreate = ctx.permissions.has("purchasing.order.manage");
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Purchase orders"
+        description="Orders are approved first. Stock increases only when goods are received and the receipt is posted."
+        actions={canCreate ? <ButtonLink href="/purchasing/orders/new" variant="primary">New order</ButtonLink> : undefined}
+      />
+      <form method="get" role="search" className="grid gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
+        <div className="space-y-1.5">
+          <label htmlFor="q" className="text-sm font-semibold">Order number</label>
+          <input id="q" name="q" defaultValue={query.q} maxLength={80} placeholder="PO-000001" className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm" />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="status" className="text-sm font-semibold">Status</label>
+          <select id="status" name="status" defaultValue={query.status} className={selectClass}>
+            <option value="all">All</option>
+            {Object.entries(PO_STATUS).map(([value, meta]) => (
+              <option key={value} value={value}>{meta.label}</option>
+            ))}
+          </select>
+        </div>
+        <Button type="submit">Apply</Button>
+      </form>
+
+      {result.items.length === 0 ? (
+        query.q || query.status !== "all" ? (
+          <p className="text-sm text-[var(--color-text-secondary)]">No orders match these filters. <Link href="/purchasing/orders" className="underline">Clear filters</Link></p>
+        ) : (
+          <EmptyState
+            title="No purchase orders yet"
+            description="Create a draft for a supplier, approve it, then record receipts as goods arrive."
+            actionHref={canCreate ? "/purchasing/orders/new" : undefined}
+            actionLabel={canCreate ? "Create an order" : undefined}
+          />
+        )
+      ) : (
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <caption className="sr-only">Purchase orders</caption>
+            <thead className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-semibold">Order</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Supplier</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Created</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Expected</th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold">Total</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border-subtle)]">
+              {result.items.map((order) => (
+                <tr key={order.id} className="hover:bg-[var(--color-bg-subtle)]">
+                  <td className="px-4 py-3 font-medium">
+                    <Link href={`/purchasing/orders/${order.id}`} className="underline-offset-2 hover:underline">{order.orderNumber}</Link>
+                  </td>
+                  <td className="px-4 py-3">{order.supplierName}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-[var(--color-text-secondary)]">{formatDate(order.createdAt)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-[var(--color-text-secondary)]">{formatDate(order.expectedDate)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{formatMoney(order.total, order.currencyCode)}</td>
+                  <td className="px-4 py-3"><StatusBadge label={PO_STATUS[order.status].label} tone={PO_STATUS[order.status].tone} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Pagination basePath="/purchasing/orders" page={result.page} totalPages={result.totalPages} params={{ q: query.q || undefined, status: query.status }} />
+    </div>
+  );
+}

@@ -130,15 +130,18 @@ export function LeaveRequestModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs">
+      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
         <div
-          className="relative w-full max-w-lg rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl transition-all"
+          className="relative w-full max-w-lg max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl pb-[max(1rem,env(safe-area-inset-bottom))]"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Mobile drag handle */}
+          <div className="w-10 h-1 rounded-full bg-[var(--color-border-control)] mx-auto mb-3 sm:hidden shrink-0" />
+
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3 sm:pb-4">
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
                 Submit Leave Request
               </h2>
               <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
@@ -149,30 +152,31 @@ export function LeaveRequestModal({
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="rounded-full p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] transition-colors"
+              aria-label="Close dialog"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors shrink-0"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {error && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-[var(--radius-control)] border border-[var(--color-status-error)]/30 bg-[var(--color-status-error-bg)] p-3 text-xs text-[var(--color-status-error)]">
+            <div className="mt-3 sm:mt-4 flex items-start gap-2.5 rounded-[var(--radius-control)] border border-[var(--color-status-error)]/30 bg-[var(--color-status-error-bg)] p-3 text-xs text-[var(--color-status-error)]">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <form onSubmit={handleSubmit} className="mt-4 sm:mt-5 space-y-3.5 sm:space-y-4">
             {/* Employee Selector */}
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
                 Employee
               </label>
               <select
                 value={selectedEmployeeId}
                 onChange={(e) => setSelectedEmployeeId(e.target.value)}
                 disabled={isPending}
-                className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)] focus:ring-1 focus:ring-[var(--color-action-primary)]"
+                className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
               >
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
@@ -188,8 +192,8 @@ export function LeaveRequestModal({
             </div>
 
             {/* Leave Type Grid */}
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1.5">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
                 Leave Category
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -200,13 +204,13 @@ export function LeaveRequestModal({
                       key={lt.type}
                       type="button"
                       onClick={() => handleLeaveTypeChange(lt.type)}
-                      className={`flex flex-col items-start p-2.5 rounded-[var(--radius-control)] border text-left transition-all ${
+                      className={`flex flex-col items-start min-h-[54px] p-2.5 rounded-[var(--radius-control)] border text-left transition-all ${
                         isSelected
                           ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)]/10 font-bold text-[var(--color-text-primary)] ring-1 ring-[var(--color-action-primary)]"
                           : "border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)]/40 hover:border-[var(--color-border-control)] text-[var(--color-text-secondary)]"
                       }`}
                     >
-                      <span className="text-xs">{lt.label}</span>
+                      <span className="text-xs font-semibold">{lt.label}</span>
                       <span className="text-[10px] text-[var(--color-text-secondary)] font-normal line-clamp-1">
                         {lt.desc}
                       </span>
@@ -216,38 +220,33 @@ export function LeaveRequestModal({
               </div>
             </div>
 
-            {/* Dates: Start & End */}
+            {/* Dates */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
                   Start Date
                 </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    required
-                    disabled={isPending}
-                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  required
+                  disabled={isPending}
+                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                />
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
                   End Date
                 </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    required
-                    disabled={isPending}
-                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  required
+                  disabled={isPending}
+                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                />
               </div>
             </div>
 
@@ -277,27 +276,25 @@ export function LeaveRequestModal({
               </div>
             )}
 
-            {/* Paid / Unpaid Toggle (Editable for special circumstances) */}
-            <div className="flex items-center gap-2 pt-1">
+            {/* Paid / Unpaid Toggle */}
+            <div className="flex items-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-3">
               <input
                 type="checkbox"
                 id="isPaidCheckbox"
                 checked={isPaid}
                 onChange={(e) => setIsPaid(e.target.checked)}
                 disabled={isPending || leaveType === "unpaid"}
-                className="h-4 w-4 rounded border-gray-300 text-[var(--color-action-primary)] focus:ring-[var(--color-action-primary)]"
+                className="h-4 w-4 rounded border-gray-300 text-[var(--color-action-primary)] focus:ring-[var(--color-action-primary)] shrink-0"
               />
-              <label
-                htmlFor="isPaidCheckbox"
-                className="text-xs text-[var(--color-text-primary)] cursor-pointer select-none"
-              >
-                Mark as Paid Leave (uncheck to apply unpaid leave salary deduction)
+              <label htmlFor="isPaidCheckbox" className="text-xs text-[var(--color-text-primary)] cursor-pointer select-none">
+                Mark as Paid Leave{" "}
+                <span className="text-[var(--color-text-secondary)]">(uncheck to apply unpaid leave salary deduction)</span>
               </label>
             </div>
 
             {/* Reason */}
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
                 Reason / Details
               </label>
               <textarea
@@ -307,35 +304,29 @@ export function LeaveRequestModal({
                 rows={3}
                 required
                 disabled={isPending}
-                className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-3 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+                className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-3.5 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)] resize-none"
               />
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 border-t border-[var(--color-border-subtle)] pt-4">
+            {/* Actions — stacked on mobile, row on sm+ */}
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-3 border-t border-[var(--color-border-subtle)]">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isPending}
-                className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] px-4 text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                className="flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-5 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isPending}
-                className="flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-6 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors disabled:opacity-50"
+                className="flex min-h-[44px] w-full sm:w-auto items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-6 text-sm font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors disabled:opacity-50"
               >
                 {isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Submitting...</span>
-                  </>
+                  <><Loader2 className="h-4 w-4 animate-spin" /><span>Submitting...</span></>
                 ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Submit Request</span>
-                  </>
+                  <><CheckCircle2 className="h-4 w-4" /><span>Submit Request</span></>
                 )}
               </button>
             </div>

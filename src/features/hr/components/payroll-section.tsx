@@ -145,8 +145,8 @@ export function PayrollSection({
           </div>
 
           {/* Period Selector & Batch Generate CTA */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-2.5 w-full sm:w-auto">
+            <div className="w-full sm:w-auto">
               <label className="block text-[10px] font-bold uppercase text-[var(--color-text-secondary)] mb-1">
                 Pay Period
               </label>
@@ -155,7 +155,7 @@ export function PayrollSection({
                 value={period}
                 onChange={(e) => handlePeriodChange(e.target.value)}
                 disabled={isPending}
-                className="min-h-[40px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
               />
             </div>
 
@@ -163,7 +163,7 @@ export function PayrollSection({
               type="button"
               onClick={handleGeneratePayroll}
               disabled={isPending}
-              className="mt-4 sm:mt-0 flex min-h-[40px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-all shadow-xs disabled:opacity-50"
+              className="flex min-h-[44px] sm:min-h-[40px] w-full sm:w-auto items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-all shadow-xs disabled:opacity-50"
             >
               {isPending ? (
                 <>
@@ -264,20 +264,20 @@ export function PayrollSection({
           </div>
 
           {/* Search */}
-          <div className="relative min-w-[220px]">
+          <div className="relative w-full sm:w-auto sm:min-w-[220px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-secondary)]" />
             <input
               type="text"
               placeholder="Search staff, job title..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] pl-8 pr-3 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+              className="w-full min-h-[42px] sm:min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] pl-8 pr-3 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
             />
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]">
           <table className="w-full text-left text-xs">
             <thead className="bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] font-bold text-[10px] uppercase">
               <tr>
@@ -372,6 +372,80 @@ export function PayrollSection({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden">
+          {filteredPayslips.length === 0 ? (
+            <div className="p-6 text-center text-[var(--color-text-secondary)]">
+              <FileText className="mx-auto h-8 w-8 opacity-40 mb-2" />
+              <p className="font-semibold text-xs">No payslips generated for period {period}</p>
+              <p className="text-[11px] mt-1 text-[var(--color-text-secondary)]">
+                Click "Generate Payslips" above to compute.
+              </p>
+            </div>
+          ) : (
+            filteredPayslips.map((slip) => (
+              <div key={slip.id} className="p-3.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-sm text-[var(--color-text-primary)]">
+                      {slip.employeeName}
+                    </p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      {slip.jobTitle} • {slip.departmentName}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-extrabold text-[var(--color-text-primary)] block">
+                      {slip.netSalary.toLocaleString(undefined, { minimumFractionDigits: 2 })} {slip.currency}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)]">
+                      Net Salary
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                      Base Salary
+                    </span>
+                    <p className="font-semibold text-[var(--color-text-primary)] mt-0.5 truncate">
+                      {slip.baseSalary.toLocaleString()} {slip.currency}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                      Unpaid
+                    </span>
+                    <p className="font-semibold text-[var(--color-text-primary)] mt-0.5">
+                      {slip.unpaidLeaveDays} day(s)
+                    </p>
+                  </div>
+
+                  <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                      Deduction
+                    </span>
+                    <p className={`font-semibold mt-0.5 truncate ${slip.deduction > 0 ? "text-[var(--color-status-error)]" : "text-[var(--color-text-secondary)]"}`}>
+                      {slip.deduction > 0 ? `-${slip.deduction.toLocaleString()}` : "0.00"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenPayslip(slip)}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] font-bold text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-bg-surface)] transition-colors"
+                >
+                  <Printer className="h-4 w-4 text-[var(--color-text-secondary)]" />
+                  <span>View Official Payslip</span>
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

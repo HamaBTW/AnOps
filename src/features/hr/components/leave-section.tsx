@@ -246,8 +246,8 @@ export function LeaveSection({
           </div>
         </div>
 
-        {/* Leave Requests Table */}
-        <div className="overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]">
           <table className="w-full text-left text-xs">
             <thead className="bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider text-[10px]">
               <tr>
@@ -377,6 +377,123 @@ export function LeaveSection({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden">
+          {filteredRequests.length === 0 ? (
+            <div className="p-6 text-center text-[var(--color-text-secondary)]">
+              <FileText className="mx-auto h-8 w-8 opacity-40 mb-2" />
+              <p className="font-semibold text-xs">No leave requests found</p>
+              <p className="text-[11px] mt-0.5">Submit a new request to see it listed here.</p>
+            </div>
+          ) : (
+            filteredRequests.map((req) => {
+              const isPendingStatus = req.status === "pending";
+              const isApproved = req.status === "approved";
+
+              return (
+                <div key={req.id} className="p-3.5 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-sm text-[var(--color-text-primary)]">
+                        {req.employeeName}
+                      </p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        {req.departmentName}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                        isPendingStatus
+                          ? "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] border border-[var(--color-warning-border)]"
+                          : isApproved
+                          ? "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)]"
+                          : "bg-[var(--color-status-error-bg)] text-[var(--color-status-error)]"
+                      }`}
+                    >
+                      {isPendingStatus && <Clock className="h-3 w-3" />}
+                      {isApproved && <CheckCircle className="h-3 w-3" />}
+                      {req.status === "rejected" && <XCircle className="h-3 w-3" />}
+                      {req.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                      <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                        Leave Type
+                      </span>
+                      <p className="font-semibold capitalize text-[var(--color-text-primary)] mt-0.5 truncate">
+                        {req.leaveType.replace("_", " / ")}
+                      </p>
+                      <span
+                        className={`inline-block mt-1 rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                          req.isPaid
+                            ? "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)]"
+                            : "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]"
+                        }`}
+                      >
+                        {req.isPaid ? "Paid" : "Unpaid"}
+                      </span>
+                    </div>
+
+                    <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                      <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                        Duration
+                      </span>
+                      <p className="font-bold text-[var(--color-text-primary)] mt-0.5">
+                        {req.days} working day{req.days > 1 ? "s" : ""}
+                      </p>
+                      <p className="text-[10px] text-[var(--color-text-secondary)] mt-1 truncate">
+                        {req.startDate} → {req.endDate}
+                      </p>
+                    </div>
+                  </div>
+
+                  {req.reason && (
+                    <div className="text-xs text-[var(--color-text-primary)] bg-[var(--color-bg-subtle)]/50 rounded-[var(--radius-control)] p-2">
+                      <span className="text-[10px] font-bold uppercase text-[var(--color-text-secondary)] block mb-0.5">
+                        Reason
+                      </span>
+                      <p className="line-clamp-2">{req.reason}</p>
+                      {req.adminComment && (
+                        <p className="mt-1 text-[11px] text-[var(--color-text-secondary)] italic border-t border-[var(--color-border-subtle)] pt-1">
+                          HR: "{req.adminComment}"
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Actions on Mobile */}
+                  {isPendingStatus ? (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReview(req, "approve")}
+                        className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-control)] bg-[var(--color-status-success)]/15 font-bold text-xs text-[var(--color-status-success)] hover:bg-[var(--color-status-success)]/25 transition-colors"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>Approve</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReview(req, "reject")}
+                        className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-control)] bg-[var(--color-status-error)]/15 font-bold text-xs text-[var(--color-status-error)] hover:bg-[var(--color-status-error)]/25 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                        <span>Reject</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-[var(--color-text-secondary)] text-right pt-0.5">
+                      {req.reviewedBy ? `Reviewed by ${req.reviewedBy}` : "Completed"}
+                    </p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Leave Request Modal */}
@@ -391,11 +508,14 @@ export function LeaveSection({
       {/* Review Confirmation Modal */}
       {reviewModalOpen && requestToReview && (
         <Portal>
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
             <div
-              className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl"
+              className="relative w-full max-w-md max-h-[92dvh] sm:max-h-[85vh] overflow-y-auto rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl pb-[max(1rem,env(safe-area-inset-bottom))]"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Mobile drag handle */}
+              <div className="w-10 h-1 rounded-full bg-[var(--color-border-control)] mx-auto mb-3 sm:hidden shrink-0" />
+
               <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3">
                 <h3 className="text-base font-bold text-[var(--color-text-primary)]">
                   {reviewAction === "approve" ? "Approve Leave Request" : "Reject Leave Request"}
@@ -403,7 +523,8 @@ export function LeaveSection({
                 <button
                   type="button"
                   onClick={() => setReviewModalOpen(false)}
-                  className="rounded-full p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+                  aria-label="Close dialog"
+                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors shrink-0"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -447,19 +568,19 @@ export function LeaveSection({
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-border-subtle)]">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2 border-t border-[var(--color-border-subtle)]">
                   <button
                     type="button"
                     onClick={() => setReviewModalOpen(false)}
                     disabled={isPending}
-                    className="min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+                    className="flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-4 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isPending}
-                    className={`flex min-h-[38px] items-center gap-1.5 rounded-[var(--radius-control)] px-4 text-xs font-bold text-white transition-colors ${
+                    className={`flex min-h-[44px] w-full sm:w-auto items-center justify-center gap-1.5 rounded-[var(--radius-control)] px-5 text-sm font-bold text-white transition-colors ${
                       reviewAction === "approve"
                         ? "bg-[var(--color-status-success)] hover:opacity-90"
                         : "bg-[var(--color-status-error)] hover:opacity-90"

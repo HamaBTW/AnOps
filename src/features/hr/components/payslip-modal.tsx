@@ -32,11 +32,14 @@ export function PayslipModal({ isOpen, onClose, payslip }: PayslipModalProps) {
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs print:p-0 print:bg-white">
+      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs print:p-0 print:bg-white animate-in fade-in duration-200">
         <div
-          className="relative w-full max-w-2xl rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 sm:p-8 shadow-2xl transition-all print:border-none print:shadow-none print:w-full print:max-w-none"
+          className="relative w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] overflow-y-auto rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl pb-[max(1rem,env(safe-area-inset-bottom))] print:border-none print:shadow-none print:w-full print:max-w-none"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Mobile drag handle */}
+          <div className="w-10 h-1 rounded-full bg-[var(--color-border-control)] mx-auto mb-3 sm:hidden shrink-0 print:hidden" />
+
           {/* Top modal action bar (hidden during print) */}
           <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-4 print:hidden">
             <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
@@ -46,7 +49,7 @@ export function PayslipModal({ isOpen, onClose, payslip }: PayslipModalProps) {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-3 py-1.5 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors shadow-xs"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-3 py-1.5 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors shadow-xs"
               >
                 <Printer className="h-3.5 w-3.5" />
                 <span>Print / Save as PDF</span>
@@ -54,7 +57,8 @@ export function PayslipModal({ isOpen, onClose, payslip }: PayslipModalProps) {
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full p-1.5 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                aria-label="Close dialog"
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors shrink-0"
               >
                 <X className="h-5 w-5" />
               </button>

@@ -251,7 +251,7 @@ export function AttendanceSection({
         {/* Today's Roster & KPIs (2 columns) */}
         <div className="lg:col-span-2 space-y-4">
           {/* Quick Metrics */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-xs">
               <span className="text-xs text-[var(--color-text-secondary)]">Present Now</span>
               <div className="mt-1 flex items-baseline gap-1.5">
@@ -380,22 +380,22 @@ export function AttendanceSection({
           </div>
 
           {/* Search & Filter */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1 sm:max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-secondary)]" />
               <input
                 type="text"
                 placeholder="Search staff or date..."
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
-                className="w-full min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] pl-8 pr-3 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+                className="w-full min-h-[44px] sm:min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] pl-8 pr-3 text-sm sm:text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
               />
             </div>
 
             <select
               value={historyDeptFilter}
               onChange={(e) => setHistoryDeptFilter(e.target.value)}
-              className="min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-2.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+              className="min-h-[44px] sm:min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-2.5 text-sm sm:text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
             >
               <option value="all">All Departments</option>
               {departmentsList.map((d) => (
@@ -407,7 +407,8 @@ export function AttendanceSection({
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]">
           <table className="w-full text-left text-xs">
             <thead className="bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] font-bold text-[10px] uppercase">
               <tr>
@@ -454,6 +455,64 @@ export function AttendanceSection({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="md:hidden divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden">
+          {filteredHistory.length === 0 ? (
+            <div className="p-6 text-center text-[var(--color-text-secondary)] text-xs">
+              No attendance records found matching filters.
+            </div>
+          ) : (
+            filteredHistory.map((rec) => (
+              <div key={rec.id} className="p-3.5 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-sm text-[var(--color-text-primary)]">
+                      {rec.employeeName}
+                    </p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      {rec.departmentName}
+                    </p>
+                  </div>
+                  <span className="font-mono text-xs font-bold text-[var(--color-text-secondary)] bg-[var(--color-bg-subtle)] px-2 py-0.5 rounded-[var(--radius-control)] shrink-0">
+                    {rec.date}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                      Check-In
+                    </span>
+                    <p className="font-mono font-bold text-[var(--color-text-primary)] mt-0.5">
+                      {new Date(rec.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                      Check-Out
+                    </span>
+                    <p className="font-mono font-bold text-[var(--color-text-secondary)] mt-0.5">
+                      {rec.checkOut
+                        ? new Date(rec.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        : "Active"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-2">
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-secondary)] block">
+                      Worked
+                    </span>
+                    <p className="font-bold text-[var(--color-text-primary)] mt-0.5 truncate">
+                      {rec.hoursWorked > 0 ? `${rec.hoursWorked}h` : "Active"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

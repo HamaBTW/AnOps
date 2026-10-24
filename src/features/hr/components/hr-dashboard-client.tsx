@@ -157,7 +157,7 @@ export function HRDashboardClient({
         <button
           type="button"
           onClick={() => setActiveTab("employees")}
-          className={`flex min-h-[42px] items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
+          className={`flex min-h-[42px] shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
             activeTab === "employees"
               ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-xs"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
@@ -171,7 +171,7 @@ export function HRDashboardClient({
         <button
           type="button"
           onClick={() => setActiveTab("leave")}
-          className={`flex min-h-[42px] items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
+          className={`flex min-h-[42px] shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
             activeTab === "leave"
               ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-xs"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
@@ -196,7 +196,7 @@ export function HRDashboardClient({
         <button
           type="button"
           onClick={() => setActiveTab("attendance")}
-          className={`flex min-h-[42px] items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
+          className={`flex min-h-[42px] shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
             activeTab === "attendance"
               ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-xs"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
@@ -211,7 +211,7 @@ export function HRDashboardClient({
         <button
           type="button"
           onClick={() => setActiveTab("payroll")}
-          className={`flex min-h-[42px] items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
+          className={`flex min-h-[42px] shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
             activeTab === "payroll"
               ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-xs"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
@@ -225,7 +225,7 @@ export function HRDashboardClient({
         <button
           type="button"
           onClick={() => setActiveTab("ai")}
-          className={`flex min-h-[42px] items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
+          className={`flex min-h-[42px] shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
             activeTab === "ai"
               ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-xs"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"

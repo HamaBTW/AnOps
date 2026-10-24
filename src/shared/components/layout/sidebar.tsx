@@ -25,7 +25,7 @@ import { cn } from "@/shared/lib/utils";
 import { logoutAction } from "@/features/auth/actions/auth.action";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: IconGrid },
+  { name: "Dashboard", href: "/dashboard", icon: IconGrid },
   { name: "CRM", href: "/crm", icon: IconUsers },
   { name: "Sales", href: "/sales", icon: IconReceipt },
   { name: "Finance", href: "/finance", icon: IconWallet },
@@ -80,7 +80,7 @@ export function Sidebar({
       )}
     >
       <div className="flex h-[72px] items-center justify-between px-4 sm:px-5">
-        <Link href="/" className="flex items-center" onClick={onMobileClose}>
+        <Link href="/dashboard" className="flex items-center" onClick={onMobileClose}>
           {/* Light mode: dark logo; Dark mode: white logo */}
           <img
             src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-dark.svg"

@@ -19,7 +19,7 @@ export default async function LoginPage({
           : "Access your AnOps workspace"
       }
     >
-      <LoginForm callbackUrl={params.callbackUrl || "/"} />
+      <LoginForm callbackUrl={params.callbackUrl || "/dashboard"} />
     </AuthCard>
   );
 }

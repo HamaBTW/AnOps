@@ -5,7 +5,7 @@ import { authConfig } from "@/server/auth/config";
 const { auth } = NextAuth(authConfig);
 
 const protectedRoutes = [
-  "/",
+  "/dashboard",
   "/crm",
   "/sales",
   "/finance",
@@ -52,12 +52,12 @@ export default auth((req) => {
   }
 
   if (isAuthRoute && isLoggedIn && status === "active") {
-    return NextResponse.redirect(new URL("/", nextUrl.origin));
+    return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
   }
 
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp)$).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|brand-kit/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|gif|ico|js|json|txt|xml|css|woff2?)$).*)"],
 };

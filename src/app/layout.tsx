@@ -3,8 +3,10 @@ import Script from "next/script";
 import "./globals.css";
 import { PwaRegister } from "@/shared/components/pwa-register";
 import { HydrationMarker } from "@/shared/components/hydration-marker";
+import { siteUrl } from "@/shared/config/url";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "AnOps | One platform. Every operation.",
   description: "An AI-native, modular business platform that centralizes data, supports analysis, and helps teams move work forward.",
   manifest: "/manifest.json",
@@ -114,6 +116,8 @@ const devRecoveryShim = `(function () {
   });
 })();`;
 
+const themeInitScript = `(function(){try{var t=localStorage.getItem('anops:theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -121,13 +125,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-theme="light" className="h-full" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('anops:theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();`,
-          }}
-        />
-      </head>
       <body
         className="h-full antialiased bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]"
         style={{
@@ -136,6 +133,9 @@ export default function RootLayout({
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
+        <Script id="anops-theme-init" strategy="beforeInteractive">
+          {themeInitScript}
+        </Script>
         {process.env.NODE_ENV === "development" && (
           <Script id="anops-dev-recovery" strategy="beforeInteractive">
             {devRecoveryShim}

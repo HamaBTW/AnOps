@@ -13,6 +13,10 @@ export function PwaRegister() {
       });
     };
 
+    if (document.readyState === "complete") {
+      register();
+      return;
+    }
     window.addEventListener("load", register);
     return () => window.removeEventListener("load", register);
   }, []);

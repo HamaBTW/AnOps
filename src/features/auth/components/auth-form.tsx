@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/shared/lib/utils";
 
 export function AuthCard({
@@ -13,7 +14,7 @@ export function AuthCard({
     <div className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg-canvas)]">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <a href="/" className="inline-flex items-center justify-center mb-6">
+          <Link href="/" className="inline-flex items-center justify-center mb-6">
             <img
               src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-dark.svg"
               alt="AnOps"
@@ -24,7 +25,7 @@ export function AuthCard({
               alt="AnOps"
               className="h-8 hidden dark:block"
             />
-          </a>
+          </Link>
           <h1 className="text-2xl font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">{title}</h1>
           {description && <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{description}</p>}
         </div>

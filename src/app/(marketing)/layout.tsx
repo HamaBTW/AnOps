@@ -1,7 +1,10 @@
+import { auth } from "@/server/auth";
 import { SiteHeader } from "@/shared/components/marketing/site-header";
 import { SiteFooter } from "@/shared/components/marketing/site-footer";
 
-export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]">
       <a
@@ -10,7 +13,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       >
         Skip to content
       </a>
-      <SiteHeader />
+      <SiteHeader user={session?.user} />
       <main id="main" className="flex-1">
         {children}
       </main>

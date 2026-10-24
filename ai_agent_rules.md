@@ -15,6 +15,13 @@
 - Extend `Session` and `JWT` types explicitly in `types/next-auth.d.ts`.
 - Protect routes via `middleware.ts` with graceful offline fallback handling.
 
+## Multi-Tenancy & Data Isolation
+- **Tenant Scoping:** The platform is multi-tenant. Every user belongs to one or more companies.
+- **Mandatory `companyId`:** Every database query and insert must be filtered or populated with the active tenant's `companyId`.
+- **Zero Cross-Tenant Leaks:** Never query business entities (employees, departments, attendance, payroll, invoices) globally without `companyId`.
+- **Onboarding Flow:** Users without a company must be guided to create an initial company before accessing module dashboards.
+
 ## UI/UX Rules
 - Touch target sizes must be at least `44x44px`.
 - Handle notch and navigation safe areas (`env(safe-area-inset-*)`).
+- Multi-tenant company switcher must be accessible from mobile and desktop shells.

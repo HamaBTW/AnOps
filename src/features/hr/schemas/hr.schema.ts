@@ -58,6 +58,86 @@ export const departmentSchema = z.object({
   description: z.string().trim().max(250).optional(),
 });
 
+// ========================
+// Leave / Time-off Schemas
+// ========================
+
+export const leaveRequestSchema = z
+  .object({
+    employeeId: z.string().min(1, "Employee is required"),
+    leaveType: z.enum([
+      "annual",
+      "sick",
+      "unpaid",
+      "maternity_paternity",
+      "bereavement",
+      "other",
+    ]),
+    startDate: z.string().min(1, "Start date is required"),
+    endDate: z.string().min(1, "End date is required"),
+    reason: z
+      .string()
+      .trim()
+      .min(3, "Please provide a reason (minimum 3 characters)")
+      .max(300, "Reason must be at most 300 characters"),
+    isPaid: z.boolean().default(true),
+  })
+  .refine(
+    (data) => {
+      const start = new Date(data.startDate);
+      const end = new Date(data.endDate);
+      return !isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start;
+    },
+    {
+      message: "End date must be on or after start date",
+      path: ["endDate"],
+    }
+  );
+
+export const leaveReviewSchema = z.object({
+  requestId: z.string().min(1, "Request ID is required"),
+  action: z.enum(["approve", "reject"]),
+  adminComment: z.string().trim().max(300, "Comment is too long").optional(),
+});
+
+// ========================
+// Attendance Schemas
+// ========================
+
+export const attendancePunchSchema = z.object({
+  employeeId: z.string().min(1, "Employee ID is required"),
+});
+
+// ========================
+// Payroll Schemas
+// ========================
+
+export const payrollGenerateSchema = z.object({
+  period: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Period must be in YYYY-MM format"),
+  employeeIds: z.array(z.string()).optional(),
+  workingDaysInMonth: z.coerce.number().min(1).max(31).default(22),
+});
+
+// ========================
+// AI Assistant Schemas
+// ========================
+
+export const aiPromptSchema = z.object({
+  prompt: z
+    .string()
+    .trim()
+    .min(1, "Prompt cannot be empty")
+    .max(1000, "Prompt cannot exceed 1000 characters"),
+  employeeId: z.string().min(1, "Employee context is required"),
+});
+
 export type EmployeeInput = z.infer<typeof employeeSchema>;
 export type JobTitleInput = z.infer<typeof jobTitleSchema>;
 export type DepartmentInput = z.infer<typeof departmentSchema>;
+export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
+export type LeaveReviewInput = z.infer<typeof leaveReviewSchema>;
+export type AttendancePunchInput = z.infer<typeof attendancePunchSchema>;
+export type PayrollGenerateInput = z.infer<typeof payrollGenerateSchema>;
+export type AIPromptInput = z.infer<typeof aiPromptSchema>;

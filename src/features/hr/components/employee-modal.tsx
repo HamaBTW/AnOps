@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { X, Loader2, User, Mail, Phone, Calendar, DollarSign, Shield } from "lucide-react";
+import { X, Loader2, User, Mail, Phone, Calendar, DollarSign, Shield, Copy, Check, KeyRound } from "lucide-react";
 import type { Department, JobTitle, Employee } from "@/features/hr/types";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
 import { Portal } from "@/shared/components/ui/portal";
@@ -27,6 +27,8 @@ export function EmployeeModal({
 }: EmployeeModalProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Form fields
   const [fullName, setFullName] = useState("");
@@ -118,11 +120,28 @@ export function EmployeeModal({
 
       if (result.error) {
         setError(result.error);
+      } else if (!isEditing && result.tempPassword) {
+        // Show the one-time temp password to HR admin before closing
+        setTempPassword(result.tempPassword);
+        onSuccess?.();
       } else {
         onSuccess?.();
         onClose();
       }
     });
+  };
+
+  const handleCopyPassword = async () => {
+    if (!tempPassword) return;
+    await navigator.clipboard.writeText(tempPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDismissTempPassword = () => {
+    setTempPassword(null);
+    setCopied(false);
+    onClose();
   };
 
   return (
@@ -134,6 +153,63 @@ export function EmployeeModal({
         >
           {/* Mobile Sheet Drag Indicator */}
           <div className="w-10 h-1 rounded-full bg-[var(--color-border-control)] mx-auto mb-2.5 sm:hidden shrink-0" />
+
+          {/* Temp Password Success Screen */}
+          {tempPassword ? (
+            <div className="flex flex-col items-center gap-5 py-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-action-primary)]/15">
+                <KeyRound className="h-8 w-8 text-[var(--color-action-primary)]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[var(--color-text-primary)]">Employee Created!</h2>
+                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                  A login account has been provisioned. Share this one-time password securely — it won&apos;t be shown again.
+                </p>
+              </div>
+
+              {/* Temp Password Display */}
+              <div className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-subtle)] p-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Temporary Password</p>
+                <div className="flex items-center gap-3">
+                  <code className="flex-1 rounded-[var(--radius-control)] bg-[var(--color-bg-canvas)] px-3 py-2.5 text-center font-mono text-lg font-bold tracking-widest text-[var(--color-text-primary)] select-all border border-[var(--color-border-subtle)]">
+                    {tempPassword}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleCopyPassword}
+                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors shrink-0"
+                    title="Copy to clipboard"
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="mt-2 text-[10px] text-[var(--color-text-secondary)]">
+                  The employee must set a new password on first login.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={handleCopyPassword}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                >
+                  {copied ? <Check className="h-4 w-4 text-[var(--color-status-success)]" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "Copied!" : "Copy password"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissTempPassword}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-sm font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
+
+
 
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3 sm:pb-4">
@@ -367,6 +443,8 @@ export function EmployeeModal({
               </button>
             </div>
           </form>
+          </>
+          )}
         </div>
       </div>
     </Portal>

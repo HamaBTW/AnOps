@@ -67,6 +67,7 @@ export async function registerUser(data: unknown): Promise<RegisterResult> {
       name: name.trim(),
       email: normalizedEmail,
       password: hashedPassword,
+      role: "employee",
       emailVerified: null,
       status: "unverified",
       createdAt: now,

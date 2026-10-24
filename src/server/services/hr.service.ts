@@ -167,12 +167,20 @@ import {
   calculateNetSalary,
 } from "@/features/hr/utils/date-utils";
 
+let seedPromise: Promise<void> | null = null;
+
 /**
  * Initializes and seeds default HR records (departments, predefined titles, demo employees,
  * sample leave requests, today's attendance, and sample payslips) if they do not exist yet.
+ * Protected by a singleton in-flight seedPromise lock to eliminate concurrency race conditions.
  */
 export async function seedHrDefaults(): Promise<void> {
-  const db = await getDb();
+  if (seedPromise) {
+    return seedPromise;
+  }
+
+  seedPromise = (async () => {
+    const db = await getDb();
 
   // 1. Departments
   const deptCount = await db.collection("departments").countDocuments();
@@ -399,9 +407,21 @@ export async function seedHrDefaults(): Promise<void> {
     }
 
     if (sampleAttendance.length > 0) {
-      await db.collection("attendance").insertMany(sampleAttendance);
+      for (const att of sampleAttendance) {
+        await db.collection("attendance").updateOne(
+          { employeeId: att.employeeId, date: att.date },
+          { $setOnInsert: att },
+          { upsert: true }
+        );
+      }
     }
   }
+  })().catch((err) => {
+    seedPromise = null;
+    throw err;
+  });
+
+  return seedPromise;
 }
 
 // ==========================================
@@ -1172,7 +1192,17 @@ export async function getTodayAttendance(): Promise<TodayAttendanceSummary> {
   const activeEmpMap = new Map<string, string>();
   activeEmployees.forEach((e) => activeEmpMap.set((e._id as ObjectId).toString(), e.fullName as string));
 
-  const attendanceRecords: AttendanceRecord[] = records.map((doc) => ({
+  // Deduplicate by employeeId to guarantee each employee appears AT MOST ONCE in today's roster
+  const latestByEmployee = new Map<string, (typeof records)[0]>();
+  for (const doc of records) {
+    const empId = doc.employeeId as string;
+    if (!latestByEmployee.has(empId)) {
+      latestByEmployee.set(empId, doc);
+    }
+  }
+  const deduplicatedRecords = Array.from(latestByEmployee.values());
+
+  const attendanceRecords: AttendanceRecord[] = deduplicatedRecords.map((doc) => ({
     id: (doc._id as ObjectId).toString(),
     employeeId: doc.employeeId as string,
     employeeName: (doc.employeeName as string) || activeEmpMap.get(doc.employeeId) || "Staff",

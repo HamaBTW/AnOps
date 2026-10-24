@@ -37,6 +37,11 @@ src/
 │   ├── db/                # Database layer
 │   │   ├── client.ts      # MongoDB connection
 │   │   └── schemas/       # Collection schemas/models
+│   ├── ai/                # AI Provider Master (server-only)
+│   │   ├── index.ts       # THE only import for AI features (AiMaster singleton)
+│   │   ├── types.ts       # AiProvider interface, message & result types
+│   │   ├── key-pool.ts    # Rotating key pool with 429 cooldown
+│   │   └── providers/     # Provider adapters (Groq, OpenRouter, Gemini)
 │   └── services/          # Shared business logic services
 │
 ├── shared/                # Reusable across all features
@@ -211,3 +216,39 @@ Tenant Boundary: Company
 - [ ] Types are explicit, no `any`
 - [ ] Using server components by default
 
+## AI Architecture
+
+> Full reference: `docs/AI_PROVIDERS.md`
+
+AnOps uses a **provider master** pattern for all AI features. The master is a server-side singleton at `src/server/ai/index.ts` that routes requests through three free-tier providers in priority order:
+
+```
+Groq (multi-key rotation) → OpenRouter (free models) → Gemini (Gemma family)
+```
+
+### Rules
+
+- **Always import `{ ai } from "@/server/ai"`** — never instantiate provider classes directly.
+- Provider adapters live in `src/server/ai/providers/` and implement the `AiProvider` interface.
+- All AI code is `server-only` — never import in client components or `proxy.ts`.
+- AI errors must be caught; AI outages must not crash core features.
+
+### Key Rotation
+
+Groq and Gemini accept comma-separated key lists in `.env`:
+
+```env
+GROQ_API_KEYS=gsk_key1,gsk_key2,gsk_key3
+GEMINI_API_KEYS=AIza_key1,AIza_key2
+```
+
+`KeyPool` marks a key rate-limited for 60s on 429 and auto-rotates to the next key.
+
+### Quick Usage
+
+```typescript
+// server action / service / route handler only
+import { ai } from "@/server/ai";
+
+const answer = await ai.ask("Summarise attendance for this week", "You are an HR assistant.");
+```

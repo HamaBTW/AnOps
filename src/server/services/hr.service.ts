@@ -1,4 +1,6 @@
 import "server-only";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 import clientPromise from "@/server/db/client";
 import type {
@@ -809,7 +811,7 @@ export async function getEmployeeByEmail(email: string): Promise<Employee | null
   };
 }
 
-export async function createEmployee(data: EmployeeInput): Promise<Employee> {
+export async function createEmployee(data: EmployeeInput): Promise<Employee & { tempPassword: string }> {
   const db = await getDb();
   const normalizedEmail = data.email.toLowerCase().trim();
 
@@ -844,6 +846,26 @@ export async function createEmployee(data: EmployeeInput): Promise<Employee> {
 
   const result = await db.collection("employees").insertOne(newDoc);
 
+  // Auto-provision a users account for the new employee
+  const tempPassword = crypto.randomBytes(9).toString("base64url").slice(0, 12);
+  const hashedPassword = await bcrypt.hash(tempPassword, 12);
+  await db.collection("users").updateOne(
+    { email: normalizedEmail },
+    {
+      $setOnInsert: {
+        email: normalizedEmail,
+        name: data.fullName.trim(),
+        password: hashedPassword,
+        status: "active",
+        forcePasswordReset: true,
+        emailVerified: new Date(), // skip email verification for HR-provisioned accounts
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    },
+    { upsert: true }
+  );
+
   return {
     id: result.insertedId.toString(),
     fullName: newDoc.fullName,
@@ -859,6 +881,7 @@ export async function createEmployee(data: EmployeeInput): Promise<Employee> {
     leaveAllowance: newDoc.leaveAllowance,
     createdAt: newDoc.createdAt.toISOString(),
     updatedAt: newDoc.updatedAt.toISOString(),
+    tempPassword, // shown once to HR admin
   };
 }
 

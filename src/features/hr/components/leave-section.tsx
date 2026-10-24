@@ -25,6 +25,7 @@ type LeaveSectionProps = {
   currentEmployee?: Employee | null;
   leaveBalance: LeaveBalance;
   onRefresh: () => void;
+  userRole?: "employee" | "manager" | "hr_admin";
 };
 
 export function LeaveSection({
@@ -33,11 +34,13 @@ export function LeaveSection({
   currentEmployee,
   leaveBalance,
   onRefresh,
+  userRole = "employee",
 }: LeaveSectionProps) {
   const [isPending, startTransition] = useTransition();
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"all" | "my">("all");
+  const isAdmin = userRole === "hr_admin";
+  const [activeTab, setActiveTab] = useState<"all" | "my">(isAdmin ? "all" : "my");
 
   // Review modal state
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -201,8 +204,9 @@ export function LeaveSection({
 
         {/* Tab & Status Filter Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-y border-[var(--color-border-subtle)] py-3">
-          {/* My vs All Tabs */}
+          {/* My vs All Tabs — All Requests only for hr_admin */}
           <div className="flex items-center gap-1 bg-[var(--color-bg-subtle)] p-1 rounded-[var(--radius-control)]">
+            {isAdmin && (
             <button
               type="button"
               onClick={() => setActiveTab("all")}
@@ -214,6 +218,7 @@ export function LeaveSection({
             >
               All Requests ({leaveRequests.length})
             </button>
+            )}
             <button
               type="button"
               onClick={() => setActiveTab("my")}
@@ -226,6 +231,7 @@ export function LeaveSection({
               My Requests
             </button>
           </div>
+
 
           {/* Status Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
@@ -343,7 +349,7 @@ export function LeaveSection({
 
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                        {isPendingStatus ? (
+                        {isPendingStatus && isAdmin ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
@@ -366,10 +372,11 @@ export function LeaveSection({
                           </div>
                         ) : (
                           <span className="text-[11px] text-[var(--color-text-secondary)]">
-                            {req.reviewedBy ? `Reviewed by ${req.reviewedBy}` : "Completed"}
+                            {req.reviewedBy ? `Reviewed by ${req.reviewedBy}` : isPendingStatus ? "Pending" : "Completed"}
                           </span>
                         )}
                       </td>
+
                     </tr>
                   );
                 })
@@ -464,8 +471,8 @@ export function LeaveSection({
                     </div>
                   )}
 
-                  {/* Actions on Mobile */}
-                  {isPendingStatus ? (
+                  {/* Actions on Mobile — admin only */}
+                  {isPendingStatus && isAdmin ? (
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <button
                         type="button"
@@ -486,7 +493,7 @@ export function LeaveSection({
                     </div>
                   ) : (
                     <p className="text-[11px] text-[var(--color-text-secondary)] text-right pt-0.5">
-                      {req.reviewedBy ? `Reviewed by ${req.reviewedBy}` : "Completed"}
+                      {req.reviewedBy ? `Reviewed by ${req.reviewedBy}` : isPendingStatus ? "Awaiting review" : "Completed"}
                     </p>
                   )}
                 </div>

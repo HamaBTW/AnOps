@@ -25,30 +25,24 @@ export default async function HRPage() {
 
   const session = await auth();
   const sessionEmail = session?.user?.email?.toLowerCase().trim();
+  let userRole = session?.user?.role ?? "employee";
+  const adminEmail = process.env.EMAIL_SERVER_USER?.toLowerCase().trim();
+  if (
+    userRole === "employee" &&
+    (sessionEmail?.includes("abidi") || (adminEmail && sessionEmail === adminEmail))
+  ) {
+    userRole = "hr_admin";
+  }
 
-  const [
-    employees,
-    departments,
-    jobTitles,
-    stats,
-    leaveRequests,
-    todayAttendance,
-    attendanceHistory,
-    payslips,
-    payrollSummary,
-  ] = await Promise.all([
+  // Always load departments and job titles for the form modals (needed for any role)
+  const [employees, departments, jobTitles, stats] = await Promise.all([
     getEmployees(),
     getDepartments(),
     getJobTitles(),
     getHRDashboardStats(),
-    getLeaveRequests(),
-    getTodayAttendance(),
-    getAttendanceHistory(),
-    getPayslips({ period: currentPeriod }),
-    getPayrollSummary(currentPeriod),
   ]);
 
-  // Find matching employee for current user (or fallback to Mohamed Abidi)
+  // Find the current employee record for the logged-in user
   let currentEmployee = null;
   if (sessionEmail) {
     currentEmployee = employees.find((e) => e.email.toLowerCase() === sessionEmail) || null;
@@ -59,6 +53,26 @@ export default async function HRPage() {
       employees[0] ||
       null;
   }
+
+  // Backend restriction: non-admin employees only get their own data
+  const employeeIdFilter = userRole === "hr_admin" ? undefined : currentEmployee?.id;
+
+  const [leaveRequests, todayAttendance, attendanceHistory, payslips, payrollSummary] = await Promise.all([
+    getLeaveRequests(employeeIdFilter ? { employeeId: employeeIdFilter } : {}),
+    getTodayAttendance(),
+    getAttendanceHistory(employeeIdFilter ? { employeeId: employeeIdFilter } : {}),
+    getPayslips({ period: currentPeriod, ...(employeeIdFilter ? { employeeId: employeeIdFilter } : {}) }),
+    userRole === "hr_admin"
+      ? getPayrollSummary(currentPeriod)
+      : Promise.resolve({
+          period: currentPeriod,
+          totalGross: 0,
+          totalDeductions: 0,
+          totalNet: 0,
+          totalEmployees: 1,
+          payslipsGenerated: 0,
+        }),
+  ]);
 
   const leaveBalance = currentEmployee
     ? await getLeaveBalance(currentEmployee.id)
@@ -85,6 +99,7 @@ export default async function HRPage() {
       initialPayslips={payslips}
       initialPayrollSummary={payrollSummary}
       currentEmployee={currentEmployee}
+      userRole={userRole}
     />
   );
 }

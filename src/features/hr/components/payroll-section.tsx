@@ -28,6 +28,7 @@ type PayrollSectionProps = {
   employees: Employee[];
   currentEmployee?: Employee | null;
   onRefresh: () => void;
+  userRole?: "employee" | "manager" | "hr_admin";
 };
 
 export function PayrollSection({
@@ -36,8 +37,10 @@ export function PayrollSection({
   employees,
   currentEmployee,
   onRefresh,
+  userRole = "employee",
 }: PayrollSectionProps) {
   const [isPending, startTransition] = useTransition();
+  const isAdmin = userRole === "hr_admin";
 
   // Selected period e.g. "2026-10"
   const [period, setPeriod] = useState<string>(initialSummary.period || "2026-10");
@@ -159,6 +162,7 @@ export function PayrollSection({
               />
             </div>
 
+            {isAdmin && (
             <button
               type="button"
               onClick={handleGeneratePayroll}
@@ -177,6 +181,7 @@ export function PayrollSection({
                 </>
               )}
             </button>
+            )}
           </div>
         </div>
 

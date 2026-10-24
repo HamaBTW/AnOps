@@ -10,12 +10,17 @@ import {
 import type { AttendanceRecord, TodayAttendanceSummary } from "@/features/hr/types";
 import type { ActionResult } from "./employee.action";
 
+import { requireAuthUser } from "@/server/auth/rbac";
+
 export async function checkInAction(employeeId: string): Promise<ActionResult<AttendanceRecord>> {
   try {
-    if (!employeeId) {
+    const authUser = await requireAuthUser();
+    const effectiveEmployeeId = !authUser.isAdmin && authUser.employee ? authUser.employee.id : employeeId;
+
+    if (!effectiveEmployeeId) {
       return { error: "Employee ID is required." };
     }
-    const record = await checkInEmployee(employeeId);
+    const record = await checkInEmployee(effectiveEmployeeId);
     revalidatePath("/hr");
     return { success: true, data: record };
   } catch (err: unknown) {
@@ -26,10 +31,13 @@ export async function checkInAction(employeeId: string): Promise<ActionResult<At
 
 export async function checkOutAction(employeeId: string): Promise<ActionResult<AttendanceRecord>> {
   try {
-    if (!employeeId) {
+    const authUser = await requireAuthUser();
+    const effectiveEmployeeId = !authUser.isAdmin && authUser.employee ? authUser.employee.id : employeeId;
+
+    if (!effectiveEmployeeId) {
       return { error: "Employee ID is required." };
     }
-    const record = await checkOutEmployee(employeeId);
+    const record = await checkOutEmployee(effectiveEmployeeId);
     revalidatePath("/hr");
     return { success: true, data: record };
   } catch (err: unknown) {
@@ -40,6 +48,7 @@ export async function checkOutAction(employeeId: string): Promise<ActionResult<A
 
 export async function getTodayAttendanceAction(): Promise<ActionResult<TodayAttendanceSummary>> {
   try {
+    await requireAuthUser();
     const summary = await getTodayAttendance();
     return { success: true, data: summary };
   } catch (err: unknown) {
@@ -54,7 +63,12 @@ export async function getAttendanceHistoryAction(filter: {
   endDate?: string;
 }): Promise<ActionResult<AttendanceRecord[]>> {
   try {
-    const history = await getAttendanceHistory(filter);
+    const authUser = await requireAuthUser();
+    const effectiveFilter = !authUser.isAdmin && authUser.employee
+      ? { ...filter, employeeId: authUser.employee.id }
+      : filter;
+
+    const history = await getAttendanceHistory(effectiveFilter);
     return { success: true, data: history };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch attendance history.";

@@ -50,6 +50,7 @@ type HRDashboardClientProps = {
   initialPayslips: PayslipRecord[];
   initialPayrollSummary: PayrollSummary;
   currentEmployee?: Employee | null;
+  userRole?: "employee" | "manager" | "hr_admin";
 };
 
 export function HRDashboardClient({
@@ -64,11 +65,13 @@ export function HRDashboardClient({
   initialPayslips,
   initialPayrollSummary,
   currentEmployee,
+  userRole = "employee",
 }: HRDashboardClientProps) {
   const router = useRouter();
+  const isAdmin = userRole === "hr_admin";
 
   // Active module tab
-  const [activeTab, setActiveTab] = useState<HRTab>("employees");
+  const [activeTab, setActiveTab] = useState<HRTab>(isAdmin ? "employees" : "leave");
 
   // Modals for Employee Management
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
@@ -111,9 +114,10 @@ export function HRDashboardClient({
           </p>
         </div>
 
-        {/* Global Action Buttons */}
+        {/* Global Action Buttons — admin only */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Job Titles */}
+          {isAdmin && (
           <button
             type="button"
             onClick={() => setJobTitlesModalOpen(true)}
@@ -125,8 +129,10 @@ export function HRDashboardClient({
               {initialJobTitles.length}
             </span>
           </button>
+          )}
 
           {/* Departments */}
+          {isAdmin && (
           <button
             type="button"
             onClick={() => setDepartmentModalOpen(true)}
@@ -138,8 +144,10 @@ export function HRDashboardClient({
               {initialDepartments.length}
             </span>
           </button>
+          )}
 
-          {/* Add Employee CTA */}
+          {/* Add Employee CTA — admin only */}
+          {isAdmin && (
           <button
             type="button"
             onClick={handleOpenAddEmployee}
@@ -148,12 +156,14 @@ export function HRDashboardClient({
             <Plus className="h-4 w-4" />
             <span>Add Employee</span>
           </button>
+          )}
         </div>
       </div>
 
       {/* Modern Navigation Tabs for the 5 Deliverables */}
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[var(--color-border-subtle)] pb-2 no-scrollbar">
-        {/* Tab 1: Employees */}
+        {/* Tab 1: Employees — admin only */}
+        {isAdmin && (
         <button
           type="button"
           onClick={() => setActiveTab("employees")}
@@ -166,6 +176,7 @@ export function HRDashboardClient({
           <Users className="h-4 w-4" />
           <span>Employees ({initialEmployees.length})</span>
         </button>
+        )}
 
         {/* Tab 2: Time-off & Leave */}
         <button
@@ -282,10 +293,11 @@ export function HRDashboardClient({
       {activeTab === "leave" && (
         <LeaveSection
           leaveRequests={initialLeaveRequests}
-          employees={initialEmployees}
+          employees={isAdmin ? initialEmployees : initialEmployees.filter(e => e.id === currentEmployee?.id)}
           currentEmployee={currentEmployee}
           leaveBalance={initialLeaveBalance}
           onRefresh={handleRefresh}
+          userRole={userRole}
         />
       )}
 
@@ -293,19 +305,21 @@ export function HRDashboardClient({
         <AttendanceSection
           todaySummary={initialTodayAttendance}
           attendanceHistory={initialAttendanceHistory}
-          employees={initialEmployees}
+          employees={isAdmin ? initialEmployees : initialEmployees.filter(e => e.id === currentEmployee?.id)}
           currentEmployee={currentEmployee}
           onRefresh={handleRefresh}
+          userRole={userRole}
         />
       )}
 
       {activeTab === "payroll" && (
         <PayrollSection
-          initialPayslips={initialPayslips}
+          initialPayslips={isAdmin ? initialPayslips : initialPayslips.filter(p => p.employeeId === currentEmployee?.id)}
           initialSummary={initialPayrollSummary}
-          employees={initialEmployees}
+          employees={isAdmin ? initialEmployees : initialEmployees.filter(e => e.id === currentEmployee?.id)}
           currentEmployee={currentEmployee}
           onRefresh={handleRefresh}
+          userRole={userRole}
         />
       )}
 

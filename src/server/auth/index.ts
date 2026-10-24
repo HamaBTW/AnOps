@@ -79,12 +79,30 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
         }
 
+        const employee = await db.collection("employees").findOne({ email: normalizedEmail });
+        let hrRole = (employee?.role as "employee" | "manager" | "hr_admin" | undefined);
+        if (!hrRole) {
+          const adminEmail = process.env.EMAIL_SERVER_USER?.toLowerCase().trim();
+          if (
+            user.role === "admin" ||
+            user.role === "hr_admin" ||
+            normalizedEmail.includes("abidi") ||
+            (adminEmail && normalizedEmail === adminEmail)
+          ) {
+            hrRole = "hr_admin";
+          } else {
+            hrRole = "employee";
+          }
+        }
+
         return {
           id: user._id.toString(),
           email: user.email as string,
           name: (user.name as string) || (user.email as string).split("@")[0],
           status,
           emailVerified: (user.emailVerified as Date | null) ?? null,
+          role: hrRole,
+          forcePasswordReset: Boolean(user.forcePasswordReset),
         };
       },
     }),

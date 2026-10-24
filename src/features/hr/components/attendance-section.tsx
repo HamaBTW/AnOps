@@ -22,6 +22,7 @@ type AttendanceSectionProps = {
   employees: Employee[];
   currentEmployee?: Employee | null;
   onRefresh: () => void;
+  userRole?: "employee" | "manager" | "hr_admin";
 };
 
 export function AttendanceSection({
@@ -30,9 +31,11 @@ export function AttendanceSection({
   employees,
   currentEmployee,
   onRefresh,
+  userRole = "employee",
 }: AttendanceSectionProps) {
   const [isPending, startTransition] = useTransition();
   const [punchError, setPunchError] = useState<string | null>(null);
+  const isAdmin = userRole === "hr_admin";
 
   // Live real-time clock
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -145,11 +148,12 @@ export function AttendanceSection({
               </p>
             </div>
 
-            {/* Employee Switcher for punch in/out */}
+            {/* Employee Switcher — admin only; employees see just their own name */}
             <div className="mt-3">
               <label className="block text-[11px] font-semibold text-[var(--color-text-secondary)] mb-1">
-                Active Staff Member
+                {isAdmin ? "Active Staff Member" : "Your Attendance"}
               </label>
+              {isAdmin ? (
               <select
                 value={punchEmployeeId}
                 onChange={(e) => {
@@ -165,6 +169,11 @@ export function AttendanceSection({
                   </option>
                 ))}
               </select>
+              ) : (
+              <p className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3 py-2 text-xs font-medium text-[var(--color-text-primary)]">
+                {activePunchEmployee?.fullName || "You"} &mdash; {activePunchEmployee?.jobTitle}
+              </p>
+              )}
             </div>
 
             {/* Status indicator */}

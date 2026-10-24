@@ -51,6 +51,12 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/unverified", nextUrl.origin));
   }
 
+  // Force password reset: employee must change their temp password before accessing the app
+  const forceReset = (req.auth?.user as { forcePasswordReset?: boolean } | undefined)?.forcePasswordReset;
+  if (isLoggedIn && forceReset && isProtected && nextUrl.pathname !== "/reset-password") {
+    return NextResponse.redirect(new URL("/reset-password?force=1", nextUrl.origin));
+  }
+
   if (isAuthRoute && isLoggedIn && status === "active") {
     return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
   }

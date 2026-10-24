@@ -13,8 +13,11 @@ import {
 import type { JobTitle, Employee } from "@/features/hr/types";
 import type { ActionResult } from "./employee.action";
 
+import { requireAdminUser } from "@/server/auth/rbac";
+
 export async function createJobTitleAction(title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
   try {
+    await requireAdminUser();
     const parsed = jobTitleSchema.safeParse({ title, departmentId });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid job title." };
@@ -31,6 +34,7 @@ export async function createJobTitleAction(title: string, departmentId?: string)
 
 export async function updateJobTitleAction(id: string, title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
   try {
+    await requireAdminUser();
     const parsed = jobTitleSchema.safeParse({ title, departmentId });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid job title." };
@@ -47,6 +51,7 @@ export async function updateJobTitleAction(id: string, title: string, department
 
 export async function deleteJobTitleAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
+    await requireAdminUser();
     await deleteJobTitle(id);
     revalidatePath("/hr");
     return { success: true, data: { id } };
@@ -68,6 +73,7 @@ export async function fetchJobTitlesAction(): Promise<ActionResult<JobTitle[]>> 
 
 export async function reseedDefaultsAction(): Promise<ActionResult<boolean>> {
   try {
+    await requireAdminUser();
     await seedHrDefaults();
     revalidatePath("/hr");
     return { success: true, data: true };

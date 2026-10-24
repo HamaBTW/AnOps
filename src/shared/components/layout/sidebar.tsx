@@ -32,6 +32,7 @@ const navigation = [
   { name: "Purchasing", href: "/purchasing", icon: ShoppingCart },
   { name: "Projects", href: "/projects", icon: FolderKanban },
   { name: "Documents", href: "/documents", icon: FileText },
+  { name: "HR", href: "/hr", icon: Users },
   { name: "Notifications", href: "/notifications", icon: Bell },
   { name: "Administration", href: "/admin", icon: Settings },
 ];

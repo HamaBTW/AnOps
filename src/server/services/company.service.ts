@@ -1,7 +1,7 @@
 import "server-only";
 import { ObjectId } from "mongodb";
 import clientPromise from "@/server/db/client";
-import type { Company, CompanyMember, CreateCompanyInput } from "@/features/company/types";
+import type { Company, CompanyMember, CompanyRole, CreateCompanyInput } from "@/features/company/types";
 import { seedHrDefaultsForCompany } from "./hr.service";
 
 async function getDb() {
@@ -161,5 +161,264 @@ export async function getCompanyMember(
     status: doc.status,
     createdAt: doc.createdAt ? (doc.createdAt as Date).toISOString() : undefined,
     updatedAt: doc.updatedAt ? (doc.updatedAt as Date).toISOString() : undefined,
+  };
+}
+
+/**
+ * Updates company settings (name, industry, currency).
+ */
+export async function updateCompany(
+  companyId: string,
+  data: { name?: string; industry?: string; currency?: string }
+): Promise<Company> {
+  const db = await getDb();
+  if (!ObjectId.isValid(companyId)) throw new Error("Invalid company ID.");
+
+  const updateFields: Record<string, unknown> = {
+    updatedAt: new Date(),
+  };
+
+  if (data.name && data.name.trim()) {
+    updateFields.name = data.name.trim();
+  }
+  if (data.industry) {
+    updateFields.industry = data.industry.trim();
+  }
+  if (data.currency) {
+    updateFields.currency = data.currency.trim();
+  }
+
+  await db.collection("companies").updateOne(
+    { _id: new ObjectId(companyId) },
+    { $set: updateFields }
+  );
+
+  const updated = await getCompanyById(companyId);
+  if (!updated) throw new Error("Company not found after update.");
+  return updated;
+}
+
+/**
+ * Retrieves all members of a company with joined user name and email.
+ */
+export async function getCompanyMembers(companyId: string): Promise<CompanyMember[]> {
+  const db = await getDb();
+  if (!ObjectId.isValid(companyId)) return [];
+
+  const cObjId = new ObjectId(companyId);
+
+  const members = await db
+    .collection("company_members")
+    .find({ companyId: cObjId })
+    .sort({ createdAt: 1 })
+    .toArray();
+
+  if (members.length === 0) return [];
+
+  const userIds = members.map((m) => m.userId as ObjectId);
+  const users = await db
+    .collection("users")
+    .find({ _id: { $in: userIds } })
+    .toArray();
+
+  const userMap = new Map<string, { name?: string; email?: string }>();
+  users.forEach((u) => {
+    userMap.set(u._id.toString(), {
+      name: u.name as string | undefined,
+      email: u.email as string | undefined,
+    });
+  });
+
+  return members.map((m) => {
+    const uInfo = userMap.get(m.userId.toString());
+    return {
+      id: m._id.toString(),
+      companyId: m.companyId.toString(),
+      userId: m.userId.toString(),
+      role: m.role as CompanyRole,
+      status: m.status as "active" | "invited",
+      userName: uInfo?.name || "Staff Member",
+      userEmail: uInfo?.email || "",
+      createdAt: m.createdAt ? (m.createdAt as Date).toISOString() : undefined,
+      updatedAt: m.updatedAt ? (m.updatedAt as Date).toISOString() : undefined,
+    };
+  });
+}
+
+/**
+ * Adds a new member to the company. If user account does not exist, provisions one.
+ */
+export async function addCompanyMember(
+  companyId: string,
+  email: string,
+  role: "admin" | "manager" | "employee",
+  fullName?: string
+): Promise<{ member: CompanyMember; tempPassword?: string }> {
+  const db = await getDb();
+  if (!ObjectId.isValid(companyId)) throw new Error("Invalid company ID.");
+
+  const cObjId = new ObjectId(companyId);
+  const normalizedEmail = email.toLowerCase().trim();
+
+  let tempPassword: string | undefined = undefined;
+
+  let user = await db.collection("users").findOne({ email: normalizedEmail });
+
+  if (!user) {
+    const crypto = await import("crypto");
+    const bcrypt = await import("bcryptjs");
+    tempPassword = crypto.randomBytes(9).toString("base64url").slice(0, 12);
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+
+    const insertUser = await db.collection("users").insertOne({
+      name: fullName?.trim() || normalizedEmail.split("@")[0],
+      email: normalizedEmail,
+      password: hashedPassword,
+      status: "active",
+      forcePasswordReset: true,
+      emailVerified: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    user = {
+      _id: insertUser.insertedId,
+      name: fullName?.trim() || normalizedEmail.split("@")[0],
+      email: normalizedEmail,
+    };
+  }
+
+  const existingMember = await db.collection("company_members").findOne({
+    companyId: cObjId,
+    userId: user._id as ObjectId,
+  });
+
+  if (existingMember) {
+    throw new Error(`User "${normalizedEmail}" is already a member of this company.`);
+  }
+
+  const now = new Date();
+  const insertMember = await db.collection("company_members").insertOne({
+    companyId: cObjId,
+    userId: user._id as ObjectId,
+    role,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    member: {
+      id: insertMember.insertedId.toString(),
+      companyId,
+      userId: (user._id as ObjectId).toString(),
+      role,
+      status: "active",
+      userName: (user.name as string) || normalizedEmail.split("@")[0],
+      userEmail: normalizedEmail,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    },
+    tempPassword,
+  };
+}
+
+/**
+ * Updates a company member's role.
+ */
+export async function updateCompanyMemberRole(
+  companyId: string,
+  memberId: string,
+  newRole: "admin" | "manager" | "employee",
+  actingUserId: string
+): Promise<CompanyMember> {
+  const db = await getDb();
+  if (!ObjectId.isValid(companyId) || !ObjectId.isValid(memberId)) {
+    throw new Error("Invalid company or member ID.");
+  }
+
+  const member = await db.collection("company_members").findOne({
+    _id: new ObjectId(memberId),
+    companyId: new ObjectId(companyId),
+  });
+
+  if (!member) throw new Error("Member not found in this company.");
+  if (member.role === "owner") throw new Error("The organization owner's role cannot be modified.");
+
+  if (member.userId.toString() === actingUserId) {
+    throw new Error("You cannot change your own role.");
+  }
+
+  await db.collection("company_members").updateOne(
+    { _id: new ObjectId(memberId) },
+    { $set: { role: newRole, updatedAt: new Date() } }
+  );
+
+  const updated = await db.collection("company_members").findOne({ _id: new ObjectId(memberId) });
+  const user = await db.collection("users").findOne({ _id: member.userId as ObjectId });
+
+  return {
+    id: updated!._id.toString(),
+    companyId: updated!.companyId.toString(),
+    userId: updated!.userId.toString(),
+    role: updated!.role as CompanyRole,
+    status: updated!.status as "active" | "invited",
+    userName: (user?.name as string) || "Staff",
+    userEmail: (user?.email as string) || "",
+    createdAt: updated!.createdAt ? (updated!.createdAt as Date).toISOString() : undefined,
+    updatedAt: updated!.updatedAt ? (updated!.updatedAt as Date).toISOString() : undefined,
+  };
+}
+
+/**
+ * Removes a member from a company.
+ */
+export async function removeCompanyMember(
+  companyId: string,
+  memberId: string,
+  actingUserId: string
+): Promise<void> {
+  const db = await getDb();
+  if (!ObjectId.isValid(companyId) || !ObjectId.isValid(memberId)) {
+    throw new Error("Invalid company or member ID.");
+  }
+
+  const member = await db.collection("company_members").findOne({
+    _id: new ObjectId(memberId),
+    companyId: new ObjectId(companyId),
+  });
+
+  if (!member) throw new Error("Member not found.");
+  if (member.role === "owner") throw new Error("The organization owner cannot be removed.");
+  if (member.userId.toString() === actingUserId) {
+    throw new Error("You cannot remove yourself from the organization.");
+  }
+
+  await db.collection("company_members").deleteOne({ _id: new ObjectId(memberId) });
+}
+
+/**
+ * Aggregates company overview statistics.
+ */
+export async function getCompanyStats(companyId: string) {
+  const db = await getDb();
+  if (!ObjectId.isValid(companyId)) {
+    return { membersCount: 0, employeesCount: 0, departmentsCount: 0, jobTitlesCount: 0 };
+  }
+
+  const cObjId = new ObjectId(companyId);
+
+  const [membersCount, employeesCount, departmentsCount, jobTitlesCount] = await Promise.all([
+    db.collection("company_members").countDocuments({ companyId: cObjId }),
+    db.collection("employees").countDocuments({ companyId: cObjId }),
+    db.collection("departments").countDocuments({ companyId: cObjId }),
+    db.collection("job_titles").countDocuments({ companyId: cObjId }),
+  ]);
+
+  return {
+    membersCount,
+    employeesCount,
+    departmentsCount,
+    jobTitlesCount,
   };
 }

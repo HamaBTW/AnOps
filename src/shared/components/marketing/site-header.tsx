@@ -12,7 +12,13 @@ import { CategoryIcon } from "@/shared/components/marketing/category-icon";
 import { StatusBadge } from "@/shared/components/marketing/status-badge";
 import { cn } from "@/shared/lib/utils";
 
-export function SiteHeader() {
+type SiteHeaderUser = {
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+};
+
+export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
   const pathname = usePathname();
   const [appsOpen, setAppsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -135,15 +141,34 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Link
-            href="/login"
-            className="hidden min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] sm:inline-flex"
-          >
-            Sign in
-          </Link>
-          <Link href="/contact" className={cn(btnPrimary, "hidden px-4 sm:inline-flex")}>
-            Contact us
-          </Link>
+          {user ? (
+            <div className="hidden sm:flex items-center gap-2">
+              <Link
+                href="/dashboard"
+                className="inline-flex min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/hr"
+                className={cn(btnPrimary, "px-4 inline-flex items-center gap-1.5 shadow-sm")}
+              >
+                Go to Console
+              </Link>
+            </div>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="hidden min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] sm:inline-flex"
+              >
+                Sign in
+              </Link>
+              <Link href="/contact" className={cn(btnPrimary, "hidden px-4 sm:inline-flex")}>
+                Contact us
+              </Link>
+            </>
+          )}
           <button
             type="button"
             aria-expanded={mobileOpen}
@@ -196,14 +221,30 @@ export function SiteHeader() {
                 {item.label}
               </Link>
             ))}
-          <div className="grid grid-cols-2 gap-2 pt-3">
-            <Link href="/login" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
-              Sign in
-            </Link>
-            <Link href="/contact" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
-              Contact us
-            </Link>
-          </div>
+          {user ? (
+            <div className="pt-3 border-t border-[var(--color-border-subtle)] space-y-2">
+              <div className="px-3 text-xs text-[var(--color-text-secondary)]">
+                Signed in as <span className="font-semibold text-[var(--color-text-primary)]">{user.name || user.email}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Link href="/dashboard" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
+                  Dashboard
+                </Link>
+                <Link href="/hr" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
+                  Console
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 pt-3">
+              <Link href="/login" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
+                Sign in
+              </Link>
+              <Link href="/contact" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
+                Contact us
+              </Link>
+            </div>
+          )}
         </nav>
       </div>
     </header>

@@ -20,6 +20,7 @@ import {
   IconHelpCircle,
   IconClose,
   IconProfileCard,
+  IconBuilding,
 } from "@/shared/components/ui/brand-icons";
 import { cn } from "@/shared/lib/utils";
 import { logoutAction } from "@/features/auth/actions/auth.action";
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Sales", href: "/sales", icon: IconReceipt },
   { name: "Finance", href: "/finance", icon: IconWallet },
   { name: "HR & Payroll", href: "/hr", icon: IconProfileCard },
+  { name: "Company", href: "/company", icon: IconBuilding },
   { name: "Inventory", href: "/inventory", icon: IconPackage },
   { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
   { name: "Projects", href: "/projects", icon: IconBarChart },

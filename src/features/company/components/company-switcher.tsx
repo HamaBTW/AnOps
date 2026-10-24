@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition, useRef, useEffect } from "react";
-import { Building2, ChevronsUpDown, Check, Plus, Loader2 } from "lucide-react";
+import { Building2, ChevronsUpDown, Check, Plus, Loader2, Settings } from "lucide-react";
 import type { Company } from "@/features/company/types";
 import { switchCompanyAction } from "@/features/company/actions/company.action";
 import { useRouter } from "next/navigation";
@@ -96,6 +97,15 @@ export function CompanySwitcher({ companies, activeCompanyId }: CompanySwitcherP
             </div>
 
             <div className="my-1 border-t border-[var(--color-border-subtle)]" />
+
+            <Link
+              href="/company"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 py-2 text-left text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              <Settings className="h-3.5 w-3.5 shrink-0" />
+              <span>Manage Organization</span>
+            </Link>
 
             <button
               type="button"

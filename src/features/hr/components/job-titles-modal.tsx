@@ -4,12 +4,14 @@ import { useState, useTransition } from "react";
 import {
   X, Plus, Trash2, Briefcase, Search, Loader2,
   ShieldCheck, Tag, Edit3, Save, AlertCircle, ChevronLeft,
+  Users, UserCheck, UserX, ChevronRight,
 } from "lucide-react";
-import type { JobTitle, Department } from "@/features/hr/types";
+import type { JobTitle, Department, Employee } from "@/features/hr/types";
 import {
   createJobTitleAction,
   updateJobTitleAction,
   deleteJobTitleAction,
+  fetchJobTitleStaffAction,
 } from "@/features/hr/actions/job-title.action";
 import { cn } from "@/shared/lib/utils";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
@@ -22,7 +24,7 @@ type JobTitlesModalProps = {
   onRefresh?: () => void;
 };
 
-type View = "list" | "create" | "edit";
+type View = "list" | "create" | "edit" | "staff";
 type FilterTab = "all" | "predefined" | "custom";
 
 export function JobTitlesModal({
@@ -37,6 +39,9 @@ export function JobTitlesModal({
   const [isPending, startTransition] = useTransition();
   const [view, setView] = useState<View>("list");
   const [editTarget, setEditTarget] = useState<JobTitle | null>(null);
+  const [staffTarget, setStaffTarget] = useState<JobTitle | null>(null);
+  const [staffList, setStaffList] = useState<Employee[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
 
   // List state
   const [search, setSearch] = useState("");
@@ -86,10 +91,21 @@ export function JobTitlesModal({
     setView("edit");
   };
 
+  const goToStaff = async (t: JobTitle) => {
+    setStaffTarget(t);
+    setLoadingStaff(true);
+    setView("staff");
+    const result = await fetchJobTitleStaffAction(t.title);
+    setStaffList(result.data ?? []);
+    setLoadingStaff(false);
+  };
+
   const goBack = () => {
     setView("list");
     resetForm();
     setEditTarget(null);
+    setStaffTarget(null);
+    setStaffList([]);
   };
 
   const handleCreate = (e: React.FormEvent) => {
@@ -149,6 +165,20 @@ export function JobTitlesModal({
   const deptName = (id?: string) =>
     id ? (departments.find((d) => d.id === id)?.name ?? id) : null;
 
+  const titles: Record<View, string> = {
+    list: "Job Title Management",
+    create: "Add Job Title",
+    edit: `Edit: ${editTarget?.title ?? ""}`,
+    staff: `Staff — ${staffTarget?.title ?? ""}`,
+  };
+
+  const subtitles: Record<View, string> = {
+    list: `${predefinedCount} predefined · ${customCount} custom`,
+    create: "Add a new reusable job title",
+    edit: "Rename or reassign department for this job title",
+    staff: `${staffTarget?.employeeCount ?? 0} employee${(staffTarget?.employeeCount ?? 0) !== 1 ? "s" : ""} with this title`,
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
       <div
@@ -172,14 +202,12 @@ export function JobTitlesModal({
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
-              {view === "list" ? "Job Title Management" : view === "create" ? "Add Job Title" : `Edit: ${editTarget?.title ?? ""}`}
+            <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)] truncate">
+              {titles[view]}
             </h2>
-            {view === "list" && (
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                {predefinedCount} predefined · {customCount} custom
-              </p>
-            )}
+            <p className="text-xs text-[var(--color-text-secondary)] truncate">
+              {subtitles[view]}
+            </p>
           </div>
           <button
             type="button"
@@ -288,10 +316,16 @@ export function JobTitlesModal({
                     )}
                   </div>
 
-                  {/* Staff count */}
-                  <span className="text-xs text-[var(--color-text-secondary)] shrink-0">
-                    {item.employeeCount ?? 0} staff
-                  </span>
+                  {/* Staff count badge */}
+                  <button
+                    type="button"
+                    onClick={() => goToStaff(item)}
+                    title="View staff with this job title"
+                    className="flex items-center gap-1.5 rounded-full bg-[var(--color-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-border-subtle)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>{item.employeeCount ?? 0} staff</span>
+                  </button>
 
                   {/* Actions — shown on hover for custom, or just count for predefined */}
                   <div
@@ -322,6 +356,16 @@ export function JobTitlesModal({
                       {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </button>
                   </div>
+
+                  {/* Chevron to staff */}
+                  <button
+                    type="button"
+                    onClick={() => goToStaff(item)}
+                    title="View staff"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] shrink-0"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
             </>
@@ -431,6 +475,65 @@ export function JobTitlesModal({
                 </button>
               </div>
             </form>
+          )}
+
+          {/* STAFF */}
+          {view === "staff" && (
+            <>
+              {loadingStaff && (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-[var(--color-text-secondary)]" />
+                </div>
+              )}
+              {!loadingStaff && staffList.length === 0 && (
+                <div className="py-10 text-center">
+                  <Users className="mx-auto h-8 w-8 text-[var(--color-text-secondary)] mb-2" />
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">No employees assigned</p>
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                    No staff members currently have this job title. Assign it when adding or editing employees.
+                  </p>
+                </div>
+              )}
+              {!loadingStaff && staffList.map((emp) => {
+                const initials = (() => {
+                  const parts = emp.fullName.trim().split(/\s+/).filter(Boolean);
+                  if (parts.length === 0) return "?";
+                  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+                  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                })();
+
+                return (
+                  <div
+                    key={emp.id}
+                    className="flex items-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-3"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-action-primary)] text-xs font-bold text-[var(--color-action-on-primary)]">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-[var(--color-text-primary)] truncate">{emp.fullName}</p>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] truncate">
+                        {emp.departmentName || "No Department"} · {emp.email}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0",
+                        emp.status === "active"
+                          ? "bg-[#e9f2ea] text-[#176247]"
+                          : "bg-[#fff1ee] text-[#a43434]"
+                      )}
+                    >
+                      {emp.status === "active"
+                        ? <UserCheck className="h-3 w-3" />
+                        : <UserX className="h-3 w-3" />
+                      }
+                      {emp.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
 

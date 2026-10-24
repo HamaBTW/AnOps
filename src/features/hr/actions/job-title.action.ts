@@ -8,8 +8,9 @@ import {
   deleteJobTitle,
   seedHrDefaults,
   updateJobTitle,
+  getEmployeesByJobTitle,
 } from "@/server/services/hr.service";
-import type { JobTitle } from "@/features/hr/types";
+import type { JobTitle, Employee } from "@/features/hr/types";
 import type { ActionResult } from "./employee.action";
 
 export async function createJobTitleAction(title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
@@ -72,6 +73,16 @@ export async function reseedDefaultsAction(): Promise<ActionResult<boolean>> {
     return { success: true, data: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to seed HR defaults.";
+    return { error: message };
+  }
+}
+
+export async function fetchJobTitleStaffAction(title: string): Promise<ActionResult<Employee[]>> {
+  try {
+    const employees = await getEmployeesByJobTitle(title);
+    return { success: true, data: employees };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to load staff for this title.";
     return { error: message };
   }
 }

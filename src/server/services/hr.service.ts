@@ -483,6 +483,35 @@ export async function deleteJobTitle(id: string): Promise<void> {
 }
 
 /**
+ * Fetch all employees assigned a specific job title (exact match, case-insensitive)
+ */
+export async function getEmployeesByJobTitle(title: string): Promise<Employee[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection("employees")
+    .find({ jobTitle: { $regex: new RegExp(`^${title}$`, "i") } })
+    .sort({ status: 1, fullName: 1 })
+    .toArray();
+
+  return docs.map((doc) => ({
+    id: (doc._id as ObjectId).toString(),
+    fullName: (doc.fullName as string) || (doc.name as string) || "Unnamed Staff",
+    email: (doc.email as string) || "",
+    phone: (doc.phone as string) || undefined,
+    jobTitle: (doc.jobTitle as string) || title,
+    departmentId: (doc.departmentId as string) || "",
+    departmentName: (doc.departmentName as string) || "General",
+    hireDate: (doc.hireDate as string) || "2024-01-01",
+    baseSalary: Number(doc.baseSalary) || 0,
+    status: (doc.status as "active" | "inactive") || "active",
+    role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
+    leaveAllowance: Number(doc.leaveAllowance) || 25,
+    createdAt: doc.createdAt ? (doc.createdAt as Date).toISOString() : undefined,
+    updatedAt: doc.updatedAt ? (doc.updatedAt as Date).toISOString() : undefined,
+  }));
+}
+
+/**
  * Fetch employees with optional search, department filter, and status filter
  */
 export async function getEmployees(filters: EmployeeFilterParams = {}): Promise<Employee[]> {

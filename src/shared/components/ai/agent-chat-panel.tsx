@@ -17,9 +17,64 @@ import {
   Trash2,
   Cpu,
   ChevronDown,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import type { AgentMessage } from "@/server/ai/base-agent";
+
+// ─── Provider/Model catalogue (mirrors src/server/ai/providers/*) ─────────────
+
+const AI_PROVIDERS = [
+  {
+    id: "auto",
+    label: "Auto (Best Available)",
+    icon: "⚡",
+    models: [{ id: "", label: "Auto-select" }],
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    icon: "🔥",
+    models: [
+      { id: "llama-3.3-70b-versatile",  label: "Llama 3.3 70B" },
+      { id: "llama3-8b-8192",           label: "Llama 3 8B" },
+      { id: "llama3-70b-8192",          label: "Llama 3 70B" },
+      { id: "mixtral-8x7b-32768",       label: "Mixtral 8×7B" },
+      { id: "gemma2-9b-it",             label: "Gemma 2 9B" },
+    ],
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    icon: "🌐",
+    models: [
+      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B" },
+      { id: "meta-llama/llama-3.1-8b-instruct:free",  label: "Llama 3.1 8B" },
+      { id: "google/gemma-3-27b-it:free",              label: "Gemma 3 27B" },
+      { id: "google/gemma-3-12b-it:free",              label: "Gemma 3 12B" },
+      { id: "mistralai/mistral-7b-instruct:free",      label: "Mistral 7B" },
+      { id: "deepseek/deepseek-r1:free",               label: "DeepSeek R1" },
+    ],
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    icon: "✨",
+    models: [
+      { id: "gemma-3-27b-it",    label: "Gemma 3 27B" },
+      { id: "gemma-3-12b-it",    label: "Gemma 3 12B" },
+      { id: "gemma-3-4b-it",     label: "Gemma 3 4B" },
+      { id: "gemini-2.0-flash",  label: "Gemini 2.0 Flash" },
+      { id: "gemini-1.5-flash",  label: "Gemini 1.5 Flash" },
+    ],
+  },
+] as const;
+
+type ModelSelection = { model: string; providerLabel: string; modelLabel: string };
+
+function getDefaultSelection(): ModelSelection {
+  return { model: "", providerLabel: "Auto", modelLabel: "Auto-select" };
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,10 +107,14 @@ type AgentChatPanelProps = {
   toolbar?: React.ReactNode;
   /** Custom card renderer for messages with metadata */
   renderMetadataCard?: (metadata: Record<string, unknown>) => React.ReactNode;
-  /** Called when the user submits a message — must return the assistant reply */
+  /**
+   * Called when the user submits a message — must return the assistant reply.
+   * `selectedModel` is the model ID chosen by the user, or empty string for auto.
+   */
   onSendMessage: (
     userText: string,
-    history: ChatMessage[]
+    history: ChatMessage[],
+    selectedModel: string
   ) => Promise<{ text: string; metadata?: Record<string, unknown>; provider?: string; model?: string }>;
   /** Extra classes on the outer wrapper */
   className?: string;
@@ -107,10 +166,24 @@ export function AgentChatPanel({
   const [providerBadge, setProviderBadge] = useState<ProviderBadge | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [selection, setSelection] = useState<ModelSelection>(getDefaultSelection());
+  const [selectorOpen, setSelectorOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectorRef = useRef<HTMLDivElement>(null);
+
+  // Close selector on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+        setSelectorOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -159,7 +232,7 @@ export function AgentChatPanel({
         try {
           // Pass history EXCLUDING the welcome message for cleaner context
           const historyForAgent = messages.filter((m) => m.id !== "welcome");
-          const result = await onSendMessage(userText, [...historyForAgent, userMsg]);
+          const result = await onSendMessage(userText, [...historyForAgent, userMsg], selection.model);
 
           const assistantMsg: ChatMessage = {
             id: `agent-${Date.now()}`,
@@ -210,6 +283,11 @@ export function AgentChatPanel({
     setProviderBadge(null);
   };
 
+  const handleSelectModel = (model: string, providerLabel: string, modelLabel: string) => {
+    setSelection({ model, providerLabel, modelLabel });
+    setSelectorOpen(false);
+  };
+
   return (
     <div className={cn("flex flex-col gap-4", className)}>
       {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -250,7 +328,7 @@ export function AgentChatPanel({
           </div>
         </div>
 
-        {/* Provider badge */}
+        {/* Provider badge — last response info */}
         {providerBadge && (
           <div className="mt-3 flex items-center gap-1.5 text-[10px] text-[var(--color-text-secondary)]">
             <Cpu className="h-3 w-3" />
@@ -406,6 +484,58 @@ export function AgentChatPanel({
 
         {/* ── Input Bar ─────────────────────────────────────────────── */}
         <div className="border-t border-[var(--color-border-subtle)] p-3 sm:p-4 bg-[var(--color-bg-surface)] rounded-b-[var(--radius-card)]">
+
+          {/* Model selector row */}
+          <div className="mb-2 flex items-center gap-2 relative" ref={selectorRef}>
+            <button
+              type="button"
+              onClick={() => setSelectorOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-[var(--radius-control)] border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                selection.model
+                  ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)]/10 text-[var(--color-action-primary)]"
+                  : "border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              )}
+            >
+              <Zap className="h-3 w-3" />
+              <span>{selection.providerLabel}</span>
+              {selection.model && (
+                <span className="text-[var(--color-text-secondary)] font-normal">· {selection.modelLabel}</span>
+              )}
+              <ChevronDown className={cn("h-3 w-3 transition-transform", selectorOpen && "rotate-180")} />
+            </button>
+
+            {/* Dropdown */}
+            {selectorOpen && (
+              <div className="absolute bottom-full mb-1 left-0 z-50 w-64 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="p-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)] px-3 pt-2.5">Provider & Model</div>
+                {AI_PROVIDERS.map((provider) => (
+                  <div key={provider.id}>
+                    <div className="px-3 py-1 text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider bg-[var(--color-bg-subtle)]">
+                      {provider.icon} {provider.label}
+                    </div>
+                    {provider.models.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => handleSelectModel(m.id, provider.label, m.label)}
+                        className={cn(
+                          "w-full text-left px-4 py-1.5 text-xs transition-colors hover:bg-[var(--color-bg-subtle)]",
+                          selection.model === m.id
+                            ? "text-[var(--color-action-primary)] font-semibold"
+                            : "text-[var(--color-text-primary)]"
+                        )}
+                      >
+                        {m.label}
+                        {selection.model === m.id && <span className="ml-1 text-[10px]">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <form
             onSubmit={(e) => {
               e.preventDefault();

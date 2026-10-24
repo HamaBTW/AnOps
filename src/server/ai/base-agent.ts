@@ -142,14 +142,17 @@ export abstract class BaseAgent {
   /**
    * Process one conversation turn.
    *
-   * @param history   Previous messages in this session (user + assistant turns)
-   * @param userText  The new user message
-   * @param context   Optional domain data the agent can use to enrich the prompt
+   * @param history        Previous messages in this session (user + assistant turns)
+   * @param userText       The new user message
+   * @param context        Optional domain data the agent can use to enrich the prompt
+   * @param modelOverride  Force a specific model (e.g. from the UI selector). Takes
+   *                       precedence over the agent's default model.
    */
   async chat(
     history: AgentMessage[],
     userText: string,
-    context?: AgentContext
+    context?: AgentContext,
+    modelOverride?: string
   ): Promise<AgentResponse> {
     // 1. Build the system prompt (may be dynamic)
     const systemPrompt = await this.buildSystemPrompt(context);
@@ -180,7 +183,8 @@ export abstract class BaseAgent {
       messages: [],
       maxTokens: this.config.defaults?.maxTokens ?? 1024,
       temperature: this.config.defaults?.temperature ?? 0.7,
-      model: this.config.defaults?.model,
+      // modelOverride (from UI selector) > agent default > master auto-select
+      model: modelOverride ?? this.config.defaults?.model,
     };
     messages = await this.beforeComplete(messages, context);
     options.messages = messages;

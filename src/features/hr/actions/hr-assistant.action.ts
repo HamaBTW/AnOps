@@ -8,6 +8,8 @@ import { z } from "zod";
 const chatSchema = z.object({
   userMessage: z.string().min(1).max(2000),
   employeeId: z.string().optional(),
+  /** Model ID to force (e.g. "llama-3.3-70b-versatile"). Omit for auto. */
+  model: z.string().optional(),
   history: z
     .array(
       z.object({
@@ -32,8 +34,8 @@ const hrAgent = new HRAssistantAgent();
 /**
  * Server action: chat with the HR Assistant agent.
  *
- * Accepts conversation history so the agent has multi-turn context.
- * Uses HRAssistantAgent (extends BaseAgent) which routes through AiMaster.
+ * Accepts conversation history for multi-turn context, and an optional
+ * model override from the UI provider/model selector.
  */
 export async function chatWithHRAssistantAction(
   rawData: unknown
@@ -46,15 +48,13 @@ export async function chatWithHRAssistantAction(
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
     }
 
-    const { userMessage, employeeId, history } = parsed.data;
+    const { userMessage, employeeId, model, history } = parsed.data;
 
     const response = await hrAgent.chat(
       history as AgentMessage[],
       userMessage,
-      {
-        employeeId: employeeId,
-        companyId: authUser.companyId,
-      }
+      { employeeId, companyId: authUser.companyId },
+      model  // model override — undefined = let AiMaster auto-select
     );
 
     return { ok: true, response };
@@ -64,3 +64,4 @@ export async function chatWithHRAssistantAction(
     return { ok: false, error: message };
   }
 }
+

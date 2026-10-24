@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { X, Loader2, User, Mail, Phone, Calendar, DollarSign, Shield } from "lucide-react";
 import type { Department, JobTitle, Employee } from "@/features/hr/types";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
+import { Portal } from "@/shared/components/ui/portal";
 import { JobTitleCombobox } from "./job-title-combobox";
 import { createEmployeeAction, updateEmployeeAction } from "@/features/hr/actions/employee.action";
 
@@ -125,8 +126,9 @@ export function EmployeeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-      <div
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+        <div
         className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -363,5 +365,6 @@ export function EmployeeModal({
         </form>
       </div>
     </div>
-  );
+  </Portal>
+);
 }

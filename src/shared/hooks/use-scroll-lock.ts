@@ -3,15 +3,17 @@
 import { useEffect } from "react";
 
 /**
- * Reliably locks page scroll when a modal is open.
+ * Reliably locks page background scroll when a modal is open.
  *
- * Strategy:
- * - Records current scroll position before locking
- * - Sets overflow:hidden on BOTH <html> and <body> (Next.js App Router
- *   can scroll on either element depending on the layout)
- * - Blocks wheel + touch-move events on document so nested scrollable
- *   regions inside the modal still work but the page underneath cannot scroll
- * - Restores everything exactly on unmount / when isLocked becomes false
+ * In this application:
+ * - Dashboard pages scroll inside `<main className="overflow-y-auto">`
+ * - Non-dashboard pages scroll on `<html>` / `<body>`
+ *
+ * Setting `overflow: hidden` on `<main>`, `<body>`, and `<html>`:
+ * - Completely prevents the page in the background from scrolling
+ * - Leaves inner scrollable containers inside modals free to scroll smoothly
+ * - Avoids `position: fixed` on body (which shifted layouts and broke vertical centering)
+ * - Avoids global wheel/touchmove event cancellation (which blocked scrolling inside modals)
  */
 export function useScrollLock(isLocked: boolean) {
   useEffect(() => {
@@ -19,41 +21,24 @@ export function useScrollLock(isLocked: boolean) {
 
     const html = document.documentElement;
     const body = document.body;
+    const main = document.querySelector("main");
 
-    // Capture before we touch anything
-    const scrollY = window.scrollY;
     const prevHtmlOverflow = html.style.overflow;
     const prevBodyOverflow = body.style.overflow;
-    const prevBodyPosition = body.style.position;
-    const prevBodyTop = body.style.top;
-    const prevBodyWidth = body.style.width;
+    const prevMainOverflow = main ? main.style.overflow : "";
 
-    // Lock both <html> and <body>
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-
-    // Block wheel scroll on the document (passive:false lets us call preventDefault)
-    const preventScroll = (e: Event) => e.preventDefault();
-    document.addEventListener("wheel", preventScroll, { passive: false });
-    document.addEventListener("touchmove", preventScroll, { passive: false });
+    if (main) {
+      main.style.overflow = "hidden";
+    }
 
     return () => {
-      // Restore styles
       html.style.overflow = prevHtmlOverflow;
       body.style.overflow = prevBodyOverflow;
-      body.style.position = prevBodyPosition;
-      body.style.top = prevBodyTop;
-      body.style.width = prevBodyWidth;
-
-      // Remove event blockers
-      document.removeEventListener("wheel", preventScroll);
-      document.removeEventListener("touchmove", preventScroll);
-
-      // Jump back to original scroll position
-      window.scrollTo({ top: scrollY, behavior: "instant" });
+      if (main) {
+        main.style.overflow = prevMainOverflow;
+      }
     };
   }, [isLocked]);
 }

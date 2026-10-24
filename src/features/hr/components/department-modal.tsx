@@ -14,6 +14,7 @@ import {
 } from "@/features/hr/actions/department.action";
 import { cn } from "@/shared/lib/utils";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
+import { Portal } from "@/shared/components/ui/portal";
 
 type DepartmentModalProps = {
   isOpen: boolean;
@@ -159,9 +160,10 @@ export function DepartmentModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
-    >
+    <Portal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
+      >
       <div
         className="relative w-full max-w-lg max-h-[88vh] flex flex-col rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -471,5 +473,6 @@ export function DepartmentModal({
         </div>
       </div>
     </div>
-  );
+  </Portal>
+);
 }

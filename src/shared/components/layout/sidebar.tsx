@@ -27,11 +27,11 @@ import { logoutAction } from "@/features/auth/actions/auth.action";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: IconGrid },
+  { name: "Company", href: "/company", icon: IconBuilding },
+  { name: "HR & Payroll", href: "/hr", icon: IconProfileCard },
   { name: "CRM", href: "/crm", icon: IconUsers },
   { name: "Sales", href: "/sales", icon: IconReceipt },
   { name: "Finance", href: "/finance", icon: IconWallet },
-  { name: "HR & Payroll", href: "/hr", icon: IconProfileCard },
-  { name: "Company", href: "/company", icon: IconBuilding },
   { name: "Inventory", href: "/inventory", icon: IconPackage },
   { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
   { name: "Projects", href: "/projects", icon: IconBarChart },

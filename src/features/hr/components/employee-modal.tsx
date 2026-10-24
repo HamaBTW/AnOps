@@ -125,7 +125,7 @@ export function EmployeeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
       <div
         className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}

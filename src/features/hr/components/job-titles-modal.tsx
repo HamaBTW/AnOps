@@ -150,7 +150,7 @@ export function JobTitlesModal({
     id ? (departments.find((d) => d.id === id)?.name ?? id) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
       <div
         className="relative w-full max-w-xl max-h-[90vh] flex flex-col rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}

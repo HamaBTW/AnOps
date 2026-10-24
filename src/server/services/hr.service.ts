@@ -25,6 +25,7 @@ import type {
   LeaveReviewInput,
 } from "@/features/hr/schemas/hr.schema";
 import { COMPANY_POLICIES } from "@/features/hr/policies/company-policies";
+import { calculateBusinessDays, formatDateYMD } from "@/features/hr/utils/date-utils";
 
 const DEFAULT_DEPARTMENTS = [
   { name: "Engineering", description: "Software development, architecture and infrastructure" },
@@ -158,16 +159,58 @@ async function getDb() {
   return client.db();
 }
 
-export {
-  calculateBusinessDays,
-  formatDateYMD,
-  calculateNetSalary,
-} from "@/features/hr/utils/date-utils";
-import {
-  calculateBusinessDays,
-  formatDateYMD,
-  calculateNetSalary,
-} from "@/features/hr/utils/date-utils";
+import { getActiveTenant } from "@/server/tenant/context";
+
+async function resolveCompanyId(passedId?: string): Promise<ObjectId | undefined> {
+  if (passedId && ObjectId.isValid(passedId)) {
+    return new ObjectId(passedId);
+  }
+  try {
+    const tenant = await getActiveTenant();
+    if (tenant && ObjectId.isValid(tenant.companyId)) {
+      return new ObjectId(tenant.companyId);
+    }
+  } catch {}
+  return undefined;
+}
+
+/**
+ * Seeds default departments and job titles for a newly created company organization.
+ */
+export async function seedHrDefaultsForCompany(companyId: string): Promise<void> {
+  if (!ObjectId.isValid(companyId)) return;
+  const db = await getDb();
+  const cId = new ObjectId(companyId);
+
+  // 1. Departments
+  const deptCount = await db.collection("departments").countDocuments({ companyId: cId });
+  if (deptCount === 0) {
+    const docs = DEFAULT_DEPARTMENTS.map((d) => ({
+      ...d,
+      companyId: cId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    await db.collection("departments").insertMany(docs);
+  }
+
+  const allDepts = await db.collection("departments").find({ companyId: cId }).toArray();
+  const deptMapByName = new Map<string, ObjectId>();
+  allDepts.forEach((d) => deptMapByName.set(d.name, d._id as ObjectId));
+
+  // 2. Predefined Job Titles
+  const titleCount = await db.collection("job_titles").countDocuments({ companyId: cId });
+  if (titleCount === 0) {
+    const titleDocs = DEFAULT_JOB_TITLES.map((t) => ({
+      title: t.title,
+      departmentId: deptMapByName.get(t.deptName)?.toString() ?? "",
+      companyId: cId,
+      isPredefined: true,
+      createdAt: new Date(),
+    }));
+    await db.collection("job_titles").insertMany(titleDocs);
+  }
+}
 
 let seedPromise: Promise<void> | null = null;
 
@@ -457,13 +500,20 @@ export async function seedHrDefaults(): Promise<void> {
 // Department Service Methods
 // ==========================================
 
-export async function getDepartments(): Promise<Department[]> {
+export async function getDepartments(companyId?: string): Promise<Department[]> {
   const db = await getDb();
-  await seedHrDefaults();
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
+
+  if (cId) {
+    await seedHrDefaultsForCompany(cId.toString());
+  } else {
+    await seedHrDefaults();
+  }
 
   const [departments, employees] = await Promise.all([
-    db.collection("departments").find().sort({ name: 1 }).toArray(),
-    db.collection("employees").find().toArray(),
+    db.collection("departments").find(filter).sort({ name: 1 }).toArray(),
+    db.collection("employees").find(filter).toArray(),
   ]);
 
   const countsByDeptId = new Map<string, number>();
@@ -482,11 +532,14 @@ export async function getDepartments(): Promise<Department[]> {
   }));
 }
 
-export async function createDepartment(name: string, description?: string): Promise<Department> {
+export async function createDepartment(name: string, description?: string, companyId?: string): Promise<Department> {
   const db = await getDb();
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
   const trimmed = name.trim();
 
   const existing = await db.collection("departments").findOne({
+    ...filter,
     name: { $regex: new RegExp(`^${trimmed}$`, "i") },
   });
   if (existing) {
@@ -496,6 +549,7 @@ export async function createDepartment(name: string, description?: string): Prom
   const result = await db.collection("departments").insertOne({
     name: trimmed,
     description: description?.trim() || "",
+    ...(cId ? { companyId: cId } : {}),
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -509,14 +563,17 @@ export async function createDepartment(name: string, description?: string): Prom
   };
 }
 
-export async function updateDepartment(id: string, name: string, description?: string): Promise<Department> {
+export async function updateDepartment(id: string, name: string, description?: string, companyId?: string): Promise<Department> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) throw new Error("Invalid department ID.");
   const objId = new ObjectId(id);
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
   const trimmed = name.trim();
 
   const duplicate = await db.collection("departments").findOne({
     _id: { $ne: objId },
+    ...filter,
     name: { $regex: new RegExp(`^${trimmed}$`, "i") },
   });
   if (duplicate) {
@@ -524,47 +581,52 @@ export async function updateDepartment(id: string, name: string, description?: s
   }
 
   await db.collection("departments").updateOne(
-    { _id: objId },
+    { _id: objId, ...filter },
     { $set: { name: trimmed, description: description?.trim() ?? "", updatedAt: new Date() } }
   );
 
   await db.collection("employees").updateMany(
-    { departmentId: id },
+    { departmentId: id, ...filter },
     { $set: { departmentName: trimmed, updatedAt: new Date() } }
   );
 
-  const updated = await db.collection("departments").findOne({ _id: objId });
+  const updated = await db.collection("departments").findOne({ _id: objId, ...filter });
   return {
     id,
     name: trimmed,
     description: updated?.description as string | undefined,
-    employeeCount: await db.collection("employees").countDocuments({ departmentId: id, status: "active" }),
+    employeeCount: await db.collection("employees").countDocuments({ departmentId: id, status: "active", ...filter }),
     createdAt: updated?.createdAt ? (updated.createdAt as Date).toISOString() : undefined,
   };
 }
 
-export async function deleteDepartment(id: string): Promise<void> {
+export async function deleteDepartment(id: string, companyId?: string): Promise<void> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) throw new Error("Invalid department ID.");
   const objId = new ObjectId(id);
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
 
-  const dept = await db.collection("departments").findOne({ _id: objId });
+  const dept = await db.collection("departments").findOne({ _id: objId, ...filter });
   if (!dept) throw new Error("Department not found.");
 
-  const empCount = await db.collection("employees").countDocuments({ departmentId: id });
+  const empCount = await db.collection("employees").countDocuments({ departmentId: id, ...filter });
   if (empCount > 0) {
     throw new Error(
       `Cannot delete "${dept.name}" — it has ${empCount} employee(s) assigned. Reassign them first.`
     );
   }
 
-  await db.collection("departments").deleteOne({ _id: objId });
+  await db.collection("departments").deleteOne({ _id: objId, ...filter });
 }
 
-export async function getEmployeesByDepartment(departmentId: string): Promise<Employee[]> {
+export async function getEmployeesByDepartment(departmentId: string, companyId?: string): Promise<Employee[]> {
   const db = await getDb();
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
+
   const docs = await db.collection("employees")
-    .find({ departmentId })
+    .find({ departmentId, ...filter })
     .sort({ status: 1, fullName: 1 })
     .toArray();
 
@@ -590,13 +652,20 @@ export async function getEmployeesByDepartment(departmentId: string): Promise<Em
 // Job Title Service Methods
 // ==========================================
 
-export async function getJobTitles(): Promise<JobTitle[]> {
+export async function getJobTitles(companyId?: string): Promise<JobTitle[]> {
   const db = await getDb();
-  await seedHrDefaults();
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
+
+  if (cId) {
+    await seedHrDefaultsForCompany(cId.toString());
+  } else {
+    await seedHrDefaults();
+  }
 
   const [jobTitles, employees] = await Promise.all([
-    db.collection("job_titles").find().sort({ isPredefined: -1, title: 1 }).toArray(),
-    db.collection("employees").find().toArray(),
+    db.collection("job_titles").find(filter).sort({ isPredefined: -1, title: 1 }).toArray(),
+    db.collection("employees").find(filter).toArray(),
   ]);
 
   const countsByTitle = new Map<string, number>();
@@ -620,14 +689,17 @@ export async function getJobTitles(): Promise<JobTitle[]> {
   });
 }
 
-export async function ensureJobTitle(title: string, departmentId?: string, isPredefined = false): Promise<JobTitle> {
+export async function ensureJobTitle(title: string, departmentId?: string, isPredefined = false, companyId?: string): Promise<JobTitle> {
   const db = await getDb();
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
   const trimmed = title.trim();
   if (!trimmed) {
     throw new Error("Job title cannot be empty.");
   }
 
   const existing = await db.collection("job_titles").findOne({
+    ...filter,
     title: { $regex: new RegExp(`^${trimmed}$`, "i") },
   });
 
@@ -643,6 +715,7 @@ export async function ensureJobTitle(title: string, departmentId?: string, isPre
   const insertResult = await db.collection("job_titles").insertOne({
     title: trimmed,
     departmentId: departmentId || "",
+    ...(cId ? { companyId: cId } : {}),
     isPredefined,
     createdAt: new Date(),
   });
@@ -656,12 +729,14 @@ export async function ensureJobTitle(title: string, departmentId?: string, isPre
   };
 }
 
-export async function updateJobTitle(id: string, title: string, departmentId?: string): Promise<JobTitle> {
+export async function updateJobTitle(id: string, title: string, departmentId?: string, companyId?: string): Promise<JobTitle> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) throw new Error("Invalid job title ID.");
   const objId = new ObjectId(id);
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
 
-  const existing = await db.collection("job_titles").findOne({ _id: objId });
+  const existing = await db.collection("job_titles").findOne({ _id: objId, ...filter });
   if (!existing) throw new Error("Job title not found.");
   if (existing.isPredefined) throw new Error("Predefined job titles cannot be renamed.");
 
@@ -669,34 +744,38 @@ export async function updateJobTitle(id: string, title: string, departmentId?: s
 
   const dup = await db.collection("job_titles").findOne({
     _id: { $ne: objId },
+    ...filter,
     title: { $regex: new RegExp(`^${trimmed}$`, "i") },
   });
   if (dup) throw new Error(`A job title "${trimmed}" already exists.`);
 
   const oldTitle = existing.title as string;
   await db.collection("job_titles").updateOne(
-    { _id: objId },
+    { _id: objId, ...filter },
     { $set: { title: trimmed, departmentId: departmentId ?? existing.departmentId, updatedAt: new Date() } }
   );
 
   await db.collection("employees").updateMany(
-    { jobTitle: { $regex: new RegExp(`^${oldTitle}$`, "i") } },
+    { jobTitle: { $regex: new RegExp(`^${oldTitle}$`, "i") }, ...filter },
     { $set: { jobTitle: trimmed, updatedAt: new Date() } }
   );
 
   return {
     id,
     title: trimmed,
-    departmentId: (departmentId ?? existing.departmentId as string) || undefined,
+    departmentId: (departmentId ?? (existing.departmentId as string)) || undefined,
     isPredefined: false,
     createdAt: existing.createdAt ? (existing.createdAt as Date).toISOString() : undefined,
   };
 }
 
-export async function deleteJobTitle(id: string): Promise<void> {
+export async function deleteJobTitle(id: string, companyId?: string): Promise<void> {
   const db = await getDb();
   const objId = new ObjectId(id);
-  const titleDoc = await db.collection("job_titles").findOne({ _id: objId });
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { companyId: cId } : {};
+
+  const titleDoc = await db.collection("job_titles").findOne({ _id: objId, ...filter });
 
   if (!titleDoc) {
     throw new Error("Job title not found.");
@@ -706,15 +785,20 @@ export async function deleteJobTitle(id: string): Promise<void> {
     throw new Error("Predefined system job titles cannot be deleted.");
   }
 
-  const inUse = await db.collection("employees").findOne({
-    jobTitle: { $regex: new RegExp(`^${titleDoc.title}$`, "i") },
+  const assignedEmployees = await db.collection("employees").countDocuments({
+    jobTitle: titleDoc.title,
+    status: "active",
+    ...filter,
   });
-  if (inUse) {
-    throw new Error(`Cannot delete "${titleDoc.title}" because it is currently assigned to one or more employees.`);
+  if (assignedEmployees > 0) {
+    throw new Error(
+      `Cannot delete "${titleDoc.title}" — it is currently held by ${assignedEmployees} active employee(s).`
+    );
   }
 
-  await db.collection("job_titles").deleteOne({ _id: objId });
+  await db.collection("job_titles").deleteOne({ _id: objId, ...filter });
 }
+
 
 export async function getEmployeesByJobTitle(title: string): Promise<Employee[]> {
   const db = await getDb();
@@ -746,11 +830,10 @@ export async function getEmployeesByJobTitle(title: string): Promise<Employee[]>
 // Employee Service Methods
 // ==========================================
 
-export async function getEmployees(filters: EmployeeFilterParams = {}): Promise<Employee[]> {
+export async function getEmployees(filters: EmployeeFilterParams = {}, companyId?: string): Promise<Employee[]> {
   const db = await getDb();
-  await seedHrDefaults();
-
-  const query: Record<string, unknown> = {};
+  const cId = await resolveCompanyId(companyId);
+  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
 
   if (filters.status && filters.status !== "all") {
     query.status = filters.status;
@@ -789,11 +872,14 @@ export async function getEmployees(filters: EmployeeFilterParams = {}): Promise<
   }));
 }
 
-export async function getEmployeeById(id: string): Promise<Employee | null> {
+export async function getEmployeeById(id: string, companyId?: string): Promise<Employee | null> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) return null;
 
-  const doc = await db.collection("employees").findOne({ _id: new ObjectId(id) });
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { _id: new ObjectId(id), companyId: cId } : { _id: new ObjectId(id) };
+
+  const doc = await db.collection("employees").findOne(filter);
   if (!doc) return null;
 
   return {
@@ -814,10 +900,13 @@ export async function getEmployeeById(id: string): Promise<Employee | null> {
   };
 }
 
-export async function getEmployeeByEmail(email: string): Promise<Employee | null> {
+export async function getEmployeeByEmail(email: string, companyId?: string): Promise<Employee | null> {
   const db = await getDb();
   const normalized = email.toLowerCase().trim();
-  const doc = await db.collection("employees").findOne({ email: normalized });
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { email: normalized, companyId: cId } : { email: normalized };
+
+  const doc = await db.collection("employees").findOne(filter);
   if (!doc) return null;
 
   return {
@@ -838,22 +927,27 @@ export async function getEmployeeByEmail(email: string): Promise<Employee | null
   };
 }
 
-export async function createEmployee(data: EmployeeInput): Promise<Employee & { tempPassword: string }> {
+export async function createEmployee(data: EmployeeInput, companyId?: string): Promise<Employee & { tempPassword: string }> {
   const db = await getDb();
   const normalizedEmail = data.email.toLowerCase().trim();
+  const cId = await resolveCompanyId(companyId);
 
-  const existing = await db.collection("employees").findOne({ email: normalizedEmail });
+  const existingFilter = cId ? { email: normalizedEmail, companyId: cId } : { email: normalizedEmail };
+  const existing = await db.collection("employees").findOne(existingFilter);
   if (existing) {
-    throw new Error(`An employee with email "${normalizedEmail}" already exists.`);
+    throw new Error(`An employee with email "${normalizedEmail}" already exists in this organization.`);
   }
 
   let deptName = "General";
   if (ObjectId.isValid(data.departmentId)) {
-    const dept = await db.collection("departments").findOne({ _id: new ObjectId(data.departmentId) });
+    const dept = await db.collection("departments").findOne({
+      _id: new ObjectId(data.departmentId),
+      ...(cId ? { companyId: cId } : {}),
+    });
     if (dept) deptName = dept.name as string;
   }
 
-  await ensureJobTitle(data.jobTitle, data.departmentId, false);
+  await ensureJobTitle(data.jobTitle, data.departmentId, false, cId?.toString());
 
   const newDoc = {
     fullName: data.fullName.trim(),
@@ -867,6 +961,7 @@ export async function createEmployee(data: EmployeeInput): Promise<Employee & { 
     role: data.role,
     status: data.status,
     leaveAllowance: data.leaveAllowance,
+    ...(cId ? { companyId: cId } : {}),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -876,7 +971,7 @@ export async function createEmployee(data: EmployeeInput): Promise<Employee & { 
   // Auto-provision a users account for the new employee
   const tempPassword = crypto.randomBytes(9).toString("base64url").slice(0, 12);
   const hashedPassword = await bcrypt.hash(tempPassword, 12);
-  await db.collection("users").updateOne(
+  const userUpsert = await db.collection("users").findOneAndUpdate(
     { email: normalizedEmail },
     {
       $setOnInsert: {
@@ -890,8 +985,27 @@ export async function createEmployee(data: EmployeeInput): Promise<Employee & { 
         updatedAt: new Date(),
       },
     },
-    { upsert: true }
+    { upsert: true, returnDocument: "after" }
   );
+
+  // Add user as member to company_members if company is known
+  if (cId && userUpsert && "_id" in userUpsert && userUpsert._id) {
+    const memberRole = data.role === "hr_admin" ? "admin" : (data.role === "manager" ? "manager" : "employee");
+    await db.collection("company_members").updateOne(
+      { companyId: cId, userId: userUpsert._id as ObjectId },
+      {
+        $setOnInsert: {
+          companyId: cId,
+          userId: userUpsert._id as ObjectId,
+          role: memberRole,
+          status: "active",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+  }
 
   return {
     id: result.insertedId.toString(),
@@ -912,29 +1026,32 @@ export async function createEmployee(data: EmployeeInput): Promise<Employee & { 
   };
 }
 
-export async function updateEmployee(id: string, data: EmployeeInput): Promise<Employee> {
+export async function updateEmployee(id: string, data: EmployeeInput, companyId?: string): Promise<Employee> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) {
     throw new Error("Invalid employee ID.");
   }
   const objId = new ObjectId(id);
   const normalizedEmail = data.email.toLowerCase().trim();
+  const cId = await resolveCompanyId(companyId);
+  const compFilter = cId ? { companyId: cId } : {};
 
   const existingWithEmail = await db.collection("employees").findOne({
     _id: { $ne: objId },
     email: normalizedEmail,
+    ...compFilter,
   });
   if (existingWithEmail) {
-    throw new Error(`An employee with email "${normalizedEmail}" already exists.`);
+    throw new Error(`An employee with email "${normalizedEmail}" already exists in this organization.`);
   }
 
   let deptName = "General";
   if (ObjectId.isValid(data.departmentId)) {
-    const dept = await db.collection("departments").findOne({ _id: new ObjectId(data.departmentId) });
+    const dept = await db.collection("departments").findOne({ _id: new ObjectId(data.departmentId), ...compFilter });
     if (dept) deptName = dept.name as string;
   }
 
-  await ensureJobTitle(data.jobTitle, data.departmentId, false);
+  await ensureJobTitle(data.jobTitle, data.departmentId, false, cId?.toString());
 
   const updateFields = {
     fullName: data.fullName.trim(),
@@ -951,44 +1068,54 @@ export async function updateEmployee(id: string, data: EmployeeInput): Promise<E
     updatedAt: new Date(),
   };
 
-  await db.collection("employees").updateOne({ _id: objId }, { $set: updateFields });
+  await db.collection("employees").updateOne({ _id: objId, ...compFilter }, { $set: updateFields });
 
-  const updated = await getEmployeeById(id);
+  const updated = await getEmployeeById(id, cId?.toString());
   if (!updated) {
     throw new Error("Employee not found after update.");
   }
   return updated;
 }
 
-export async function toggleEmployeeStatus(id: string): Promise<{ id: string; newStatus: "active" | "inactive" }> {
+export async function toggleEmployeeStatus(id: string, companyId?: string): Promise<{ id: string; newStatus: "active" | "inactive" }> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) {
     throw new Error("Invalid employee ID.");
   }
   const objId = new ObjectId(id);
+  const cId = await resolveCompanyId(companyId);
+  const compFilter = cId ? { companyId: cId } : {};
 
-  const emp = await db.collection("employees").findOne({ _id: objId });
+  const emp = await db.collection("employees").findOne({ _id: objId, ...compFilter });
   if (!emp) {
     throw new Error("Employee not found.");
   }
 
   const newStatus: "active" | "inactive" = emp.status === "active" ? "inactive" : "active";
   await db.collection("employees").updateOne(
-    { _id: objId },
+    { _id: objId, ...compFilter },
     { $set: { status: newStatus, updatedAt: new Date() } }
   );
 
   return { id, newStatus };
 }
 
-export async function getHRDashboardStats(): Promise<HRDashboardStats> {
+export async function getHRDashboardStats(companyId?: string): Promise<HRDashboardStats> {
   const db = await getDb();
-  await seedHrDefaults();
+  const cId = await resolveCompanyId(companyId);
+
+  if (cId) {
+    await seedHrDefaultsForCompany(cId.toString());
+  } else {
+    await seedHrDefaults();
+  }
+
+  const filter = cId ? { companyId: cId } : {};
 
   const [employees, departments, jobTitles] = await Promise.all([
-    db.collection("employees").find().toArray(),
-    db.collection("departments").countDocuments(),
-    db.collection("job_titles").countDocuments(),
+    db.collection("employees").find(filter).toArray(),
+    db.collection("departments").countDocuments(filter),
+    db.collection("job_titles").countDocuments(filter),
   ]);
 
   const total = employees.length;
@@ -1020,9 +1147,10 @@ export async function getHRDashboardStats(): Promise<HRDashboardStats> {
 // Feature 2: Leave & Time-off Service Methods
 // ==========================================
 
-export async function getLeaveBalance(employeeId: string, year = new Date().getFullYear()): Promise<LeaveBalance> {
+export async function getLeaveBalance(employeeId: string, year = new Date().getFullYear(), companyId?: string): Promise<LeaveBalance> {
   const db = await getDb();
-  const emp = await getEmployeeById(employeeId);
+  const cId = await resolveCompanyId(companyId);
+  const emp = await getEmployeeById(employeeId, cId?.toString());
   const employeeName = emp?.fullName || "Employee";
   const allowance = emp?.leaveAllowance ?? 25;
 
@@ -1035,6 +1163,7 @@ export async function getLeaveBalance(employeeId: string, year = new Date().getF
       employeeId,
       status: "approved",
       startDate: { $gte: yearStart, $lte: yearEnd },
+      ...(cId ? { companyId: cId } : {}),
     })
     .toArray();
 
@@ -1063,11 +1192,20 @@ export async function getLeaveBalance(employeeId: string, year = new Date().getF
   };
 }
 
-export async function getLeaveRequests(filter: { employeeId?: string; status?: string } = {}): Promise<LeaveRequest[]> {
+export async function getLeaveRequests(
+  filter: { employeeId?: string; status?: string } = {},
+  companyId?: string
+): Promise<LeaveRequest[]> {
   const db = await getDb();
-  await seedHrDefaults();
+  const cId = await resolveCompanyId(companyId);
 
-  const query: Record<string, unknown> = {};
+  if (cId) {
+    await seedHrDefaultsForCompany(cId.toString());
+  } else {
+    await seedHrDefaults();
+  }
+
+  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
   if (filter.employeeId) {
     query.employeeId = filter.employeeId;
   }
@@ -1097,9 +1235,10 @@ export async function getLeaveRequests(filter: { employeeId?: string; status?: s
   }));
 }
 
-export async function createLeaveRequest(data: LeaveRequestInput): Promise<LeaveRequest> {
+export async function createLeaveRequest(data: LeaveRequestInput, companyId?: string): Promise<LeaveRequest> {
   const db = await getDb();
-  const emp = await getEmployeeById(data.employeeId);
+  const cId = await resolveCompanyId(companyId);
+  const emp = await getEmployeeById(data.employeeId, cId?.toString());
   if (!emp) {
     throw new Error("Employee not found.");
   }
@@ -1113,6 +1252,7 @@ export async function createLeaveRequest(data: LeaveRequestInput): Promise<Leave
   const overlap = await db.collection("leave_requests").findOne({
     employeeId: data.employeeId,
     status: { $in: ["approved", "pending"] },
+    ...(cId ? { companyId: cId } : {}),
     $or: [
       { startDate: { $lte: data.endDate }, endDate: { $gte: data.startDate } },
     ],
@@ -1129,7 +1269,7 @@ export async function createLeaveRequest(data: LeaveRequestInput): Promise<Leave
 
   if (isPaid) {
     const currentYear = new Date(data.startDate).getFullYear();
-    const balance = await getLeaveBalance(data.employeeId, currentYear);
+    const balance = await getLeaveBalance(data.employeeId, currentYear, cId?.toString());
     if (days > balance.remainingDays) {
       throw new Error(
         `Requested duration (${days} days) exceeds available annual leave balance (${balance.remainingDays} days remaining of ${balance.allowance}). Submit as unpaid leave or reduce duration.`
@@ -1148,6 +1288,7 @@ export async function createLeaveRequest(data: LeaveRequestInput): Promise<Leave
     days,
     reason: data.reason.trim(),
     status: "pending" as LeaveStatus,
+    ...(cId ? { companyId: cId } : {}),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -1173,15 +1314,18 @@ export async function createLeaveRequest(data: LeaveRequestInput): Promise<Leave
 
 export async function reviewLeaveRequest(
   input: LeaveReviewInput,
-  reviewerName = "HR Administrator"
+  reviewerName = "HR Administrator",
+  companyId?: string
 ): Promise<LeaveRequest> {
   const db = await getDb();
   if (!ObjectId.isValid(input.requestId)) {
     throw new Error("Invalid leave request ID.");
   }
   const objId = new ObjectId(input.requestId);
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { _id: objId, companyId: cId } : { _id: objId };
 
-  const existing = await db.collection("leave_requests").findOne({ _id: objId });
+  const existing = await db.collection("leave_requests").findOne(filter);
   if (!existing) {
     throw new Error("Leave request not found.");
   }
@@ -1189,7 +1333,7 @@ export async function reviewLeaveRequest(
   const newStatus: LeaveStatus = input.action === "approve" ? "approved" : "rejected";
 
   await db.collection("leave_requests").updateOne(
-    { _id: objId },
+    filter,
     {
       $set: {
         status: newStatus,
@@ -1201,7 +1345,7 @@ export async function reviewLeaveRequest(
     }
   );
 
-  const updated = await db.collection("leave_requests").findOne({ _id: objId });
+  const updated = await db.collection("leave_requests").findOne(filter);
   if (!updated) throw new Error("Could not load updated leave request.");
 
   return {
@@ -1228,15 +1372,23 @@ export async function reviewLeaveRequest(
 // Feature 3: Attendance Tracking Service Methods
 // ==========================================
 
-export async function getTodayAttendance(): Promise<TodayAttendanceSummary> {
+export async function getTodayAttendance(companyId?: string): Promise<TodayAttendanceSummary> {
   const db = await getDb();
-  await seedHrDefaults();
+  const cId = await resolveCompanyId(companyId);
+
+  if (cId) {
+    await seedHrDefaultsForCompany(cId.toString());
+  } else {
+    await seedHrDefaults();
+  }
 
   const todayStr = formatDateYMD(new Date());
+  const empFilter = cId ? { status: "active", companyId: cId } : { status: "active" };
+  const attFilter = cId ? { date: todayStr, companyId: cId } : { date: todayStr };
 
   const [activeEmployees, records] = await Promise.all([
-    db.collection("employees").find({ status: "active" }).toArray(),
-    db.collection("attendance").find({ date: todayStr }).sort({ checkIn: -1 }).toArray(),
+    db.collection("employees").find(empFilter).toArray(),
+    db.collection("attendance").find(attFilter).sort({ checkIn: -1 }).toArray(),
   ]);
 
   const activeEmpMap = new Map<string, string>();
@@ -1280,10 +1432,17 @@ export async function getTodayAttendance(): Promise<TodayAttendanceSummary> {
   };
 }
 
-export async function getEmployeeTodayAttendance(employeeId: string): Promise<AttendanceRecord | null> {
+export async function getEmployeeTodayAttendance(employeeId: string, companyId?: string): Promise<AttendanceRecord | null> {
   const db = await getDb();
+  const cId = await resolveCompanyId(companyId);
   const todayStr = formatDateYMD(new Date());
-  const doc = await db.collection("attendance").findOne({ employeeId, date: todayStr });
+  const filter = {
+    employeeId,
+    date: todayStr,
+    ...(cId ? { companyId: cId } : {}),
+  };
+
+  const doc = await db.collection("attendance").findOne(filter);
   if (!doc) return null;
 
   return {
@@ -1300,14 +1459,20 @@ export async function getEmployeeTodayAttendance(employeeId: string): Promise<At
   };
 }
 
-export async function checkInEmployee(employeeId: string): Promise<AttendanceRecord> {
+export async function checkInEmployee(employeeId: string, companyId?: string): Promise<AttendanceRecord> {
   const db = await getDb();
+  const cId = await resolveCompanyId(companyId);
   const todayStr = formatDateYMD(new Date());
 
-  const emp = await getEmployeeById(employeeId);
+  const emp = await getEmployeeById(employeeId, cId?.toString());
   if (!emp) throw new Error("Employee not found.");
 
-  const existing = await db.collection("attendance").findOne({ employeeId, date: todayStr });
+  const existing = await db.collection("attendance").findOne({
+    employeeId,
+    date: todayStr,
+    ...(cId ? { companyId: cId } : {}),
+  });
+
   if (existing) {
     if (existing.status === "present") {
       throw new Error(`You are already checked in for today (${todayStr}).`);
@@ -1326,6 +1491,7 @@ export async function checkInEmployee(employeeId: string): Promise<AttendanceRec
     checkOut: null,
     hoursWorked: 0,
     status: "present",
+    ...(cId ? { companyId: cId } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -1345,11 +1511,17 @@ export async function checkInEmployee(employeeId: string): Promise<AttendanceRec
   };
 }
 
-export async function checkOutEmployee(employeeId: string): Promise<AttendanceRecord> {
+export async function checkOutEmployee(employeeId: string, companyId?: string): Promise<AttendanceRecord> {
   const db = await getDb();
+  const cId = await resolveCompanyId(companyId);
   const todayStr = formatDateYMD(new Date());
 
-  const existing = await db.collection("attendance").findOne({ employeeId, date: todayStr });
+  const existing = await db.collection("attendance").findOne({
+    employeeId,
+    date: todayStr,
+    ...(cId ? { companyId: cId } : {}),
+  });
+
   if (!existing) {
     throw new Error("Cannot check out without checking in first today.");
   }
@@ -1389,13 +1561,17 @@ export async function checkOutEmployee(employeeId: string): Promise<AttendanceRe
   };
 }
 
-export async function getAttendanceHistory(filter: {
-  employeeId?: string;
-  startDate?: string;
-  endDate?: string;
-} = {}): Promise<AttendanceRecord[]> {
+export async function getAttendanceHistory(
+  filter: {
+    employeeId?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {},
+  companyId?: string
+): Promise<AttendanceRecord[]> {
   const db = await getDb();
-  const query: Record<string, unknown> = {};
+  const cId = await resolveCompanyId(companyId);
+  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
 
   if (filter.employeeId) query.employeeId = filter.employeeId;
   if (filter.startDate || filter.endDate) {
@@ -1427,10 +1603,12 @@ export async function getAttendanceHistory(filter: {
 export async function calculateEmployeePayrollPreview(
   employeeId: string,
   period: string, // YYYY-MM
-  workingDaysInMonth = 22
+  workingDaysInMonth = 22,
+  companyId?: string
 ) {
   const db = await getDb();
-  const emp = await getEmployeeById(employeeId);
+  const cId = await resolveCompanyId(companyId);
+  const emp = await getEmployeeById(employeeId, cId?.toString());
   if (!emp) throw new Error("Employee not found.");
 
   // Find all approved unpaid leaves overlapping this month
@@ -1445,6 +1623,7 @@ export async function calculateEmployeePayrollPreview(
       employeeId,
       status: "approved",
       isPaid: false,
+      ...(cId ? { companyId: cId } : {}),
       $or: [
         { startDate: { $gte: monthStart, $lte: monthEnd } },
         { endDate: { $gte: monthStart, $lte: monthEnd } },
@@ -1481,10 +1660,15 @@ export async function calculateEmployeePayrollPreview(
 export async function generatePayslips(
   period: string,
   employeeIds?: string[],
-  workingDaysInMonth = 22
+  workingDaysInMonth = 22,
+  companyId?: string
 ): Promise<PayslipRecord[]> {
   const db = await getDb();
-  const query: Record<string, unknown> = { status: "active" };
+  const cId = await resolveCompanyId(companyId);
+  const query: Record<string, unknown> = {
+    status: "active",
+    ...(cId ? { companyId: cId } : {}),
+  };
   if (employeeIds && employeeIds.length > 0) {
     query._id = { $in: employeeIds.map((id) => new ObjectId(id)) };
   }
@@ -1494,7 +1678,7 @@ export async function generatePayslips(
 
   for (const doc of activeEmployees) {
     const empId = (doc._id as ObjectId).toString();
-    const calculation = await calculateEmployeePayrollPreview(empId, period, workingDaysInMonth);
+    const calculation = await calculateEmployeePayrollPreview(empId, period, workingDaysInMonth, cId?.toString());
 
     const payslipDoc = {
       employeeId: empId,
@@ -1510,12 +1694,17 @@ export async function generatePayslips(
       netSalary: calculation.netSalary,
       currency: "TND",
       status: "generated" as const,
+      ...(cId ? { companyId: cId } : {}),
       generatedAt: new Date(),
     };
 
     // Upsert payslip for same employee & period to avoid duplicates
     const res = await db.collection("payslips").findOneAndUpdate(
-      { employeeId: empId, period },
+      {
+        employeeId: empId,
+        period,
+        ...(cId ? { companyId: cId } : {}),
+      },
       { $set: payslipDoc },
       { upsert: true, returnDocument: "after" }
     );
@@ -1543,9 +1732,13 @@ export async function generatePayslips(
   return generated;
 }
 
-export async function getPayslips(filter: { period?: string; employeeId?: string } = {}): Promise<PayslipRecord[]> {
+export async function getPayslips(
+  filter: { period?: string; employeeId?: string } = {},
+  companyId?: string
+): Promise<PayslipRecord[]> {
   const db = await getDb();
-  const query: Record<string, unknown> = {};
+  const cId = await resolveCompanyId(companyId);
+  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
 
   if (filter.period) query.period = filter.period;
   if (filter.employeeId) query.employeeId = filter.employeeId;
@@ -1571,11 +1764,13 @@ export async function getPayslips(filter: { period?: string; employeeId?: string
   }));
 }
 
-export async function getPayslipById(id: string): Promise<PayslipRecord | null> {
+export async function getPayslipById(id: string, companyId?: string): Promise<PayslipRecord | null> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) return null;
+  const cId = await resolveCompanyId(companyId);
+  const filter = cId ? { _id: new ObjectId(id), companyId: cId } : { _id: new ObjectId(id) };
 
-  const doc = await db.collection("payslips").findOne({ _id: new ObjectId(id) });
+  const doc = await db.collection("payslips").findOne(filter);
   if (!doc) return null;
 
   return {
@@ -1597,9 +1792,11 @@ export async function getPayslipById(id: string): Promise<PayslipRecord | null> 
   };
 }
 
-export async function getPayrollSummary(period: string): Promise<PayrollSummary> {
-  const payslips = await getPayslips({ period });
-  const totalEmployees = await (await getDb()).collection("employees").countDocuments({ status: "active" });
+export async function getPayrollSummary(period: string, companyId?: string): Promise<PayrollSummary> {
+  const cId = await resolveCompanyId(companyId);
+  const payslips = await getPayslips({ period }, cId?.toString());
+  const empFilter = cId ? { status: "active", companyId: cId } : { status: "active" };
+  const totalEmployees = await (await getDb()).collection("employees").countDocuments(empFilter);
 
   let totalGross = 0;
   let totalDeductions = 0;
@@ -1625,9 +1822,10 @@ export async function getPayrollSummary(period: string): Promise<PayrollSummary>
 // Feature 5: AI HR Assistant Engine
 // ==========================================
 
-export async function askHRAssistant(promptText: string, employeeId: string): Promise<AIChatMessage> {
+export async function askHRAssistant(promptText: string, employeeId: string, companyId?: string): Promise<AIChatMessage> {
   const query = promptText.trim().toLowerCase();
-  const emp = await getEmployeeById(employeeId);
+  const cId = await resolveCompanyId(companyId);
+  const emp = await getEmployeeById(employeeId, cId?.toString());
   const employeeName = emp?.fullName || "Employee";
 
   const messageId = "msg-" + Date.now();
@@ -1644,8 +1842,8 @@ export async function askHRAssistant(promptText: string, employeeId: string): Pr
 
   if (isLeaveBalanceQuery) {
     const currentYear = new Date().getFullYear();
-    const balance = await getLeaveBalance(employeeId, currentYear);
-    const myRequests = await getLeaveRequests({ employeeId });
+    const balance = await getLeaveBalance(employeeId, currentYear, cId?.toString());
+    const myRequests = await getLeaveRequests({ employeeId }, cId?.toString());
     const pendingCount = myRequests.filter((r) => r.status === "pending").length;
 
     let responseContent = `Hello **${employeeName}**, here is your real-time leave balance for **${currentYear}**:\n\n`;
@@ -1747,7 +1945,7 @@ export async function askHRAssistant(promptText: string, employeeId: string): Pr
     query.includes("arrival") ||
     query.includes("late")
   ) {
-    const todayRec = await getEmployeeTodayAttendance(employeeId);
+    const todayRec = await getEmployeeTodayAttendance(employeeId, cId?.toString());
     let responseContent = `### AnOps Working Hours & Attendance Policy\n\n`;
     responseContent += `- **Standard Work Week**: 40 hours per week, Monday through Friday.\n`;
     responseContent += `- **Standard Schedule**: 8:00 AM to 5:00 PM (includes 1-hour lunch break).\n`;

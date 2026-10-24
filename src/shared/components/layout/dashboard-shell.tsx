@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Sidebar } from "@/shared/components/layout/sidebar";
 import { Topbar } from "@/shared/components/layout/topbar";
 
+import type { Company } from "@/features/company/types";
+
 type ShellUser = {
   name: string;
   email: string;
@@ -12,9 +14,13 @@ type ShellUser = {
 export function DashboardShell({
   children,
   user,
+  companies = [],
+  activeCompanyId,
 }: {
   children: React.ReactNode;
   user: ShellUser;
+  companies?: Company[];
+  activeCompanyId?: string;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -34,7 +40,11 @@ export function DashboardShell({
         />
       )}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        <Topbar onMenuClick={() => setSidebarOpen(true)} />
+        <Topbar
+          onMenuClick={() => setSidebarOpen(true)}
+          companies={companies}
+          activeCompanyId={activeCompanyId}
+        />
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
             {children}

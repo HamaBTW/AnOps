@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { auth } from "@/server/auth";
+import { getCurrentAuthUser } from "@/server/auth/rbac";
 import {
   getEmployees,
   getDepartments,
@@ -23,41 +23,31 @@ export const metadata: Metadata = {
 export default async function HRPage() {
   const currentPeriod = "2026-10";
 
-  const session = await auth();
-  const sessionEmail = session?.user?.email?.toLowerCase().trim();
-  let userRole = session?.user?.role ?? "employee";
-  const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
-  if (userRole === "employee" && envAdminEmail && sessionEmail === envAdminEmail) {
-    userRole = "hr_admin";
-  }
+  const authUser = await getCurrentAuthUser();
+  const activeCompanyId = authUser?.companyId;
+  const userRole = authUser?.isAdmin ? "hr_admin" : (authUser?.role ?? "employee");
 
-  // Always load departments and job titles for the form modals (needed for any role)
+  // Always load departments and job titles for the form modals (scoped to active company)
   const [employees, departments, jobTitles, stats] = await Promise.all([
-    getEmployees(),
-    getDepartments(),
-    getJobTitles(),
-    getHRDashboardStats(),
+    getEmployees({}, activeCompanyId),
+    getDepartments(activeCompanyId),
+    getJobTitles(activeCompanyId),
+    getHRDashboardStats(activeCompanyId),
   ]);
 
-  // Find the current employee record for the logged-in user
-  let currentEmployee = null;
-  if (sessionEmail) {
-    currentEmployee = employees.find((e) => e.email.toLowerCase() === sessionEmail) || null;
-  }
-  if (!currentEmployee) {
-    currentEmployee = employees[0] || null;
-  }
+  // Find the current employee record for the logged-in user in this active company
+  const currentEmployee = authUser?.employee || employees[0] || null;
 
   // Backend restriction: non-admin employees only get their own data
   const employeeIdFilter = userRole === "hr_admin" ? undefined : currentEmployee?.id;
 
   const [leaveRequests, todayAttendance, attendanceHistory, payslips, payrollSummary] = await Promise.all([
-    getLeaveRequests(employeeIdFilter ? { employeeId: employeeIdFilter } : {}),
-    getTodayAttendance(),
-    getAttendanceHistory(employeeIdFilter ? { employeeId: employeeIdFilter } : {}),
-    getPayslips({ period: currentPeriod, ...(employeeIdFilter ? { employeeId: employeeIdFilter } : {}) }),
+    getLeaveRequests(employeeIdFilter ? { employeeId: employeeIdFilter } : {}, activeCompanyId),
+    getTodayAttendance(activeCompanyId),
+    getAttendanceHistory(employeeIdFilter ? { employeeId: employeeIdFilter } : {}, activeCompanyId),
+    getPayslips({ period: currentPeriod, ...(employeeIdFilter ? { employeeId: employeeIdFilter } : {}) }, activeCompanyId),
     userRole === "hr_admin"
-      ? getPayrollSummary(currentPeriod)
+      ? getPayrollSummary(currentPeriod, activeCompanyId)
       : Promise.resolve({
           period: currentPeriod,
           totalGross: 0,
@@ -69,7 +59,7 @@ export default async function HRPage() {
   ]);
 
   const leaveBalance = currentEmployee
-    ? await getLeaveBalance(currentEmployee.id)
+    ? await getLeaveBalance(currentEmployee.id, 2026, activeCompanyId)
     : {
         employeeId: "",
         employeeName: "",

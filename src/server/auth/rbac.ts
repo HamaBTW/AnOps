@@ -4,36 +4,53 @@ import clientPromise from "@/server/db/client";
 import type { EmployeeRole } from "@/server/auth/types";
 import type { Employee } from "@/features/hr/types";
 
+import { ObjectId } from "mongodb";
+import { getActiveTenant } from "@/server/tenant/context";
+import type { Company } from "@/features/company/types";
+
 export type CurrentAuthContext = {
   userId: string;
   email: string;
   role: EmployeeRole;
   employee: Employee | null;
   isAdmin: boolean;
+  companyId: string;
+  company: Company;
 };
 
 /**
- * Resolves the currently authenticated user along with their linked Employee record
- * and HR role permissions.
+ * Resolves the currently authenticated user along with their active company tenant,
+ * linked Employee record in that company, and HR role permissions.
  */
 export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
   const session = await auth();
-  if (!session?.user?.email) {
+  if (!session?.user?.email || !session?.user?.id) {
+    return null;
+  }
+
+  const tenant = await getActiveTenant();
+  if (!tenant) {
     return null;
   }
 
   const email = session.user.email.toLowerCase().trim();
-  let role = (session.user.role as EmployeeRole) || "employee";
-
-  // Check admin fallback from environment
-  const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
-  if (role === "employee" && envAdminEmail && email === envAdminEmail) {
-    role = "hr_admin";
-  }
-
   const client = await clientPromise;
   const db = client.db();
-  const empDoc = await db.collection("employees").findOne({ email });
+
+  // Find linked employee in this active company
+  const empDoc = await db.collection("employees").findOne({
+    companyId: new ObjectId(tenant.companyId),
+    email,
+  });
+
+  let role: EmployeeRole = "employee";
+  if (tenant.isAdmin) {
+    role = "hr_admin";
+  } else if (tenant.role === "manager" || empDoc?.role === "manager") {
+    role = "manager";
+  } else if (empDoc?.role) {
+    role = empDoc.role as EmployeeRole;
+  }
 
   let employee: Employee | null = null;
   if (empDoc) {
@@ -53,9 +70,6 @@ export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
       createdAt: empDoc.createdAt ? (empDoc.createdAt as Date).toISOString() : new Date().toISOString(),
       updatedAt: empDoc.updatedAt ? (empDoc.updatedAt as Date).toISOString() : new Date().toISOString(),
     };
-    if (empDoc.role) {
-      role = empDoc.role as EmployeeRole;
-    }
   }
 
   return {
@@ -64,6 +78,8 @@ export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
     role,
     employee,
     isAdmin: role === "hr_admin",
+    companyId: tenant.companyId,
+    company: tenant.company,
   };
 }
 

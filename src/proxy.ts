@@ -16,6 +16,7 @@ const protectedRoutes = [
   "/documents",
   "/notifications",
   "/admin",
+  "/onboarding",
 ];
 
 const authRoutes = [

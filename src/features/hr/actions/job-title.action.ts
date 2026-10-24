@@ -17,13 +17,13 @@ import { requireAdminUser } from "@/server/auth/rbac";
 
 export async function createJobTitleAction(title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
   try {
-    await requireAdminUser();
+    const admin = await requireAdminUser();
     const parsed = jobTitleSchema.safeParse({ title, departmentId });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid job title." };
     }
 
-    const jobTitle = await ensureJobTitle(parsed.data.title, parsed.data.departmentId, false);
+    const jobTitle = await ensureJobTitle(parsed.data.title, parsed.data.departmentId, false, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: jobTitle };
   } catch (err: unknown) {
@@ -34,13 +34,13 @@ export async function createJobTitleAction(title: string, departmentId?: string)
 
 export async function updateJobTitleAction(id: string, title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
   try {
-    await requireAdminUser();
+    const admin = await requireAdminUser();
     const parsed = jobTitleSchema.safeParse({ title, departmentId });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid job title." };
     }
 
-    const updated = await updateJobTitle(id, parsed.data.title, parsed.data.departmentId);
+    const updated = await updateJobTitle(id, parsed.data.title, parsed.data.departmentId, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: updated };
   } catch (err: unknown) {
@@ -51,8 +51,8 @@ export async function updateJobTitleAction(id: string, title: string, department
 
 export async function deleteJobTitleAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    await requireAdminUser();
-    await deleteJobTitle(id);
+    const admin = await requireAdminUser();
+    await deleteJobTitle(id, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: { id } };
   } catch (err: unknown) {

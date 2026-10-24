@@ -165,18 +165,49 @@ Every form validates on **both** sides using the **same Zod schema** (single sou
 - `src/shared/components/pwa-register.tsx` - registers SW in production only.
 - `/offline` route - clean offline fallback page.
 
+## Multi-Tenancy Architecture
+
+AnOps is built on a **Shared-Database, Tenant-Discriminator (`companyId`)** multi-tenant architecture:
+
+```
+Tenant Boundary: Company
+├── Core: companies, company_members
+└── Feature Data (Strictly scoped by companyId):
+    ├── HR: employees, departments, job_titles, attendance, leave_requests, payslips
+    ├── CRM & Sales: customers, leads, opportunities, orders
+    ├── Finance: invoices, expenses, payments
+    └── Inventory: products, stock_movements, purchase_orders
+```
+
+### 1. Data Isolation Rules
+- **Foreign Key Enforcement**: Every feature document MUST store `companyId: ObjectId`.
+- **Query Scoping**: Every database read, insert, update, or delete MUST include `{ companyId: activeCompanyId }` in the query filter. No cross-tenant data leaks.
+- **Role Isolation**: A user's role and permissions are evaluated within the context of their active company membership (`owner` | `admin` | `manager` | `employee`).
+
+### 2. Active Tenant Context & Cookie
+- The user's currently selected company ID is stored in an HTTP-only cookie: `anops_active_company_id`.
+- Helper `getActiveCompanyId()` / `requireActiveCompany()` in `src/server/tenant/context.ts` resolves the active tenant for server components and actions.
+- If the cookie is absent or invalid, the system automatically falls back to the user's primary company membership.
+
+### 3. Onboarding & Company Switcher
+- **Zero-Company Guard**: If an authenticated user has no company memberships, they are automatically routed to `/onboarding` to register their initial company.
+- **Tenant Switcher**: A company selector in the top navigation allows multi-organization users to switch active companies seamlessly or provision additional companies.
+
 ## Adding New Features
 
 1. Create `src/features/[feature-name]/` with subfolders as needed
 2. Add route in `src/app/(dashboard)/[feature-name]/page.tsx` (thin, imports from feature)
 3. Keep business logic in feature, infra in server, UI primitives in shared
-4. Update proxy.ts protected routes if needed
+4. Ensure all database models include `companyId`
+5. Update proxy.ts protected routes if needed
 
 ## Quick Checklist
 
 - [ ] Routes in `app/` are thin
 - [ ] Server code in `server/`, UI in `shared/` or `features/`
+- [ ] Multi-tenancy: every data record includes and filters by `companyId`
 - [ ] No DB/auth imports in client components
 - [ ] Imports follow the layer rules
 - [ ] Types are explicit, no `any`
 - [ ] Using server components by default
+

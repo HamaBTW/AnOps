@@ -16,13 +16,13 @@ import { requireAdminUser } from "@/server/auth/rbac";
 
 export async function createDepartmentAction(name: string, description?: string): Promise<ActionResult<Department>> {
   try {
-    await requireAdminUser();
+    const admin = await requireAdminUser();
     const parsed = departmentSchema.safeParse({ name, description });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid department name." };
     }
 
-    const dept = await createDepartment(parsed.data.name, parsed.data.description);
+    const dept = await createDepartment(parsed.data.name, parsed.data.description, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: dept };
   } catch (err: unknown) {
@@ -33,13 +33,13 @@ export async function createDepartmentAction(name: string, description?: string)
 
 export async function updateDepartmentAction(id: string, name: string, description?: string): Promise<ActionResult<Department>> {
   try {
-    await requireAdminUser();
+    const admin = await requireAdminUser();
     const parsed = departmentSchema.safeParse({ name, description });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid department name." };
     }
 
-    const dept = await updateDepartment(id, parsed.data.name, parsed.data.description);
+    const dept = await updateDepartment(id, parsed.data.name, parsed.data.description, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: dept };
   } catch (err: unknown) {
@@ -50,8 +50,8 @@ export async function updateDepartmentAction(id: string, name: string, descripti
 
 export async function deleteDepartmentAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    await requireAdminUser();
-    await deleteDepartment(id);
+    const admin = await requireAdminUser();
+    await deleteDepartment(id, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: { id } };
   } catch (err: unknown) {

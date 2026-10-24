@@ -27,7 +27,7 @@ export async function submitLeaveRequestAction(rawData: unknown): Promise<Action
       return { error: "You can only submit leave requests for yourself." };
     }
 
-    const leaveRequest = await createLeaveRequest(parsed.data);
+    const leaveRequest = await createLeaveRequest(parsed.data, authUser.companyId);
     revalidatePath("/hr");
     return { success: true, data: leaveRequest };
   } catch (err: unknown) {
@@ -53,7 +53,7 @@ export async function reviewLeaveRequestAction(
     }
 
     const actualReviewer = reviewerName || authUser.employee?.fullName || authUser.email;
-    const reviewed = await reviewLeaveRequest(parsed.data, actualReviewer);
+    const reviewed = await reviewLeaveRequest(parsed.data, actualReviewer, authUser.companyId);
     revalidatePath("/hr");
     return { success: true, data: reviewed };
   } catch (err: unknown) {
@@ -70,7 +70,7 @@ export async function getLeaveBalanceAction(employeeId: string): Promise<ActionR
       return { error: "Forbidden: You may only view your own leave balance." };
     }
 
-    const balance = await getLeaveBalance(employeeId);
+    const balance = await getLeaveBalance(employeeId, 2026, authUser.companyId);
     return { success: true, data: balance };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch leave balance.";
@@ -89,7 +89,7 @@ export async function fetchLeaveRequestsAction(filter: {
       ? { ...filter, employeeId: authUser.employee.id }
       : filter;
 
-    const requests = await getLeaveRequests(effectiveFilter);
+    const requests = await getLeaveRequests(effectiveFilter, authUser.companyId);
     return { success: true, data: requests };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch leave requests.";

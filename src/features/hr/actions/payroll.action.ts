@@ -16,7 +16,7 @@ import { requireAdminUser, requireAuthUser } from "@/server/auth/rbac";
 
 export async function generatePayslipsAction(rawData: unknown): Promise<ActionResult<PayslipRecord[]>> {
   try {
-    await requireAdminUser();
+    const admin = await requireAdminUser();
     const parsed = payrollGenerateSchema.safeParse(rawData);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message || "Invalid payroll generation parameters.";
@@ -24,7 +24,7 @@ export async function generatePayslipsAction(rawData: unknown): Promise<ActionRe
     }
 
     const { period, employeeIds, workingDaysInMonth } = parsed.data;
-    const records = await generatePayslips(period, employeeIds, workingDaysInMonth);
+    const records = await generatePayslips(period, employeeIds, workingDaysInMonth, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: records };
   } catch (err: unknown) {
@@ -36,10 +36,13 @@ export async function generatePayslipsAction(rawData: unknown): Promise<ActionRe
 export async function getPayslipsAction(period: string): Promise<ActionResult<PayslipRecord[]>> {
   try {
     const authUser = await requireAuthUser();
-    const records = await getPayslips({
-      period,
-      ...(!authUser.isAdmin && authUser.employee ? { employeeId: authUser.employee.id } : {}),
-    });
+    const records = await getPayslips(
+      {
+        period,
+        ...(!authUser.isAdmin && authUser.employee ? { employeeId: authUser.employee.id } : {}),
+      },
+      authUser.companyId
+    );
     return { success: true, data: records };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load payslips.";
@@ -50,7 +53,7 @@ export async function getPayslipsAction(period: string): Promise<ActionResult<Pa
 export async function getPayslipByIdAction(id: string): Promise<ActionResult<PayslipRecord | null>> {
   try {
     const authUser = await requireAuthUser();
-    const record = await getPayslipById(id);
+    const record = await getPayslipById(id, authUser.companyId);
     if (record && !authUser.isAdmin && authUser.employee && record.employeeId !== authUser.employee.id) {
       return { error: "Forbidden: You may only access your own payslip." };
     }
@@ -63,8 +66,8 @@ export async function getPayslipByIdAction(id: string): Promise<ActionResult<Pay
 
 export async function getPayrollSummaryAction(period: string): Promise<ActionResult<PayrollSummary>> {
   try {
-    await requireAdminUser();
-    const summary = await getPayrollSummary(period);
+    const admin = await requireAdminUser();
+    const summary = await getPayrollSummary(period, admin.companyId);
     return { success: true, data: summary };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load payroll summary.";
@@ -82,7 +85,7 @@ export async function previewEmployeePayrollAction(
       return { error: "Forbidden: You may only preview your own payroll." };
     }
 
-    const preview = await calculateEmployeePayrollPreview(employeeId, period);
+    const preview = await calculateEmployeePayrollPreview(employeeId, period, 22, authUser.companyId);
     return { success: true, data: preview };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to calculate payroll preview.";

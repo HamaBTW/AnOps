@@ -20,7 +20,7 @@ export async function checkInAction(employeeId: string): Promise<ActionResult<At
     if (!effectiveEmployeeId) {
       return { error: "Employee ID is required." };
     }
-    const record = await checkInEmployee(effectiveEmployeeId);
+    const record = await checkInEmployee(effectiveEmployeeId, authUser.companyId);
     revalidatePath("/hr");
     return { success: true, data: record };
   } catch (err: unknown) {
@@ -37,7 +37,7 @@ export async function checkOutAction(employeeId: string): Promise<ActionResult<A
     if (!effectiveEmployeeId) {
       return { error: "Employee ID is required." };
     }
-    const record = await checkOutEmployee(effectiveEmployeeId);
+    const record = await checkOutEmployee(effectiveEmployeeId, authUser.companyId);
     revalidatePath("/hr");
     return { success: true, data: record };
   } catch (err: unknown) {
@@ -48,8 +48,8 @@ export async function checkOutAction(employeeId: string): Promise<ActionResult<A
 
 export async function getTodayAttendanceAction(): Promise<ActionResult<TodayAttendanceSummary>> {
   try {
-    await requireAuthUser();
-    const summary = await getTodayAttendance();
+    const authUser = await requireAuthUser();
+    const summary = await getTodayAttendance(authUser.companyId);
     return { success: true, data: summary };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load today's attendance.";
@@ -68,7 +68,7 @@ export async function getAttendanceHistoryAction(filter: {
       ? { ...filter, employeeId: authUser.employee.id }
       : filter;
 
-    const history = await getAttendanceHistory(effectiveFilter);
+    const history = await getAttendanceHistory(effectiveFilter, authUser.companyId);
     return { success: true, data: history };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch attendance history.";

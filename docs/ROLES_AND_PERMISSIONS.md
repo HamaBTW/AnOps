@@ -24,6 +24,12 @@ AnOps implements a **multi-tiered Role-Based Access Control (RBAC)** model with 
 | **`manager`** | **Department / Team Manager** | Department Heads, Team Leads, Supervisors | Assigned by an `hr_admin` in the Employee Directory |
 | **`employee`** | **Staff Member (Standard User)** | Individual contributors, general employees, public signups | Default role for public registration and newly provisioned staff |
 
+### 2.1 Multi-Tenant Role Isolation
+Roles are evaluated strictly within the context of the user's **Active Company**:
+- **Company Creator / Owner**: Automatically granted `owner` and `hr_admin` for the created company.
+- **Invited Staff**: An employee added by an admin receives their designated role (`employee`, `manager`, `hr_admin`) within that specific company.
+- **Multi-Company Memberships**: A user can be an `hr_admin` in Company A, but a regular `employee` in Company B. Switching active companies immediately updates the effective permissions and data boundary.
+
 ---
 
 ## 3. Capability Matrix (Can vs Cannot)

@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { X, Loader2, User, Mail, Phone, Calendar, DollarSign, Shield } from "lucide-react";
 import type { Department, JobTitle, Employee } from "@/features/hr/types";
+import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
 import { JobTitleCombobox } from "./job-title-combobox";
 import { createEmployeeAction, updateEmployeeAction } from "@/features/hr/actions/employee.action";
 
@@ -39,6 +40,8 @@ export function EmployeeModal({
   const [status, setStatus] = useState<"active" | "inactive">("active");
 
   const isEditing = Boolean(employeeToEdit);
+
+  useScrollLock(isOpen);
 
   useEffect(() => {
     if (employeeToEdit) {

@@ -254,6 +254,136 @@ export async function createDepartment(name: string, description?: string): Prom
 }
 
 /**
+ * Update an existing department's name and/or description
+ */
+export async function updateDepartment(id: string, name: string, description?: string): Promise<Department> {
+  const db = await getDb();
+  if (!ObjectId.isValid(id)) throw new Error("Invalid department ID.");
+  const objId = new ObjectId(id);
+  const trimmed = name.trim();
+
+  // Ensure no duplicate name (exclude itself)
+  const duplicate = await db.collection("departments").findOne({
+    _id: { $ne: objId },
+    name: { $regex: new RegExp(`^${trimmed}$`, "i") },
+  });
+  if (duplicate) {
+    throw new Error(`Department "${trimmed}" already exists.`);
+  }
+
+  await db.collection("departments").updateOne(
+    { _id: objId },
+    { $set: { name: trimmed, description: description?.trim() ?? "", updatedAt: new Date() } }
+  );
+
+  // Update all employees who belong to this department
+  await db.collection("employees").updateMany(
+    { departmentId: id },
+    { $set: { departmentName: trimmed, updatedAt: new Date() } }
+  );
+
+  const updated = await db.collection("departments").findOne({ _id: objId });
+  return {
+    id,
+    name: trimmed,
+    description: updated?.description as string | undefined,
+    employeeCount: await db.collection("employees").countDocuments({ departmentId: id, status: "active" }),
+    createdAt: updated?.createdAt ? (updated.createdAt as Date).toISOString() : undefined,
+  };
+}
+
+/**
+ * Delete a department — only allowed if no employees are assigned to it
+ */
+export async function deleteDepartment(id: string): Promise<void> {
+  const db = await getDb();
+  if (!ObjectId.isValid(id)) throw new Error("Invalid department ID.");
+  const objId = new ObjectId(id);
+
+  const dept = await db.collection("departments").findOne({ _id: objId });
+  if (!dept) throw new Error("Department not found.");
+
+  const empCount = await db.collection("employees").countDocuments({ departmentId: id });
+  if (empCount > 0) {
+    throw new Error(
+      `Cannot delete "${dept.name}" — it has ${empCount} employee(s) assigned. Reassign them first.`
+    );
+  }
+
+  await db.collection("departments").deleteOne({ _id: objId });
+}
+
+/**
+ * Fetch employees belonging to a specific department
+ */
+export async function getEmployeesByDepartment(departmentId: string): Promise<Employee[]> {
+  const db = await getDb();
+  const docs = await db.collection("employees")
+    .find({ departmentId })
+    .sort({ status: 1, fullName: 1 })
+    .toArray();
+
+  return docs.map((doc) => ({
+    id: (doc._id as ObjectId).toString(),
+    fullName: (doc.fullName as string) || (doc.name as string) || "Unnamed Staff",
+    email: (doc.email as string) || "",
+    phone: (doc.phone as string) || undefined,
+    jobTitle: (doc.jobTitle as string) || "Staff Member",
+    departmentId: (doc.departmentId as string) || "",
+    departmentName: (doc.departmentName as string) || "General",
+    hireDate: (doc.hireDate as string) || "2024-01-01",
+    baseSalary: Number(doc.baseSalary) || 0,
+    status: (doc.status as "active" | "inactive") || "active",
+    role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
+    leaveAllowance: Number(doc.leaveAllowance) || 25,
+    createdAt: doc.createdAt ? (doc.createdAt as Date).toISOString() : undefined,
+    updatedAt: doc.updatedAt ? (doc.updatedAt as Date).toISOString() : undefined,
+  }));
+}
+
+/**
+ * Update a custom job title's text and/or department association
+ */
+export async function updateJobTitle(id: string, title: string, departmentId?: string): Promise<JobTitle> {
+  const db = await getDb();
+  if (!ObjectId.isValid(id)) throw new Error("Invalid job title ID.");
+  const objId = new ObjectId(id);
+
+  const existing = await db.collection("job_titles").findOne({ _id: objId });
+  if (!existing) throw new Error("Job title not found.");
+  if (existing.isPredefined) throw new Error("Predefined job titles cannot be renamed.");
+
+  const trimmed = title.trim();
+
+  // Check for duplicate title
+  const dup = await db.collection("job_titles").findOne({
+    _id: { $ne: objId },
+    title: { $regex: new RegExp(`^${trimmed}$`, "i") },
+  });
+  if (dup) throw new Error(`A job title "${trimmed}" already exists.`);
+
+  const oldTitle = existing.title as string;
+  await db.collection("job_titles").updateOne(
+    { _id: objId },
+    { $set: { title: trimmed, departmentId: departmentId ?? existing.departmentId, updatedAt: new Date() } }
+  );
+
+  // Update employees using the old title
+  await db.collection("employees").updateMany(
+    { jobTitle: { $regex: new RegExp(`^${oldTitle}$`, "i") } },
+    { $set: { jobTitle: trimmed, updatedAt: new Date() } }
+  );
+
+  return {
+    id,
+    title: trimmed,
+    departmentId: (departmentId ?? existing.departmentId as string) || undefined,
+    isPredefined: false,
+    createdAt: existing.createdAt ? (existing.createdAt as Date).toISOString() : undefined,
+  };
+}
+
+/**
  * Fetch all job titles (predefined + custom), with active employee count
  */
 export async function getJobTitles(): Promise<JobTitle[]> {

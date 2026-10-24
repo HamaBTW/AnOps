@@ -7,6 +7,7 @@ import {
   ensureJobTitle,
   deleteJobTitle,
   seedHrDefaults,
+  updateJobTitle,
 } from "@/server/services/hr.service";
 import type { JobTitle } from "@/features/hr/types";
 import type { ActionResult } from "./employee.action";
@@ -23,6 +24,22 @@ export async function createJobTitleAction(title: string, departmentId?: string)
     return { success: true, data: jobTitle };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to create job title.";
+    return { error: message };
+  }
+}
+
+export async function updateJobTitleAction(id: string, title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
+  try {
+    const parsed = jobTitleSchema.safeParse({ title, departmentId });
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message || "Invalid job title." };
+    }
+
+    const updated = await updateJobTitle(id, parsed.data.title, parsed.data.departmentId);
+    revalidatePath("/hr");
+    return { success: true, data: updated };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update job title.";
     return { error: message };
   }
 }

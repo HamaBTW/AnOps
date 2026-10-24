@@ -6,7 +6,13 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI;
-const options = {};
+// Bounded timeouts so a degraded database fails requests instead of hanging them.
+const options = {
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 30000,
+  maxPoolSize: 20,
+};
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;

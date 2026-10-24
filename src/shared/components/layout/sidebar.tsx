@@ -34,6 +34,7 @@ const navigation = [
   { name: "Finance", href: "/finance", icon: IconWallet },
   { name: "Inventory", href: "/inventory", icon: IconPackage },
   { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
+  { name: "Manufacturing", href: "/manufacturing", icon: IconSettings },
   { name: "Projects", href: "/projects", icon: IconBarChart },
   { name: "Documents", href: "/documents", icon: IconDocument },
   { name: "Notifications", href: "/notifications", icon: IconNotification },
@@ -77,7 +78,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex h-[100dvh] w-[280px] flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[240px] lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-40 flex h-[100dvh] w-[280px] shrink-0 flex-col overflow-hidden border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static lg:z-auto lg:w-[240px] lg:translate-x-0",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         className
       )}
@@ -108,7 +109,8 @@ export function Sidebar({
         )}
       </div>
 
-      <nav className="flex-1 px-2.5 py-2">
+      {/* min-h-0 + overflow-y-auto: on short viewports the links scroll instead of being clipped. */}
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 py-2">
         <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">
           Navigation
         </div>
@@ -144,7 +146,7 @@ export function Sidebar({
         </ul>
       </nav>
 
-      <div className="mt-auto border-t border-[var(--color-border-subtle)] p-2">
+      <div className="shrink-0 border-t border-[var(--color-border-subtle)] p-2">
         <button
           onClick={() => setOpen(!open)}
           className="group flex w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2.5 min-h-[44px] text-left hover:bg-[var(--color-bg-subtle)]"

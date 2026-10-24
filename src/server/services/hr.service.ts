@@ -184,7 +184,34 @@ export async function seedHrDefaults(): Promise<void> {
   seedPromise = (async () => {
     const db = await getDb();
 
-  // 1. Departments
+    // 0. Ensure Admin Account from .env exists
+    const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    const envAdminPassword = process.env.ADMIN_PASSWORD;
+    const envAdminName = process.env.ADMIN_NAME || "System Administrator";
+
+    if (envAdminEmail && envAdminPassword) {
+      const existingAdmin = await db.collection("users").findOne({ email: envAdminEmail });
+      if (!existingAdmin) {
+        const hashedPassword = await bcrypt.hash(envAdminPassword, 12);
+        await db.collection("users").insertOne({
+          name: envAdminName,
+          email: envAdminEmail,
+          password: hashedPassword,
+          role: "hr_admin",
+          status: "active",
+          emailVerified: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } else if (existingAdmin.role !== "hr_admin") {
+        await db.collection("users").updateOne(
+          { _id: existingAdmin._id },
+          { $set: { role: "hr_admin", updatedAt: new Date() } }
+        );
+      }
+    }
+
+    // 1. Departments
   const deptCount = await db.collection("departments").countDocuments();
   if (deptCount === 0) {
     const docs = DEFAULT_DEPARTMENTS.map((d) => ({

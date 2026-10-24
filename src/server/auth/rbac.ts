@@ -25,9 +25,9 @@ export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
   const email = session.user.email.toLowerCase().trim();
   let role = (session.user.role as EmployeeRole) || "employee";
 
-  // Check admin fallback
-  const adminEmail = process.env.EMAIL_SERVER_USER?.toLowerCase().trim();
-  if (role === "employee" && (email.includes("abidi") || (adminEmail && email === adminEmail))) {
+  // Check admin fallback from environment
+  const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  if (role === "employee" && envAdminEmail && email === envAdminEmail) {
     role = "hr_admin";
   }
 

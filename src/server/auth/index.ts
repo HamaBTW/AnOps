@@ -33,7 +33,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const client = await clientPromise;
         const db = client.db();
-        const user = await db.collection("users").findOne({ email: normalizedEmail });
+        let user = await db.collection("users").findOne({ email: normalizedEmail });
+
+        const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+        const envAdminPassword = process.env.ADMIN_PASSWORD;
+
+        if (!user && envAdminEmail && normalizedEmail === envAdminEmail && envAdminPassword && password === envAdminPassword) {
+          const hashedPassword = await bcrypt.hash(envAdminPassword, 12);
+          const adminDoc = {
+            name: process.env.ADMIN_NAME || "System Administrator",
+            email: envAdminEmail,
+            password: hashedPassword,
+            role: "hr_admin",
+            status: "active",
+            emailVerified: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          const res = await db.collection("users").insertOne(adminDoc);
+          user = { _id: res.insertedId, ...adminDoc };
+        }
 
         if (!user || !user.password) {
           console.warn(`[auth] sign-in failed for ${normalizedEmail}: user not found or no password`);
@@ -80,15 +99,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         const employee = await db.collection("employees").findOne({ email: normalizedEmail });
-        let hrRole = (employee?.role as "employee" | "manager" | "hr_admin" | undefined);
+        let hrRole = (employee?.role as "employee" | "manager" | "hr_admin" | undefined) ||
+                     (user.role as "employee" | "manager" | "hr_admin" | undefined);
+
         if (!hrRole) {
-          const adminEmail = process.env.EMAIL_SERVER_USER?.toLowerCase().trim();
-          if (
-            user.role === "admin" ||
-            user.role === "hr_admin" ||
-            normalizedEmail.includes("abidi") ||
-            (adminEmail && normalizedEmail === adminEmail)
-          ) {
+          if (envAdminEmail && normalizedEmail === envAdminEmail) {
             hrRole = "hr_admin";
           } else {
             hrRole = "employee";

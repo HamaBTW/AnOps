@@ -26,11 +26,8 @@ export default async function HRPage() {
   const session = await auth();
   const sessionEmail = session?.user?.email?.toLowerCase().trim();
   let userRole = session?.user?.role ?? "employee";
-  const adminEmail = process.env.EMAIL_SERVER_USER?.toLowerCase().trim();
-  if (
-    userRole === "employee" &&
-    (sessionEmail?.includes("abidi") || (adminEmail && sessionEmail === adminEmail))
-  ) {
+  const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  if (userRole === "employee" && envAdminEmail && sessionEmail === envAdminEmail) {
     userRole = "hr_admin";
   }
 
@@ -48,10 +45,7 @@ export default async function HRPage() {
     currentEmployee = employees.find((e) => e.email.toLowerCase() === sessionEmail) || null;
   }
   if (!currentEmployee) {
-    currentEmployee =
-      employees.find((e) => e.email === "mohamed.abidi@anops.internal") ||
-      employees[0] ||
-      null;
+    currentEmployee = employees[0] || null;
   }
 
   // Backend restriction: non-admin employees only get their own data

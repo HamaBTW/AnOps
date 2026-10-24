@@ -22,58 +22,59 @@ import {
 import { cn } from "@/shared/lib/utils";
 import type { AgentMessage } from "@/server/ai/base-agent";
 
-// ─── Provider/Model catalogue (mirrors src/server/ai/providers/*) ─────────────
+// ─── Types & fetching for live provider models ────────────────────────────────
 
-const AI_PROVIDERS = [
-  {
-    id: "auto",
-    label: "Auto (Best Available)",
-    icon: "⚡",
-    models: [{ id: "", label: "Auto-select" }],
-  },
-  {
-    id: "groq",
-    label: "Groq",
-    icon: "🔥",
-    models: [
-      { id: "llama-3.3-70b-versatile",  label: "Llama 3.3 70B" },
-      { id: "llama3-8b-8192",           label: "Llama 3 8B" },
-      { id: "llama3-70b-8192",          label: "Llama 3 70B" },
-      { id: "mixtral-8x7b-32768",       label: "Mixtral 8×7B" },
-      { id: "gemma2-9b-it",             label: "Gemma 2 9B" },
-    ],
-  },
-  {
-    id: "openrouter",
-    label: "OpenRouter",
-    icon: "🌐",
-    models: [
-      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B" },
-      { id: "meta-llama/llama-3.1-8b-instruct:free",  label: "Llama 3.1 8B" },
-      { id: "google/gemma-3-27b-it:free",              label: "Gemma 3 27B" },
-      { id: "google/gemma-3-12b-it:free",              label: "Gemma 3 12B" },
-      { id: "mistralai/mistral-7b-instruct:free",      label: "Mistral 7B" },
-      { id: "deepseek/deepseek-r1:free",               label: "DeepSeek R1" },
-    ],
-  },
-  {
-    id: "gemini",
-    label: "Gemini",
-    icon: "✨",
-    models: [
-      { id: "gemma-3-27b-it",    label: "Gemma 3 27B" },
-      { id: "gemma-3-12b-it",    label: "Gemma 3 12B" },
-      { id: "gemma-3-4b-it",     label: "Gemma 3 4B" },
-      { id: "gemini-2.0-flash",  label: "Gemini 2.0 Flash" },
-      { id: "gemini-1.5-flash",  label: "Gemini 1.5 Flash" },
-    ],
-  },
-] as const;
+type ProviderModel = { id: string; label: string };
+
+type ProviderModels = {
+  id: string;
+  label: string;
+  icon: string;
+  available: boolean;
+  models: ProviderModel[];
+  error?: string;
+};
 
 type ModelSelection = { model: string; providerLabel: string; modelLabel: string };
 
+const AUTO_PROVIDER: ProviderModels = {
+  id: "auto",
+  label: "Auto (Best Available)",
+  icon: "⚡",
+  available: true,
+  models: [{ id: "", label: "Auto-select" }],
+};
+
 function getDefaultSelection(): ModelSelection {
   return { model: "", providerLabel: "Auto", modelLabel: "Auto-select" };
+}
+
+/** Fetch live models from /api/ai/models — cached by browser for the session. */
+function useLiveProviders() {
+  const [providers, setProviders] = useState<ProviderModels[]>([AUTO_PROVIDER]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/ai/models")
+      .then((r) => r.json())
+      .then((data: { providers?: ProviderModels[]; error?: string }) => {
+        if (cancelled) return;
+        if (data.providers) {
+          setProviders([AUTO_PROVIDER, ...data.providers]);
+        } else {
+          setFetchError(data.error ?? "Unknown error");
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setFetchError((e as Error).message);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { providers, loading, fetchError };
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -168,6 +169,7 @@ export function AgentChatPanel({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [selection, setSelection] = useState<ModelSelection>(getDefaultSelection());
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const { providers, loading: providersLoading, fetchError } = useLiveProviders();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -490,46 +492,87 @@ export function AgentChatPanel({
             <button
               type="button"
               onClick={() => setSelectorOpen((v) => !v)}
+              disabled={providersLoading}
               className={cn(
                 "flex items-center gap-1.5 rounded-[var(--radius-control)] border px-2.5 py-1 text-[11px] font-medium transition-colors",
                 selection.model
                   ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)]/10 text-[var(--color-action-primary)]"
-                  : "border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                  : "border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
+                providersLoading && "opacity-60 cursor-wait"
               )}
             >
-              <Zap className="h-3 w-3" />
-              <span>{selection.providerLabel}</span>
-              {selection.model && (
+              {providersLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Zap className="h-3 w-3" />
+              )}
+              <span>{providersLoading ? "Loading models…" : selection.providerLabel}</span>
+              {selection.model && !providersLoading && (
                 <span className="text-[var(--color-text-secondary)] font-normal">· {selection.modelLabel}</span>
               )}
-              <ChevronDown className={cn("h-3 w-3 transition-transform", selectorOpen && "rotate-180")} />
+              {!providersLoading && (
+                <ChevronDown className={cn("h-3 w-3 transition-transform", selectorOpen && "rotate-180")} />
+              )}
             </button>
 
+            {/* Fetch error hint */}
+            {fetchError && !providersLoading && (
+              <span className="text-[10px] text-[var(--color-error-text)]">
+                Could not load models — using defaults
+              </span>
+            )}
+
             {/* Dropdown */}
-            {selectorOpen && (
-              <div className="absolute bottom-full mb-1 left-0 z-50 w-64 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-                <div className="p-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)] px-3 pt-2.5">Provider & Model</div>
-                {AI_PROVIDERS.map((provider) => (
+            {selectorOpen && !providersLoading && (
+              <div className="absolute bottom-full mb-1 left-0 z-50 w-72 max-h-80 overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="sticky top-0 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)] bg-[var(--color-bg-surface)] border-b border-[var(--color-border-subtle)]">
+                  Provider &amp; Model
+                </div>
+                {providers.map((provider) => (
                   <div key={provider.id}>
-                    <div className="px-3 py-1 text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider bg-[var(--color-bg-subtle)]">
-                      {provider.icon} {provider.label}
+                    {/* Provider header */}
+                    <div className={cn(
+                      "flex items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-[var(--color-bg-subtle)]",
+                      !provider.available && provider.id !== "auto" && "opacity-50"
+                    )}>
+                      <span>{provider.icon} {provider.label}</span>
+                      {provider.id !== "auto" && (
+                        <span className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[9px] font-bold",
+                          provider.available
+                            ? "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)]"
+                            : "bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
+                        )}>
+                          {provider.available ? `${provider.models.length} models` : provider.error ?? "Not configured"}
+                        </span>
+                      )}
                     </div>
-                    {provider.models.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => handleSelectModel(m.id, provider.label, m.label)}
-                        className={cn(
-                          "w-full text-left px-4 py-1.5 text-xs transition-colors hover:bg-[var(--color-bg-subtle)]",
-                          selection.model === m.id
-                            ? "text-[var(--color-action-primary)] font-semibold"
-                            : "text-[var(--color-text-primary)]"
-                        )}
-                      >
-                        {m.label}
-                        {selection.model === m.id && <span className="ml-1 text-[10px]">✓</span>}
-                      </button>
-                    ))}
+
+                    {/* Models list */}
+                    {provider.available ? (
+                      provider.models.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleSelectModel(m.id, provider.label, m.label)}
+                          className={cn(
+                            "w-full text-left px-4 py-1.5 text-xs transition-colors hover:bg-[var(--color-bg-subtle)] flex items-center justify-between gap-2",
+                            selection.model === m.id
+                              ? "text-[var(--color-action-primary)] font-semibold bg-[var(--color-action-primary)]/5"
+                              : "text-[var(--color-text-primary)]"
+                          )}
+                        >
+                          <span className="truncate">{m.label}</span>
+                          {selection.model === m.id && (
+                            <Check className="h-3 w-3 shrink-0 text-[var(--color-action-primary)]" />
+                          )}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-2 text-[11px] text-[var(--color-text-secondary)] italic">
+                        Add {provider.label} key to .env to enable
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

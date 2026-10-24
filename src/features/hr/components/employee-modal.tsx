@@ -127,244 +127,248 @@ export function EmployeeModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
         <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-4">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
-              {isEditing ? "Edit Employee Profile" : "Add New Employee"}
-            </h2>
-            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              {isEditing
-                ? "Update staff contact details, department, title, or compensation"
-                : "Create a new employee profile and define role and job title"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+          className="relative w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] overflow-y-auto rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl pb-[max(1rem,env(safe-area-inset-bottom))]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Mobile Sheet Drag Indicator */}
+          <div className="w-10 h-1 rounded-full bg-[var(--color-border-control)] mx-auto mb-2.5 sm:hidden shrink-0" />
 
-        {error && (
-          <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-status-error)]/30 bg-[var(--color-status-error-bg)] p-3 text-xs text-[var(--color-status-error)] font-medium">
-            {error}
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Full Name */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Full Name <span className="text-[var(--color-status-error)]">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Leila Ammar"
-                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                />
-                <User className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
-              </div>
-            </div>
-
-            {/* Email */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Work Email <span className="text-[var(--color-status-error)]">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. leila.ammar@anops.internal"
-                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                />
-                <Mail className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
-              </div>
-            </div>
-
-            {/* Phone */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Phone Number
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g. +216 20 555 777"
-                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                />
-                <Phone className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
-              </div>
-            </div>
-
-            {/* Department */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Department <span className="text-[var(--color-status-error)]">*</span>
-              </label>
-              <select
-                value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
-                required
-                className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-              >
-                <option value="" disabled>
-                  Select Department...
-                </option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Job Title Selector (Predefined or Custom) */}
-          <div className="pt-1">
-            <JobTitleCombobox
-              jobTitles={jobTitles}
-              value={jobTitle}
-              onChange={(newTitle, isCustom) => {
-                setJobTitle(newTitle);
-                setIsCustomJobTitle(isCustom);
-              }}
-              selectedDepartmentId={departmentId}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 pt-1">
-            {/* Base Salary */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Base Monthly Salary <span className="text-[var(--color-status-error)]">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  required
-                  value={baseSalary}
-                  onChange={(e) => setBaseSalary(e.target.value === "" ? "" : Number(e.target.value))}
-                  placeholder="3500"
-                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-9 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                />
-                <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
-              </div>
-            </div>
-
-            {/* Hire Date */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Hire Date <span className="text-[var(--color-status-error)]">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  required
-                  value={hireDate}
-                  onChange={(e) => setHireDate(e.target.value)}
-                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                />
-                <Calendar className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
-              </div>
-            </div>
-
-            {/* Role */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                System Role
-              </label>
-              <div className="relative">
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as "employee" | "manager" | "hr_admin")}
-                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-9 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                >
-                  <option value="employee">Employee</option>
-                  <option value="manager">Team Lead / Manager</option>
-                  <option value="hr_admin">HR Administrator</option>
-                </select>
-                <Shield className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
-              </div>
-            </div>
-          </div>
-
-          {/* Status radio / toggle */}
-          <div className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-3 flex items-center justify-between">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3 sm:pb-4">
             <div>
-              <p className="text-xs font-semibold text-[var(--color-text-primary)]">Employment Status</p>
-              <p className="text-[11px] text-[var(--color-text-secondary)]">
-                Inactive employees cannot request leave or receive monthly payroll.
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                {isEditing ? "Edit Employee Profile" : "Add New Employee"}
+              </h2>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                {isEditing
+                  ? "Update staff contact details, department, title, or compensation"
+                  : "Create a new employee profile and define role and job title"}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setStatus("active")}
-                className={`min-h-[36px] rounded-[var(--radius-pill)] px-3 py-1 text-xs font-semibold transition-colors ${
-                  status === "active"
-                    ? "bg-[#176247] text-white"
-                    : "bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]"
-                }`}
-              >
-                Active
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus("inactive")}
-                className={`min-h-[36px] rounded-[var(--radius-pill)] px-3 py-1 text-xs font-semibold transition-colors ${
-                  status === "inactive"
-                    ? "bg-[#a43434] text-white"
-                    : "bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]"
-                }`}
-              >
-                Inactive
-              </button>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border-subtle)]">
             <button
               type="button"
               onClick={onClose}
-              disabled={isPending}
-              className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-5 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+              aria-label="Close dialog"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors shrink-0"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex min-h-[44px] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-6 text-sm font-bold text-[var(--color-action-on-primary)] transition-colors hover:bg-[var(--color-action-hover)] disabled:opacity-50"
-            >
-              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isEditing ? "Save Changes" : "Create Employee"}
+              <X className="h-5 w-5" />
             </button>
           </div>
-        </form>
+
+          {error && (
+            <div className="mt-3 sm:mt-4 rounded-[var(--radius-control)] border border-[var(--color-status-error)]/30 bg-[var(--color-status-error-bg)] p-3 text-xs text-[var(--color-status-error)] font-medium">
+              {error}
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="mt-4 sm:mt-5 space-y-3.5 sm:space-y-4">
+            <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-2">
+              {/* Full Name */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  Full Name <span className="text-[var(--color-status-error)]">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Leila Ammar"
+                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-base sm:text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <User className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  Work Email <span className="text-[var(--color-status-error)]">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. leila.ammar@anops.internal"
+                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-base sm:text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +216 20 555 777"
+                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-base sm:text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <Phone className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
+                </div>
+              </div>
+
+              {/* Department */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  Department <span className="text-[var(--color-status-error)]">*</span>
+                </label>
+                <select
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  required
+                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                >
+                  <option value="" disabled>
+                    Select Department...
+                  </option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Job Title Selector (Predefined or Custom) */}
+            <div className="pt-1">
+              <JobTitleCombobox
+                jobTitles={jobTitles}
+                value={jobTitle}
+                onChange={(newTitle, isCustom) => {
+                  setJobTitle(newTitle);
+                  setIsCustomJobTitle(isCustom);
+                }}
+                selectedDepartmentId={departmentId}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-3 pt-1">
+              {/* Base Salary */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  Base Monthly Salary <span className="text-[var(--color-status-error)]">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    required
+                    value={baseSalary}
+                    onChange={(e) => setBaseSalary(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="3500"
+                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-9 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
+                </div>
+              </div>
+
+              {/* Hire Date */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  Hire Date <span className="text-[var(--color-status-error)]">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    required
+                    value={hireDate}
+                    onChange={(e) => setHireDate(e.target.value)}
+                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-10 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  />
+                  <Calendar className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
+                </div>
+              </div>
+
+              {/* Role */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
+                  System Role
+                </label>
+                <div className="relative">
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as "employee" | "manager" | "hr_admin")}
+                    className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3.5 py-2 pl-9 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="manager">Team Lead / Manager</option>
+                    <option value="hr_admin">HR Administrator</option>
+                  </select>
+                  <Shield className="absolute left-3 top-3.5 h-4 w-4 text-[var(--color-text-secondary)]" />
+                </div>
+              </div>
+            </div>
+
+            {/* Status radio / toggle */}
+            <div className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div>
+                <p className="text-xs font-semibold text-[var(--color-text-primary)]">Employment Status</p>
+                <p className="text-[11px] text-[var(--color-text-secondary)]">
+                  Inactive employees cannot request leave or receive monthly payroll.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setStatus("active")}
+                  className={`min-h-[40px] px-4 rounded-[var(--radius-pill)] text-xs font-semibold transition-colors flex items-center justify-center ${
+                    status === "active"
+                      ? "bg-[#176247] text-white"
+                      : "bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]"
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatus("inactive")}
+                  className={`min-h-[40px] px-4 rounded-[var(--radius-pill)] text-xs font-semibold transition-colors flex items-center justify-center ${
+                    status === "inactive"
+                      ? "bg-[#a43434] text-white"
+                      : "bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]"
+                  }`}
+                >
+                  Inactive
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-3 border-t border-[var(--color-border-subtle)]">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isPending}
+                className="flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-5 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="flex min-h-[44px] w-full sm:w-auto items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-6 text-sm font-bold text-[var(--color-action-on-primary)] transition-colors hover:bg-[var(--color-action-hover)] disabled:opacity-50"
+              >
+                {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isEditing ? "Save Changes" : "Create Employee"}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
-  </Portal>
+    </Portal>
 );
 }

@@ -127,7 +127,7 @@ export function JobTitleCombobox({
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search predefined titles or type new..."
                   autoFocus
-                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-focus-ring)]"
+                  className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-3 py-2 text-base sm:text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-focus-ring)]"
                 />
               </div>
             ) : (
@@ -148,19 +148,19 @@ export function JobTitleCombobox({
                         handleApplyCustom();
                       }
                     }}
-                    className="flex-1 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                    className="flex-1 min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-1.5 text-base sm:text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
                   />
                   <button
                     type="button"
                     onClick={handleApplyCustom}
-                    className="rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)]"
+                    className="min-h-[44px] rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-3.5 py-1.5 text-xs font-semibold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)]"
                   >
                     Add
                   </button>
                   <button
                     type="button"
                     onClick={() => setCustomMode(false)}
-                    className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] px-2.5 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+                    className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
                   >
                     Cancel
                   </button>
@@ -177,7 +177,7 @@ export function JobTitleCombobox({
                 setOpen(false);
                 setSearch("");
               }}
-              className="flex cursor-pointer items-center gap-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3.5 py-2.5 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-action-primary)]/20"
+              className="flex min-h-[44px] cursor-pointer items-center gap-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3.5 py-2.5 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-action-primary)]/20"
             >
               <Sparkles className="h-3.5 w-3.5 text-[var(--color-text-primary)]" />
               <span>
@@ -195,7 +195,7 @@ export function JobTitleCombobox({
                   key={t.id}
                   onClick={() => handleSelect(t.title, t.isPredefined)}
                   className={cn(
-                    "flex min-h-[38px] cursor-pointer items-center justify-between rounded-[var(--radius-control)] px-3 py-2 text-sm transition-colors",
+                    "flex min-h-[44px] cursor-pointer items-center justify-between rounded-[var(--radius-control)] px-3 py-2 text-sm transition-colors",
                     isSelected
                       ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] font-semibold"
                       : "text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"

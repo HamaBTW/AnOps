@@ -22,6 +22,11 @@ export type AiCompletionOptions = {
    * If omitted, the provider uses its default free model.
    */
   model?: string;
+  /**
+   * Preferred provider (e.g. "groq", "openrouter", "gemini").
+   * If set, AiMaster routes to this provider first.
+   */
+  provider?: string;
 };
 
 export type AiCompletionResult = {

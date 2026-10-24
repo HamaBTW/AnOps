@@ -8,8 +8,10 @@ import { z } from "zod";
 const chatSchema = z.object({
   userMessage: z.string().min(1).max(2000),
   employeeId: z.string().optional(),
-  /** Model ID to force (e.g. "llama-3.3-70b-versatile"). Omit for auto. */
+  /** Model ID to force (e.g. "openai/gpt-oss-120b"). Omit for auto. */
   model: z.string().optional(),
+  /** Provider to route to (e.g. "groq", "openrouter", "gemini"). Omit for auto. */
+  provider: z.string().optional(),
   history: z
     .array(
       z.object({
@@ -35,7 +37,7 @@ const hrAgent = new HRAssistantAgent();
  * Server action: chat with the HR Assistant agent.
  *
  * Accepts conversation history for multi-turn context, and an optional
- * model override from the UI provider/model selector.
+ * model / provider override from the UI provider/model selector.
  */
 export async function chatWithHRAssistantAction(
   rawData: unknown
@@ -48,13 +50,14 @@ export async function chatWithHRAssistantAction(
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
     }
 
-    const { userMessage, employeeId, model, history } = parsed.data;
+    const { userMessage, employeeId, model, provider, history } = parsed.data;
 
     const response = await hrAgent.chat(
       history as AgentMessage[],
       userMessage,
       { employeeId, companyId: authUser.companyId },
-      model  // model override — undefined = let AiMaster auto-select
+      model,     // model override — undefined = let AiMaster auto-select
+      provider   // provider override — undefined = let AiMaster auto-select
     );
 
     return { ok: true, response };

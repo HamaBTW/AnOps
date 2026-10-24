@@ -46,11 +46,17 @@ export function AIHRAssistant({ currentEmployee, employees }: AIHRAssistantProps
   const selectedPolicy = COMPANY_POLICIES.find((p) => p.id === selectedPolicyId);
 
   /** Bridge: AgentChatPanel → HR server action */
-  const handleSend = async (userText: string, history: ChatMessage[], selectedModel: string) => {
+  const handleSend = async (
+    userText: string,
+    history: ChatMessage[],
+    selectedModel?: string,
+    selectedProvider?: string
+  ) => {
     const result = await chatWithHRAssistantAction({
       userMessage: userText,
       employeeId: activeEmployeeId,
       model: selectedModel || undefined,
+      provider: selectedProvider || undefined,
       history: history.map((m) => ({
         id: m.id,
         role: m.role,

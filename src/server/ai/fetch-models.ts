@@ -41,19 +41,44 @@ async function fetchGroqModels(): Promise<ProviderModels> {
 
     const json = await res.json() as { data: Array<{ id: string; owned_by?: string }> };
 
-    // Filter to chat models only (skip whisper / tts)
+    // Filter to chat models only (skip whisper / tts / guards)
     const chatModels = json.data
-      .filter((m) => !m.id.includes("whisper") && !m.id.includes("tts"))
+      .filter((m) =>
+        !m.id.includes("whisper") &&
+        !m.id.includes("tts") &&
+        !m.id.includes("guard") &&
+        !m.id.includes("safeguard")
+      )
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((m) => ({
         id: m.id,
         label: formatGroqLabel(m.id),
       }));
 
-    return { id: "groq", label: "Groq", icon: "🔥", available: true, models: chatModels };
+    return {
+      id: "groq",
+      label: "Groq",
+      icon: "🔥",
+      available: true,
+      models: chatModels.length > 0 ? chatModels : [
+        { id: "openai/gpt-oss-120b", label: "OpenAI GPT OSS 120B" },
+        { id: "openai/gpt-oss-20b", label: "OpenAI GPT OSS 20B" },
+        { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B" },
+        { id: "allam-2-7b", label: "Allam 2 7B" },
+      ],
+    };
   } catch (err) {
     return {
-      id: "groq", label: "Groq", icon: "🔥", available: false, models: [],
+      id: "groq",
+      label: "Groq",
+      icon: "🔥",
+      available: true,
+      models: [
+        { id: "openai/gpt-oss-120b", label: "OpenAI GPT OSS 120B" },
+        { id: "openai/gpt-oss-20b", label: "OpenAI GPT OSS 20B" },
+        { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B" },
+        { id: "allam-2-7b", label: "Allam 2 7B" },
+      ],
       error: (err as Error).message,
     };
   }
@@ -99,17 +124,43 @@ async function fetchOpenRouterModels(): Promise<ProviderModels> {
 
     // Free models: prompt price is "0" or model id ends with ":free"
     const freeModels = json.data
-      .filter((m) => m.id.endsWith(":free") || m.pricing?.prompt === "0")
+      .filter(
+        (m) =>
+          (m.id.endsWith(":free") || m.pricing?.prompt === "0") &&
+          !m.id.includes("safety")
+      )
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((m) => ({
         id: m.id,
         label: m.name.replace(/\s*\(free\)/i, "").trim(),
       }));
 
-    return { id: "openrouter", label: "OpenRouter", icon: "🌐", available: true, models: freeModels };
+    return {
+      id: "openrouter",
+      label: "OpenRouter",
+      icon: "🌐",
+      available: true,
+      models: freeModels.length > 0 ? freeModels : [
+        { id: "nvidia/nemotron-3.5-lightning:free", label: "NVIDIA Nemotron 3.5 Lightning" },
+        { id: "liquid/lfm-2.5-2.6b:free", label: "Liquid LFM 2.5 2.6B" },
+        { id: "thinkingmachines/inkling-small:free", label: "ThinkingMachines Inkling Small" },
+        { id: "poolside/laguna-s-2.1:free", label: "Poolside Laguna S 2.1" },
+        { id: "recursive/flint-v1.0:free", label: "Recursive Flint v1.0" },
+      ],
+    };
   } catch (err) {
     return {
-      id: "openrouter", label: "OpenRouter", icon: "🌐", available: false, models: [],
+      id: "openrouter",
+      label: "OpenRouter",
+      icon: "🌐",
+      available: true,
+      models: [
+        { id: "nvidia/nemotron-3.5-lightning:free", label: "NVIDIA Nemotron 3.5 Lightning" },
+        { id: "liquid/lfm-2.5-2.6b:free", label: "Liquid LFM 2.5 2.6B" },
+        { id: "thinkingmachines/inkling-small:free", label: "ThinkingMachines Inkling Small" },
+        { id: "poolside/laguna-s-2.1:free", label: "Poolside Laguna S 2.1" },
+        { id: "recursive/flint-v1.0:free", label: "Recursive Flint v1.0" },
+      ],
       error: (err as Error).message,
     };
   }
@@ -137,26 +188,57 @@ async function fetchGeminiModels(): Promise<ProviderModels> {
 
     const json = await res.json() as {
       models: Array<{
-        name: string;        // "models/gemini-1.5-flash"
+        name: string;        // "models/gemini-2.5-flash"
         displayName: string;
         supportedGenerationMethods?: string[];
       }>;
     };
 
-    // Keep only models that support generateContent (i.e. chat models)
+    // Keep only models that support generateContent and are general text/chat models
     const chatModels = (json.models ?? [])
-      .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+      .filter(
+        (m) =>
+          m.supportedGenerationMethods?.includes("generateContent") &&
+          !m.name.includes("tts") &&
+          !m.name.includes("image") &&
+          !m.name.includes("clip") &&
+          !m.name.includes("robotics") &&
+          !m.name.includes("deep-research") &&
+          !m.name.includes("transcribe") &&
+          !m.name.includes("computer-use")
+      )
       .map((m) => ({
-        // strip the "models/" prefix to get the plain model id
         id: m.name.replace(/^models\//, ""),
         label: m.displayName,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
-    return { id: "gemini", label: "Gemini", icon: "✨", available: true, models: chatModels };
+    return {
+      id: "gemini",
+      label: "Gemini",
+      icon: "✨",
+      available: true,
+      models: chatModels.length > 0 ? chatModels : [
+        { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+        { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+        { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+        { id: "gemini-flash-latest", label: "Gemini Flash Latest" },
+        { id: "gemma-4-26b-a4b-it", label: "Gemma 4 26B A4B IT" },
+      ],
+    };
   } catch (err) {
     return {
-      id: "gemini", label: "Gemini", icon: "✨", available: false, models: [],
+      id: "gemini",
+      label: "Gemini",
+      icon: "✨",
+      available: true,
+      models: [
+        { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+        { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+        { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+        { id: "gemini-flash-latest", label: "Gemini Flash Latest" },
+        { id: "gemma-4-26b-a4b-it", label: "Gemma 4 26B A4B IT" },
+      ],
       error: (err as Error).message,
     };
   }

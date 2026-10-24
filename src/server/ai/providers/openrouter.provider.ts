@@ -9,13 +9,12 @@ import { AiProviderError } from "@/server/ai/types";
  * First entry is the default.
  */
 const FREE_MODELS = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "meta-llama/llama-3.1-8b-instruct:free",
-  "google/gemma-3-27b-it:free",
-  "google/gemma-3-12b-it:free",
-  "mistralai/mistral-7b-instruct:free",
-  "qwen/qwen2.5-72b-instruct:free",
-  "deepseek/deepseek-r1:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "liquid/lfm-2.5-2.6b:free",
+  "thinkingmachines/inkling-small:free",
+  "poolside/laguna-s-2.1:free",
+  "recursive/flint-v1.0:free",
+  "google/gemma-4-26b-a4b-it:free",
 ];
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -37,6 +36,17 @@ export class OpenRouterProvider implements AiProvider {
   async complete(options: AiCompletionOptions): Promise<AiCompletionResult> {
     if (!this.apiKey) {
       throw new AiProviderError(this.name, "OPENROUTER_API_KEY is not set.", false);
+    }
+
+    // If a model is specifically meant for another provider, skip OpenRouter
+    if (
+      options.model &&
+      (options.model.startsWith("gemini") ||
+        options.model.startsWith("models/") ||
+        options.model.startsWith("allam-") ||
+        options.model.startsWith("openai/gpt-oss-"))
+    ) {
+      throw new AiProviderError(this.name, `Model ${options.model} is not supported by OpenRouter`, false);
     }
 
     const model = options.model ?? FREE_MODELS[0];
@@ -74,6 +84,13 @@ export class OpenRouterProvider implements AiProvider {
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
+
+      // If a model override returned 404 (e.g. no longer free), recover with the default free model
+      if (response.status === 404 && model !== FREE_MODELS[0]) {
+        console.warn(`[OpenRouter] Model "${model}" returned 404, recovering with ${FREE_MODELS[0]}`);
+        return await this.complete({ ...options, model: FREE_MODELS[0] });
+      }
+
       throw new AiProviderError(
         this.name,
         `HTTP ${response.status}: ${text.slice(0, 200)}`,

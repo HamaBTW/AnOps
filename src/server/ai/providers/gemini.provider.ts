@@ -6,18 +6,18 @@ import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/serv
 import { AiProviderError } from "@/server/ai/types";
 
 /**
- * Free Gemini models (Gemma family + Gemini flash variants).
+ * Free Gemini models (Gemini flash variants + Gemma family).
  * Full list: https://ai.google.dev/gemini-api/docs/models/gemini
  * First entry is the default.
  */
 const FREE_MODELS = [
-  "gemma-3-27b-it",
-  "gemma-3-12b-it",
-  "gemma-3-4b-it",
-  "gemma-3-1b-it",
+  "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+  "gemma-4-26b-a4b-it",
+  "gemma-4-31b-it",
 ];
 
 const MAX_RETRIES_PER_CALL = 3;
@@ -37,6 +37,18 @@ export class GeminiProvider implements AiProvider {
   }
 
   async complete(options: AiCompletionOptions): Promise<AiCompletionResult> {
+    // If a model is specifically meant for another provider, skip Gemini
+    if (
+      options.model &&
+      (options.model.includes(":free") ||
+        options.model.startsWith("openai/") ||
+        options.model.startsWith("qwen/") ||
+        options.model.startsWith("allam-") ||
+        options.model.startsWith("nvidia/"))
+    ) {
+      throw new AiProviderError(this.name, `Model ${options.model} is not supported by Gemini`, false);
+    }
+
     const model = options.model ?? FREE_MODELS[0];
     let lastError: Error | null = null;
 
@@ -109,6 +121,12 @@ export class GeminiProvider implements AiProvider {
           lastError = err as Error;
           console.warn(`[Gemini] Rate-limited on key ...${apiKey!.slice(-6)}, rotating (attempt ${attempt + 1}/${MAX_RETRIES_PER_CALL})`);
           continue;
+        }
+
+        // If a model override returned 404 (not found), recover with the default free model
+        if ((message.includes("404") || message.includes("not found")) && model !== FREE_MODELS[0]) {
+          console.warn(`[Gemini] Model "${model}" not found (404), recovering with ${FREE_MODELS[0]}`);
+          return await this.complete({ ...options, model: FREE_MODELS[0] });
         }
 
         throw new AiProviderError(

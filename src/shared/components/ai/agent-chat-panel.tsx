@@ -35,7 +35,12 @@ type ProviderModels = {
   error?: string;
 };
 
-type ModelSelection = { model: string; providerLabel: string; modelLabel: string };
+type ModelSelection = {
+  providerId: string;
+  providerLabel: string;
+  model: string;
+  modelLabel: string;
+};
 
 const AUTO_PROVIDER: ProviderModels = {
   id: "auto",
@@ -46,7 +51,7 @@ const AUTO_PROVIDER: ProviderModels = {
 };
 
 function getDefaultSelection(): ModelSelection {
-  return { model: "", providerLabel: "Auto", modelLabel: "Auto-select" };
+  return { providerId: "auto", providerLabel: "Auto", model: "", modelLabel: "Auto-select" };
 }
 
 /** Fetch live models from /api/ai/models — cached by browser for the session. */
@@ -115,7 +120,8 @@ type AgentChatPanelProps = {
   onSendMessage: (
     userText: string,
     history: ChatMessage[],
-    selectedModel: string
+    selectedModel?: string,
+    selectedProvider?: string
   ) => Promise<{ text: string; metadata?: Record<string, unknown>; provider?: string; model?: string }>;
   /** Extra classes on the outer wrapper */
   className?: string;
@@ -234,7 +240,12 @@ export function AgentChatPanel({
         try {
           // Pass history EXCLUDING the welcome message for cleaner context
           const historyForAgent = messages.filter((m) => m.id !== "welcome");
-          const result = await onSendMessage(userText, [...historyForAgent, userMsg], selection.model);
+          const result = await onSendMessage(
+            userText,
+            [...historyForAgent, userMsg],
+            selection.model || undefined,
+            selection.providerId === "auto" ? undefined : selection.providerId
+          );
 
           const assistantMsg: ChatMessage = {
             id: `agent-${Date.now()}`,
@@ -249,7 +260,8 @@ export function AgentChatPanel({
           if (result.provider && result.model) {
             setProviderBadge({ provider: result.provider, model: result.model });
           }
-        } catch {
+        } catch (err) {
+          console.error("[AgentChatPanel send error]", err);
           setMessages((prev) => [
             ...prev,
             {
@@ -263,7 +275,7 @@ export function AgentChatPanel({
         }
       });
     },
-    [input, isPending, messages, onSendMessage]
+    [input, isPending, messages, onSendMessage, selection]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -285,8 +297,13 @@ export function AgentChatPanel({
     setProviderBadge(null);
   };
 
-  const handleSelectModel = (model: string, providerLabel: string, modelLabel: string) => {
-    setSelection({ model, providerLabel, modelLabel });
+  const handleSelectModel = (
+    providerId: string,
+    providerLabel: string,
+    model: string,
+    modelLabel: string
+  ) => {
+    setSelection({ providerId, providerLabel, model, modelLabel });
     setSelectorOpen(false);
   };
 
@@ -554,7 +571,7 @@ export function AgentChatPanel({
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => handleSelectModel(m.id, provider.label, m.label)}
+                          onClick={() => handleSelectModel(provider.id, provider.label, m.id, m.label)}
                           className={cn(
                             "w-full text-left px-4 py-1.5 text-xs transition-colors hover:bg-[var(--color-bg-subtle)] flex items-center justify-between gap-2",
                             selection.model === m.id

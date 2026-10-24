@@ -6,15 +6,14 @@ import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/serv
 import { AiProviderError } from "@/server/ai/types";
 
 /**
- * Free Groq models (as of 2025).
+ * Free Groq models.
  * First entry is the default. Full list: https://console.groq.com/docs/models
  */
 const FREE_MODELS = [
-  "llama-3.3-70b-versatile",
-  "llama3-8b-8192",
-  "llama3-70b-8192",
-  "mixtral-8x7b-32768",
-  "gemma2-9b-it",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.8-27b",
+  "allam-2-7b",
 ];
 
 const MAX_RETRIES_PER_CALL = 3;
@@ -34,6 +33,17 @@ export class GroqProvider implements AiProvider {
   }
 
   async complete(options: AiCompletionOptions): Promise<AiCompletionResult> {
+    // If a non-Groq model was explicitly requested, bail early so the router reaches the right provider
+    if (
+      options.model &&
+      (options.model.includes(":free") ||
+        options.model.startsWith("gemini") ||
+        options.model.startsWith("models/") ||
+        options.model.startsWith("nvidia/"))
+    ) {
+      throw new AiProviderError(this.name, `Model ${options.model} is not supported by Groq`, false);
+    }
+
     const model = options.model ?? FREE_MODELS[0];
     let lastError: Error | null = null;
 
@@ -76,6 +86,32 @@ export class GroqProvider implements AiProvider {
           lastError = err as Error;
           console.warn(`[Groq] 429 on key ...${apiKey.slice(-6)}, rotating (attempt ${attempt + 1}/${MAX_RETRIES_PER_CALL})`);
           continue;
+        }
+
+        // If the model was not found (404 / deprecated) and was an override, try the default free model
+        if (status === 404 && model !== FREE_MODELS[0]) {
+          console.warn(`[Groq] Model "${model}" not found (404), recovering with ${FREE_MODELS[0]}`);
+          try {
+            const fallbackRes = await client.chat.completions.create({
+              model: FREE_MODELS[0],
+              messages: options.messages,
+              max_tokens: options.maxTokens ?? 1024,
+              temperature: options.temperature ?? 0.7,
+            });
+            const choice = fallbackRes.choices[0];
+            return {
+              text: choice.message?.content ?? "",
+              provider: this.name,
+              model: FREE_MODELS[0],
+              usage: {
+                promptTokens: fallbackRes.usage?.prompt_tokens,
+                completionTokens: fallbackRes.usage?.completion_tokens,
+                totalTokens: fallbackRes.usage?.total_tokens,
+              },
+            };
+          } catch {
+            // fall through to error
+          }
         }
 
         // Non-retryable error

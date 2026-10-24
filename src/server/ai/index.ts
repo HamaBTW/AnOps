@@ -52,7 +52,7 @@ class AiMaster {
    * @throws Error when ALL configured providers fail.
    */
   async complete(options: AiCompletionOptions): Promise<AiCompletionResult> {
-    const candidates = this.availableProviders;
+    let candidates = this.availableProviders;
 
     if (candidates.length === 0) {
       throw new Error(
@@ -61,12 +61,42 @@ class AiMaster {
       );
     }
 
+    // 1. If a specific provider was explicitly selected (e.g. "groq", "gemini", "openrouter"):
+    if (options.provider && options.provider.toLowerCase() !== "auto") {
+      const target = candidates.find(
+        (p) => p.name.toLowerCase() === options.provider?.toLowerCase()
+      );
+      if (!target) {
+        throw new Error(
+          `[AiMaster] Provider "${options.provider}" is not configured. ` +
+          `Available providers: ${candidates.map((c) => c.name).join(", ")}`
+        );
+      }
+
+      console.info(`[AiMaster] Using explicitly selected provider: ${target.name} (model: ${options.model ?? "default"})`);
+      return await target.complete(options);
+    }
+
+    // 2. If a specific model was selected without an explicit provider, prioritize the matching provider
+    if (options.model) {
+      const matched = candidates.find((p) =>
+        p.freeModels.includes(options.model!) ||
+        (p.name === "OpenRouter" && options.model!.includes(":free")) ||
+        (p.name === "Gemini" && options.model!.startsWith("gemini")) ||
+        (p.name === "Groq" && (options.model!.startsWith("openai/") || options.model!.startsWith("qwen/") || options.model!.startsWith("allam-")))
+      );
+      if (matched) {
+        candidates = [matched, ...candidates.filter((p) => p !== matched)];
+      }
+    }
+
     const errors: string[] = [];
+    let currentOptions = { ...options };
 
     for (const provider of candidates) {
       try {
-        console.info(`[AiMaster] Trying provider: ${provider.name}`);
-        const result = await provider.complete(options);
+        console.info(`[AiMaster] Trying provider: ${provider.name} (model: ${currentOptions.model ?? "default"})`);
+        const result = await provider.complete(currentOptions);
         console.info(
           `[AiMaster] Success via ${provider.name} / ${result.model}` +
           (result.usage?.totalTokens ? ` (${result.usage.totalTokens} tokens)` : "")
@@ -80,8 +110,8 @@ class AiMaster {
         console.warn(`[AiMaster] Provider failed — ${msg}`);
         errors.push(msg);
 
-        // Non-retryable (auth / bad request) — still fall through to next provider
-        // since the next provider may handle it fine.
+        // For the next fallback provider, reset specific model & provider so it uses its own free defaults
+        currentOptions = { ...currentOptions, model: undefined, provider: undefined };
       }
     }
 

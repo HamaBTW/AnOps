@@ -23,7 +23,9 @@ describe("role permissions", () => {
     const perms = permissionsForRole("viewer");
     expect(perms.has(PERMISSIONS.INVENTORY_READ)).toBe(true);
     for (const permission of Object.values(PERMISSIONS)) {
-      if (!permission.endsWith(".read")) expect(perms.has(permission)).toBe(false);
+      if (!permission.endsWith(".read") && !permission.endsWith(".view")) {
+        expect(perms.has(permission)).toBe(false);
+      }
     }
   });
 

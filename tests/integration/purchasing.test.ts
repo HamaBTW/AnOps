@@ -77,7 +77,7 @@ function receiptFor(order: PurchaseOrderDetailDto, quantity: string) {
 }
 
 async function onHand(): Promise<number> {
-  return getOnHandMicro(h.db, { organizationId: h.ctx().organizationId, companyId: h.ctx().companyId }, ObjectId.createFromHexString(product.id), ObjectId.createFromHexString(warehouse.id));
+  return getOnHandMicro(h.db, { companyId: h.ctx().companyId }, ObjectId.createFromHexString(product.id), ObjectId.createFromHexString(warehouse.id));
 }
 
 describe("suppliers", () => {

@@ -76,7 +76,6 @@ export async function applyLedgerEntries(
 
     const movement: StockMovementDoc = {
       _id: new ObjectId(),
-      organizationId: scope.organizationId,
       companyId: scope.companyId,
       productId: entry.productId,
       warehouseId: entry.warehouseId,
@@ -104,7 +103,7 @@ async function loadProduct(
   const cached = cache.get(key);
   if (cached) return cached;
   const product = await db.collection<ProductDoc>(COLLECTIONS.inventoryProducts).findOne(
-    { _id: productId, organizationId: scope.organizationId, companyId: scope.companyId },
+    { _id: productId, companyId: scope.companyId },
     { session: tx.session }
   );
   if (!product) throw new AppError("NOT_FOUND", "Product not found");
@@ -125,7 +124,7 @@ async function loadWarehouse(
   const cached = cache.get(key);
   if (cached) return cached;
   const warehouse = await db.collection<WarehouseDoc>(COLLECTIONS.inventoryWarehouses).findOne(
-    { _id: warehouseId, organizationId: scope.organizationId, companyId: scope.companyId },
+    { _id: warehouseId, companyId: scope.companyId },
     { session: tx.session }
   );
   if (!warehouse) throw new AppError("NOT_FOUND", "Warehouse not found");
@@ -143,7 +142,6 @@ async function decrementBalance(
 ): Promise<void> {
   const required = -entry.deltaMicro;
   const balanceFilter = {
-    organizationId: scope.organizationId,
     companyId: scope.companyId,
     productId: entry.productId,
     warehouseId: entry.warehouseId,
@@ -170,7 +168,6 @@ async function decrementBalance(
 
 async function incrementBalance(db: Db, scope: TenantScope, entry: LedgerEntry, tx: Tx): Promise<void> {
   const balanceFilter = {
-    organizationId: scope.organizationId,
     companyId: scope.companyId,
     productId: entry.productId,
     warehouseId: entry.warehouseId,
@@ -198,7 +195,6 @@ export async function getOnHandMicro(
 ): Promise<number> {
   const balance = await db.collection<StockBalanceDoc>(COLLECTIONS.inventoryStockBalances).findOne(
     {
-      organizationId: scope.organizationId,
       companyId: scope.companyId,
       productId,
       warehouseId,

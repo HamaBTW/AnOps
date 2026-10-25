@@ -6,12 +6,13 @@ import {
   getJobTitles,
   ensureJobTitle,
   deleteJobTitle,
-  seedHrDefaults,
+  seedHrDefaultsForCompany,
   updateJobTitle,
   getEmployeesByJobTitle,
 } from "@/server/services/hr.service";
 import type { JobTitle, Employee } from "@/features/hr/types";
 import type { ActionResult } from "./employee.action";
+import { requireAuthUser } from "@/server/auth/rbac";
 
 import { requireAdminUser } from "@/server/auth/rbac";
 
@@ -63,7 +64,8 @@ export async function deleteJobTitleAction(id: string): Promise<ActionResult<{ i
 
 export async function fetchJobTitlesAction(): Promise<ActionResult<JobTitle[]>> {
   try {
-    const titles = await getJobTitles();
+    const user = await requireAuthUser();
+    const titles = await getJobTitles(user.companyId);
     return { success: true, data: titles };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load job titles.";
@@ -73,8 +75,8 @@ export async function fetchJobTitlesAction(): Promise<ActionResult<JobTitle[]>> 
 
 export async function reseedDefaultsAction(): Promise<ActionResult<boolean>> {
   try {
-    await requireAdminUser();
-    await seedHrDefaults();
+    const admin = await requireAdminUser();
+    await seedHrDefaultsForCompany(admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: true };
   } catch (err: unknown) {

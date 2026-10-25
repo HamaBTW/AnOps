@@ -89,7 +89,7 @@ export class HRAssistantAgent extends BaseAgent {
     // ── 2. Employee data ───────────────────────────────────────────────
     if (context?.employeeId) {
       try {
-        const emp = await getEmployeeById(context.employeeId, context.companyId);
+        const emp = await getEmployeeById(context.employeeId, context.companyId ?? "");
         if (emp) {
           parts.push(`\n## Employee Profile (current user context)\n`);
           parts.push(`- **Name**: ${emp.fullName}`);
@@ -104,8 +104,8 @@ export class HRAssistantAgent extends BaseAgent {
         // ── 3. Live leave balance ──────────────────────────────────────
         const currentYear = new Date().getFullYear();
         const [balance, allRequests] = await Promise.all([
-          getLeaveBalance(context.employeeId, currentYear, context.companyId),
-          getLeaveRequests({ employeeId: context.employeeId }, context.companyId),
+          getLeaveBalance(context.employeeId, currentYear, context.companyId ?? ""),
+          getLeaveRequests({ employeeId: context.employeeId }, context.companyId ?? ""),
         ]);
 
         const pending = allRequests.filter((r) => r.status === "pending");

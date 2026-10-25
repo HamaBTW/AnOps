@@ -17,7 +17,7 @@ import type { BomDetailDto, BomSummaryDto, ManufacturingPage } from "@/features/
 export const BOM_PAGE_SIZE = 25;
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 function toSummary(doc: BomDoc): BomSummaryDto {
@@ -219,7 +219,6 @@ export async function activateBom(ctx: WorkspaceContext, bomId: string, expected
     await recordAudit(
       ctx.db,
       {
-        organizationId: ctx.organizationId,
         companyId: ctx.companyId,
         actorUserId: ctx.userId,
         action: "manufacturing.bom.activated",

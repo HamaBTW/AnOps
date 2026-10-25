@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getCurrentAuthUser } from "@/server/auth/rbac";
+import { getPageWorkspace } from "@/server/tenancy/workspace";
 import {
   getEmployees,
   getDepartments,
@@ -23,8 +24,11 @@ export const metadata: Metadata = {
 export default async function HRPage() {
   const currentPeriod = "2026-10";
 
+  // Resolves the active company or redirects to login / onboarding. Every HR query below uses this company.
+  const workspace = await getPageWorkspace();
+  const activeCompanyId = workspace.companyId.toHexString();
+
   const authUser = await getCurrentAuthUser();
-  const activeCompanyId = authUser?.companyId;
   const userRole = authUser?.isAdmin ? "hr_admin" : (authUser?.role ?? "employee");
 
   // Always load departments and job titles for the form modals (scoped to active company)

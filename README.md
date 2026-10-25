@@ -6,7 +6,7 @@ AnOps is a modern, modular, multi-tenant Business Operations & ERP platform desi
 
 ## Key Features
 
-- **🏢 Multi-Tenant Architecture:** Every user can create or join multiple organizations (companies). All business data (staff, departments, attendance, payroll, invoices) is strictly scoped to the active tenant.
+- **🏢 Multi-Company Architecture:** Every user creates a company on first sign-in (onboarding) and can belong to several companies. Each company has its own staff, departments, job titles, attendance and business data. Nothing is shared between companies, and the active company is switched from the top bar. See docs/ARCHITECTURE.md and docs/ROLES_AND_PERMISSIONS.md.
 - **👥 People Operations (HR & Payroll):**
   - **Employee Directory:** Complete staff CRUD with job titles, departments, and confidential salary safeguards.
   - **Time-Off & Leave Management:** Leave allowances, balance deductions, and multi-tier approval workflows.

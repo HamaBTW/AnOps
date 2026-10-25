@@ -37,7 +37,7 @@ afterAll(async () => {
   await h.cleanup();
 });
 
-const scope = () => ({ organizationId: h.ctx().organizationId, companyId: h.ctx().companyId });
+const scope = () => ({ companyId: h.ctx().companyId });
 const oid = (hex: string) => ObjectId.createFromHexString(hex);
 
 async function onHand(productId: string): Promise<number> {

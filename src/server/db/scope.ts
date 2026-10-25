@@ -2,8 +2,8 @@ import "server-only";
 import type { TenantScope } from "@/server/db/documents";
 
 /** Filter fragment that every tenant-owned query must include. */
-export function tenantFilter(scope: TenantScope): { organizationId: TenantScope["organizationId"]; companyId: TenantScope["companyId"] } {
-  return { organizationId: scope.organizationId, companyId: scope.companyId };
+export function tenantFilter(scope: TenantScope): { companyId: TenantScope["companyId"] } {
+  return { companyId: scope.companyId };
 }
 
 /** Escapes user text for use inside an anchored MongoDB regex, so input cannot inject operators. */

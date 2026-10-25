@@ -187,16 +187,29 @@ Tenant Boundary: Company
 ### 1. Data Isolation Rules
 - **Foreign Key Enforcement**: Every feature document MUST store `companyId: ObjectId`.
 - **Query Scoping**: Every database read, insert, update, or delete MUST include `{ companyId: activeCompanyId }` in the query filter. No cross-tenant data leaks.
-- **Role Isolation**: A user's role and permissions are evaluated within the context of their active company membership (`owner` | `admin` | `manager` | `employee`).
+- **Required Scope**: Services take `companyId` as a required string parameter. A missing or malformed id throws. There is no unscoped code path, and no filter may be built as `cId ? {companyId} : {}`.
+- **Role Isolation**: A user's role and permissions are evaluated within the context of their active company membership (`owner` | `admin` | `manager` | `employee`). The mapping to permissions is in docs/ROLES_AND_PERMISSIONS.md.
+- **No Personal Workspace**: Accounts are not given a hidden tenant. A user acquires data access only by creating or joining a company.
 
 ### 2. Active Tenant Context & Cookie
 - The user's currently selected company ID is stored in an HTTP-only cookie: `anops_active_company_id`.
-- Helper `getActiveCompanyId()` / `requireActiveCompany()` in `src/server/tenant/context.ts` resolves the active tenant for server components and actions.
-- If the cookie is absent or invalid, the system automatically falls back to the user's primary company membership.
+- `getActiveTenant()` / `requireActiveTenant()` in `src/server/tenant/context.ts` resolve the active company for server components and actions. The cookie only selects among companies the user already belongs to; authority always comes from the membership, which is read from the database on each request.
+- If the cookie is absent or names a company the user does not belong to, the first company the user belongs to is used.
+- Inventory, purchasing and manufacturing services receive a `WorkspaceContext` built from the same tenant by `src/server/tenancy/workspace.ts` (`resolveWorkspace()` / `getPageWorkspace()`). HR pages and actions take the company from the same source.
 
 ### 3. Onboarding & Company Switcher
-- **Zero-Company Guard**: If an authenticated user has no company memberships, they are automatically routed to `/onboarding` to register their initial company.
+- **Zero-Company Guard**: If an authenticated user has no company memberships, the dashboard layout redirects them to `/onboarding`. The page is `src/app/onboarding/page.tsx`. It is outside the dashboard layout, so the redirect cannot loop, and it sends users who already have a company to `/hr`. Company creation seeds that company's departments and predefined job titles (`seedHrDefaultsForCompany`). It does not create staff.
 - **Tenant Switcher**: A company selector in the top navigation allows multi-organization users to switch active companies seamlessly or provision additional companies.
+
+### 4. Migration From the Earlier Organization Model
+Data written before this change used an `organizations` / `memberships` model. Run the migration once per database:
+
+```bash
+npm run db:migrate-tenancy            # dry run: prints the planned changes, writes nothing
+npm run db:migrate-tenancy -- --apply # performs them
+```
+
+The script (`scripts/migrate-multi-tenant.mjs`) keeps legacy company ids, so references stay valid. It makes the legacy owner the company owner, converts memberships to `company_members`, assigns unscoped HR documents to the default company "AnOps Technologies", removes `organizationId`, and renames the old collections with a `_legacy_` prefix. Nothing is deleted. It is idempotent. The older `scripts/migrate-to-multitenant.mjs` uses the same default company and is safe to run before or after it.
 
 ## Adding New Features
 
@@ -210,7 +223,7 @@ Tenant Boundary: Company
 
 - [ ] Routes in `app/` are thin
 - [ ] Server code in `server/`, UI in `shared/` or `features/`
-- [ ] Multi-tenancy: every data record includes and filters by `companyId`
+- [ ] Multi-tenancy: every data record includes and filters by `companyId`; the service takes a required `companyId`
 - [ ] No DB/auth imports in client components
 - [ ] Imports follow the layer rules
 - [ ] Types are explicit, no `any`

@@ -35,7 +35,7 @@ const RECENT_MOVEMENT_LIMIT = 8;
 export async function getInventoryOverview(ctx: WorkspaceContext): Promise<InventoryOverviewDto> {
   assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
   const db = ctx.db;
-  const base = tenantFilter({ organizationId: ctx.organizationId, companyId: ctx.companyId });
+  const base = tenantFilter({ companyId: ctx.companyId });
 
   const [
     activeProducts,

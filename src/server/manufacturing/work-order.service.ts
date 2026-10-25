@@ -31,7 +31,7 @@ import type { ManufacturingPage, WorkOrderDetailDto, WorkOrderSummaryDto } from 
 export const WORK_ORDER_PAGE_SIZE = 25;
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 function toSummary(doc: WorkOrderDoc): WorkOrderSummaryDto {
@@ -341,7 +341,6 @@ export async function completeWorkOrder(ctx: WorkspaceContext, orderId: string, 
     await recordAudit(
       ctx.db,
       {
-        organizationId: ctx.organizationId,
         companyId: ctx.companyId,
         actorUserId: ctx.userId,
         action: "manufacturing.work_order.completed",

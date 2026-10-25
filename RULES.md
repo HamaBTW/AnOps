@@ -260,9 +260,8 @@ The master class diagram represents the foundation on which every module depends
 | Entity                             | Responsibility                                 |
 | ---------------------------------- | ---------------------------------------------- |
 | `User`                             | Global identity and authentication profile     |
-| `Organization`                     | Tenant boundary for a customer's workspace     |
-| `Company`                          | Legal/business entity inside an organization   |
-| `Membership`                       | A user's relationship with an organization     |
+| `Company`                          | The tenant boundary: one business and all its data |
+| `CompanyMember`                    | A user's role inside one company (`owner`, `admin`, `manager`, `employee`) |
 | `Role`, `Permission`               | Authorization vocabulary and policies          |
 | `MembershipRole`, `RolePermission` | Explicit many-to-many assignments              |
 | `Application`                      | Registry of available modules                  |
@@ -278,7 +277,7 @@ These entities need shared definitions and owners. They must not be redefined di
 
 Identity is not membership. A registered user does not automatically have access to every organization. The user must have an active membership, and that membership must grant the relevant permissions.
 
-Organization is not company. An organization is the tenant/workspace boundary. It can contain one or more companies. A user may access one or several companies within an organization according to their assigned permissions and scope.
+There is one tenant boundary: the company. A user can belong to several companies, and each company's data (staff, job titles, attendance, stock, orders) is isolated from the others. There is no organization level above or below the company. A new user creates a company during onboarding before any module is available.
 
 Subscription is not authorization. A paid plan can enable an application without granting every member full access to its data. The system must check both commercial entitlement and the user's actual permissions.
 
@@ -311,10 +310,10 @@ The current dependencies support using the official MongoDB Node.js driver. Unle
 
 ### Collection design
 
-- Use a consistent naming convention, such as `users`, `organizations`, `memberships`, `products`, `stockMovements`, and `invoices`.
+- Use a consistent naming convention, such as `users`, `companies`, `company_members`, `employees`, `inventory_products`, and `attendance`.
 - Use a consistent identifier strategy. MongoDB `_id` values should be mapped to API identifiers deliberately; do not mix `ObjectId`, arbitrary strings, and user-controlled identifiers without a defined contract.
-- Include `organizationId` on tenant-owned documents.
-- Include `companyId` where a record belongs to a particular company.
+- Every tenant-owned document carries `companyId`. It is the only tenant key; do not add other tenant fields.
+- Services take a required `companyId`. Never accept an optional one, and never build a filter that drops the company when the id is missing. See docs/ARCHITECTURE.md (Multi-Tenancy).
 - Do not copy entire parent documents into child records when a stable reference and a small historical snapshot are sufficient.
 - Add `createdAt` and `updatedAt` where applicable, and actor/approval metadata for workflows that require it.
 - Use explicit DTOs to separate persisted documents from public responses.

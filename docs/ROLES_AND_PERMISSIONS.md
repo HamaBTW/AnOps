@@ -1,4 +1,88 @@
-# Roles & Permissions Specification
+# Roles and Permissions
+
+AnOps has one authorization model per company. A user's role is defined by their membership in the
+company they are working in, never globally. The same user can be an owner in one company and an
+employee in another.
+
+## 1. Company roles (`company_members.role`)
+
+| Role | Who | Meaning |
+| --- | --- | --- |
+| `owner` | Creator of the company | Full control, including company settings and members |
+| `admin` | Appointed by owner | Full control of company data, approvals and count corrections |
+| `manager` | Appointed by owner or admin | Runs day-to-day operations: staff, job titles, attendance, stock, receipts, production |
+| `employee` | Added as a member | Read-only access to company data; no management actions |
+
+Membership status is `active` or `invited`. Only `active` members have access. Membership is the
+only source of authority: the active-company cookie selects among companies the user already belongs to.
+
+## 2. Workspace roles and the permission catalogue
+
+Company roles map to workspace roles (`src/server/security/permissions.ts`, `workspaceRoleFor`):
+
+| Company role | Workspace role |
+| --- | --- |
+| owner | owner |
+| admin | admin |
+| manager | operator |
+| employee | viewer |
+
+Every service asserts the permission it needs. A hidden button is never the only control.
+
+**Status:** the inventory, purchasing and manufacturing services assert these permissions. The HR
+server actions still authorize through the HR role model in section 3 (`requireAdminUser`,
+`requireAuthUser`) and do not yet assert the `hr.*` permissions. Until they are migrated, the HR
+rules in Part B below are the enforced behaviour, and the `hr.*` rows are the target.
+
+| Permission | owner | admin | operator | viewer |
+| --- | :-: | :-: | :-: | :-: |
+| `hr.read` | ✓ | ✓ | ✓ | ✓ |
+| `hr.manage` (staff, departments, job titles) | ✓ | ✓ | ✓ | |
+| `hr.attendance.record` (check-in/out, corrections) | ✓ | ✓ | ✓ | |
+| `inventory.read` | ✓ | ✓ | ✓ | ✓ |
+| `inventory.product.manage` | ✓ | ✓ | ✓ | |
+| `inventory.warehouse.manage` | ✓ | ✓ | ✓ | |
+| `inventory.stock.move` (receive, issue, transfer) | ✓ | ✓ | ✓ | |
+| `inventory.stock.adjust` (count corrections) | ✓ | ✓ | | |
+| `purchasing.read` | ✓ | ✓ | ✓ | ✓ |
+| `purchasing.supplier.manage` | ✓ | ✓ | ✓ | |
+| `purchasing.order.manage` (create and edit drafts) | ✓ | ✓ | ✓ | |
+| `purchasing.order.approve` (approve, cancel approved) | ✓ | ✓ | | |
+| `purchasing.receipt.post` | ✓ | ✓ | ✓ | |
+| `manufacturing.read` | ✓ | ✓ | ✓ | ✓ |
+| `manufacturing.bom.manage` | ✓ | ✓ | ✓ | |
+| `manufacturing.work_order.manage` | ✓ | ✓ | ✓ | |
+| `manufacturing.work_order.execute` (start, complete) | ✓ | ✓ | ✓ | |
+
+## 3. HR role (employee record)
+
+HR screens and HR server actions also use an HR role, derived in `src/server/auth/rbac.ts` on every request:
+
+- company owner or admin → `hr_admin`
+- company manager, or an employee record with role `manager` → `manager`
+- otherwise → the role stored on the employee record (`employee`)
+
+HR `hr_admin` may manage staff and payroll. A non-admin employee sees only their own leave, attendance
+and payslips. This is enforced by the server: the page filters, and the service receives the employee filter.
+
+## 4. Company scope
+
+- Every permission check happens inside the active company. Holding a role in company A grants nothing in company B.
+- Requests cannot name a different company's records: services look up every document with the active
+  `companyId` filter, so another company's ids return "not found".
+- Attendance records are created only for employees of the company in which the check-in is made.
+
+## 5. Adding a permission
+
+1. Add the constant to `PERMISSIONS` in `src/server/security/permissions.ts`.
+2. Grant it in `ROLE_PERMISSIONS` for each workspace role that needs it. Grant the minimum.
+3. Assert it in the service function, not only in the UI.
+4. Add a test that the permission is denied to the roles that must not have it.
+5. Update the table above.
+
+---
+
+# Part B: HR Capability Matrix (detailed, from the HR module)
 
 This document provides a comprehensive reference of all user roles, access control policies, security boundaries, and capabilities implemented across the AnOps platform.
 

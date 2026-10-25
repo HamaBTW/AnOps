@@ -12,7 +12,7 @@ import {
 import type { Department, Employee } from "@/features/hr/types";
 import type { ActionResult } from "./employee.action";
 
-import { requireAdminUser } from "@/server/auth/rbac";
+import { requireAdminUser, requireAuthUser } from "@/server/auth/rbac";
 
 export async function createDepartmentAction(name: string, description?: string): Promise<ActionResult<Department>> {
   try {
@@ -62,7 +62,8 @@ export async function deleteDepartmentAction(id: string): Promise<ActionResult<{
 
 export async function fetchDepartmentsAction(): Promise<ActionResult<Department[]>> {
   try {
-    const departments = await getDepartments();
+    const user = await requireAuthUser();
+    const departments = await getDepartments(user.companyId);
     return { success: true, data: departments };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load departments.";
@@ -72,7 +73,8 @@ export async function fetchDepartmentsAction(): Promise<ActionResult<Department[
 
 export async function fetchDepartmentStaffAction(departmentId: string): Promise<ActionResult<Employee[]>> {
   try {
-    const employees = await getEmployeesByDepartment(departmentId);
+    const user = await requireAuthUser();
+    const employees = await getEmployeesByDepartment(departmentId, user.companyId);
     return { success: true, data: employees };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load department staff.";

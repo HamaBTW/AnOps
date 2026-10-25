@@ -200,7 +200,7 @@ export function CompanyManagementClient({
       <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-card)] bg-[var(--color-primary)]/10 text-[var(--color-primary-text)]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-card)] bg-[var(--color-action-primary)]/25 text-[var(--color-text-primary)]">
               <Building2 className="h-7 w-7" />
             </div>
             <div>
@@ -238,7 +238,7 @@ export function CompanyManagementClient({
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 border-t border-[var(--color-border-subtle)] pt-6">
           <div className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)]/50 p-3.5">
             <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
-              <Users className="h-4 w-4 text-[var(--color-primary-text)]" />
+              <Users className="h-4 w-4 text-[var(--color-text-primary)]" />
               Team Members
             </div>
             <p className="mt-2 text-xl font-bold text-[var(--color-text-primary)]">{stats.membersCount}</p>
@@ -288,7 +288,7 @@ export function CompanyManagementClient({
                   <button
                     type="button"
                     onClick={copyTempPassword}
-                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] bg-amber-600 px-3 py-1 text-xs font-semibold text-[var(--color-action-on-primary)] hover:bg-amber-700 transition-colors"
                   >
                     {copiedPass ? <CheckCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     {copiedPass ? "Copied" : "Copy Password"}
@@ -299,7 +299,7 @@ export function CompanyManagementClient({
             <button
               type="button"
               onClick={() => setTempPasswordAlert(null)}
-              className="text-xs text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-white"
+              className="text-xs text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-[var(--color-action-on-primary)]"
             >
               Dismiss
             </button>
@@ -308,13 +308,15 @@ export function CompanyManagementClient({
       )}
 
       {/* Tabs Switcher */}
-      <div className="flex gap-2 border-b border-[var(--color-border-subtle)] pb-2">
+      <div className="-mx-1 flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] px-1 pb-2 sm:gap-2" role="tablist">
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "general"}
           onClick={() => setActiveTab("general")}
-          className={`flex items-center gap-2 rounded-[var(--radius-control)] px-4 py-2 text-sm font-semibold transition-colors ${
+          className={`flex min-h-[44px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] px-3 py-2 text-sm font-semibold transition-colors sm:px-4 ${
             activeTab === "general"
-              ? "bg-[var(--color-primary)] text-white shadow-sm"
+              ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-sm"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
           }`}
         >
@@ -324,10 +326,12 @@ export function CompanyManagementClient({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "members"}
           onClick={() => setActiveTab("members")}
-          className={`flex items-center gap-2 rounded-[var(--radius-control)] px-4 py-2 text-sm font-semibold transition-colors ${
+          className={`flex min-h-[44px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] px-3 py-2 text-sm font-semibold transition-colors sm:px-4 ${
             activeTab === "members"
-              ? "bg-[var(--color-primary)] text-white shadow-sm"
+              ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-sm"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
           }`}
         >
@@ -337,10 +341,12 @@ export function CompanyManagementClient({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === "organizations"}
           onClick={() => setActiveTab("organizations")}
-          className={`flex items-center gap-2 rounded-[var(--radius-control)] px-4 py-2 text-sm font-semibold transition-colors ${
+          className={`flex min-h-[44px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] px-3 py-2 text-sm font-semibold transition-colors sm:px-4 ${
             activeTab === "organizations"
-              ? "bg-[var(--color-primary)] text-white shadow-sm"
+              ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-sm"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
           }`}
         >
@@ -369,7 +375,7 @@ export function CompanyManagementClient({
                   onChange={(e) => setName(e.target.value)}
                   disabled={!isOwnerOrAdmin || isPending}
                   required
-                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-60"
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)] disabled:opacity-60"
                 />
               </div>
 
@@ -382,7 +388,7 @@ export function CompanyManagementClient({
                     value={industry}
                     onChange={(e) => setIndustry(e.target.value)}
                     disabled={!isOwnerOrAdmin || isPending}
-                    className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-60"
+                    className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)] disabled:opacity-60"
                   >
                     {INDUSTRIES.map((ind) => (
                       <option key={ind} value={ind}>
@@ -400,7 +406,7 @@ export function CompanyManagementClient({
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
                     disabled={!isOwnerOrAdmin || isPending}
-                    className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-60"
+                    className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)] disabled:opacity-60"
                   >
                     {CURRENCIES.map((curr) => (
                       <option key={curr.code} value={curr.code}>
@@ -442,7 +448,7 @@ export function CompanyManagementClient({
                   <button
                     type="submit"
                     disabled={isPending}
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-primary)] px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-6 py-2.5 text-sm font-semibold text-[var(--color-action-on-primary)] shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
                   >
                     {isPending ? (
                       <>
@@ -475,7 +481,7 @@ export function CompanyManagementClient({
               <button
                 type="button"
                 onClick={() => setAddModalOpen(true)}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-action-on-primary)] shadow-sm hover:opacity-90 transition-opacity"
               >
                 <Plus className="h-4 w-4" />
                 Add Member
@@ -483,9 +489,66 @@ export function CompanyManagementClient({
             )}
           </div>
 
-          <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-sm">
+          {/* Mobile: one card per member. Table below is shown from md upward. */}
+          <ul className="space-y-3 md:hidden" aria-label="Team members">
+            {members.map((member) => {
+              const isSelf = member.userId === currentUserId;
+              const isOwner = member.role === "owner";
+              return (
+                <li key={member.id} className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-[var(--color-text-primary)]">
+                        {member.userName || "Team Member"} {isSelf && <span className="text-xs font-normal text-[var(--color-text-secondary)]">(You)</span>}
+                      </div>
+                      <div className="truncate text-xs text-[var(--color-text-secondary)]">{member.userEmail}</div>
+                    </div>
+                    {isOwnerOrAdmin && !isOwner && !isSelf && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMember(member)}
+                        disabled={isPending}
+                        aria-label={`Remove ${member.userName || "member"} from company`}
+                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {isOwnerOrAdmin && !isOwner && !isSelf ? (
+                      <select
+                        aria-label={`Role for ${member.userName || "member"}`}
+                        value={member.role}
+                        onChange={(e) => handleRoleChange(member.id, e.target.value as "admin" | "manager" | "employee")}
+                        disabled={isPending}
+                        className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 text-sm font-semibold capitalize text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="manager">Manager</option>
+                        <option value="employee">Employee</option>
+                      </select>
+                    ) : (
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${roleBadgeColor[member.role]}`}>
+                        {member.role}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {member.status}
+                    </span>
+                    <span className="ml-auto text-xs text-[var(--color-text-secondary)]">
+                      Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString() : "—"}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="hidden overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-sm md:block">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)]/40 text-xs uppercase tracking-wider text-[var(--color-text-secondary)]">
                   <tr>
                     <th className="px-6 py-3.5 font-semibold">User</th>
@@ -504,7 +567,7 @@ export function CompanyManagementClient({
                       <tr key={member.id} className="hover:bg-[var(--color-bg-subtle)]/30 transition-colors">
                         <td className="px-6 py-4">
                           <div className="font-semibold text-[var(--color-text-primary)]">
-                            {member.userName || "Team Member"} {isSelf && <span className="text-xs text-[var(--color-primary-text)] font-normal">(You)</span>}
+                            {member.userName || "Team Member"} {isSelf && <span className="text-xs text-[var(--color-text-primary)] font-normal">(You)</span>}
                           </div>
                           <div className="text-xs text-[var(--color-text-secondary)]">{member.userEmail}</div>
                         </td>
@@ -515,7 +578,7 @@ export function CompanyManagementClient({
                               value={member.role}
                               onChange={(e) => handleRoleChange(member.id, e.target.value as "admin" | "manager" | "employee")}
                               disabled={isPending}
-                              className="rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                              className="rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-focus-ring)]"
                             >
                               <option value="admin">Admin</option>
                               <option value="manager">Manager</option>
@@ -581,7 +644,7 @@ export function CompanyManagementClient({
             <button
               type="button"
               onClick={() => setCreateModalOpen(true)}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-action-on-primary)] shadow-sm hover:opacity-90 transition-opacity"
             >
               <Plus className="h-4 w-4" />
               Create Organization
@@ -597,7 +660,7 @@ export function CompanyManagementClient({
                   key={comp.id}
                   className={`relative rounded-[var(--radius-card)] border p-5 shadow-sm transition-all ${
                     isActive
-                      ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5"
+                      ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)]/10"
                       : "border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] hover:border-[var(--color-border-control)]"
                   }`}
                 >
@@ -606,7 +669,7 @@ export function CompanyManagementClient({
                       <div
                         className={`flex h-11 w-11 items-center justify-center rounded-[var(--radius-control)] ${
                           isActive
-                            ? "bg-[var(--color-primary)] text-white"
+                            ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)]"
                             : "bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
                         }`}
                       >
@@ -619,7 +682,7 @@ export function CompanyManagementClient({
                     </div>
 
                     {isActive && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)] px-2.5 py-0.5 text-xs font-semibold text-white">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-action-primary)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-action-on-primary)]">
                         <Check className="h-3 w-3" />
                         Active
                       </span>
@@ -662,7 +725,7 @@ export function CompanyManagementClient({
       {/* Add Member Modal */}
       {addModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-xl">
+          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 shadow-xl sm:p-6">
             <h3 className="text-lg font-bold text-[var(--color-text-primary)]">Add Team Member</h3>
             <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
               Add an existing user or auto-provision an account to this organization.
@@ -679,7 +742,7 @@ export function CompanyManagementClient({
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="colleague@company.com"
                   required
-                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
                 />
               </div>
 
@@ -692,7 +755,7 @@ export function CompanyManagementClient({
                   value={inviteName}
                   onChange={(e) => setInviteName(e.target.value)}
                   placeholder="e.g. Sarah Jenkins"
-                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
                 />
               </div>
 
@@ -703,7 +766,7 @@ export function CompanyManagementClient({
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as "admin" | "manager" | "employee")}
-                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-canvas)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
                 >
                   <option value="employee">Employee (Standard Access)</option>
                   <option value="manager">Manager (Leave & Team Approvals)</option>
@@ -729,7 +792,7 @@ export function CompanyManagementClient({
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] bg-[var(--color-primary)] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 py-2 text-xs font-semibold text-[var(--color-action-on-primary)] shadow-sm hover:opacity-90 disabled:opacity-50"
                 >
                   {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Add Member

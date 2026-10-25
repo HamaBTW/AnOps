@@ -4,29 +4,23 @@ import { COLLECTIONS } from "@/server/db/documents";
 import { AppError } from "@/shared/lib/errors";
 
 /**
- * Index definitions for the inventory, purchasing, and manufacturing modules plus
- * the tenancy and audit collections they depend on. Every index is idempotent, and
+ * Index definitions for every company-scoped collection (HR, inventory, purchasing, manufacturing),
+ * plus the company membership and audit collections they depend on. Every index is idempotent, and
  * ensureIndexes runs once per database connection before the first workspace access.
  *
  * Tenant-scoped indexes lead with companyId because every query filters on it.
  */
 const INDEXES: Record<string, IndexDescription[]> = {
-  [COLLECTIONS.organizations]: [{ key: { slug: 1 }, name: "org_slug_unique", unique: true }],
+  // Tenant boundary. The slug index is partial so legacy documents without a slug do not collide.
   [COLLECTIONS.companies]: [
-    { key: { organizationId: 1, isActive: 1, createdAt: 1 }, name: "company_org_active" },
+    { key: { slug: 1 }, name: "company_slug_unique", unique: true, partialFilterExpression: { slug: { $exists: true } } },
   ],
-  [COLLECTIONS.memberships]: [
-    { key: { organizationId: 1, userId: 1 }, name: "membership_org_user_unique", unique: true },
-    {
-      key: { userId: 1 },
-      name: "membership_personal_unique",
-      unique: true,
-      partialFilterExpression: { isPersonal: true },
-    },
-    { key: { userId: 1, status: 1, createdAt: 1 }, name: "membership_user_status" },
+  [COLLECTIONS.companyMembers]: [
+    { key: { companyId: 1, userId: 1 }, name: "member_company_user_unique", unique: true },
+    { key: { userId: 1, status: 1 }, name: "member_user_status" },
   ],
   [COLLECTIONS.auditEvents]: [
-    { key: { organizationId: 1, occurredAt: -1 }, name: "audit_org_time" },
+    { key: { companyId: 1, occurredAt: -1 }, name: "audit_company_time" },
     { key: { companyId: 1, entityType: 1, entityId: 1, occurredAt: -1 }, name: "audit_entity" },
   ],
   [COLLECTIONS.inventoryCategories]: [

@@ -25,153 +25,28 @@ import type {
   LeaveReviewInput,
 } from "@/features/hr/schemas/hr.schema";
 import { COMPANY_POLICIES } from "@/features/hr/policies/company-policies";
+import DEFAULT_STRUCTURE from "@/features/hr/defaults/company-structure.json";
 import { calculateBusinessDays, formatDateYMD } from "@/features/hr/utils/date-utils";
 
-const DEFAULT_DEPARTMENTS = [
-  { name: "Engineering", description: "Software development, architecture and infrastructure" },
-  { name: "Product & Design", description: "Product management, UX/UI and user research" },
-  { name: "Human Resources", description: "People operations, talent acquisition and employee relations" },
-  { name: "Finance & Accounting", description: "Financial planning, accounting and payroll" },
-  { name: "Sales & Marketing", description: "Revenue growth, outreach and brand marketing" },
-  { name: "Operations", description: "Business administration, facilities and logistics" },
-];
+const DEFAULT_DEPARTMENTS = DEFAULT_STRUCTURE.departments;
 
-const DEFAULT_JOB_TITLES = [
-  { title: "Senior Software Engineer", deptName: "Engineering" },
-  { title: "Full Stack Developer", deptName: "Engineering" },
-  { title: "Frontend Specialist", deptName: "Engineering" },
-  { title: "DevOps Engineer", deptName: "Engineering" },
-  { title: "QA Engineer", deptName: "Engineering" },
-  { title: "Product Manager", deptName: "Product & Design" },
-  { title: "UI/UX Designer", deptName: "Product & Design" },
-  { title: "HR Director", deptName: "Human Resources" },
-  { title: "HR Specialist", deptName: "Human Resources" },
-  { title: "Talent Acquisition Lead", deptName: "Human Resources" },
-  { title: "Financial Analyst", deptName: "Finance & Accounting" },
-  { title: "Senior Accountant", deptName: "Finance & Accounting" },
-  { title: "Account Executive", deptName: "Sales & Marketing" },
-  { title: "Marketing Strategist", deptName: "Sales & Marketing" },
-  { title: "Operations Manager", deptName: "Operations" },
-  { title: "Executive Assistant", deptName: "Operations" },
-];
-
-const DEFAULT_EMPLOYEES = [
-  {
-    fullName: "Mohamed Abidi",
-    email: "mohamed.abidi@anops.internal",
-    phone: "+216 20 123 456",
-    jobTitle: "HR Director",
-    deptName: "Human Resources",
-    hireDate: "2023-01-15",
-    baseSalary: 4200,
-    role: "hr_admin" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Karim Ben Salah",
-    email: "karim.bensalah@anops.internal",
-    phone: "+216 21 234 567",
-    jobTitle: "Senior Software Engineer",
-    deptName: "Engineering",
-    hireDate: "2023-03-01",
-    baseSalary: 4800,
-    role: "manager" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Nesrin Trabelsi",
-    email: "nesrin.trabelsi@anops.internal",
-    phone: "+216 22 345 678",
-    jobTitle: "Marketing Strategist",
-    deptName: "Sales & Marketing",
-    hireDate: "2023-06-10",
-    baseSalary: 3500,
-    role: "employee" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Oussema Gharbi",
-    email: "oussema.gharbi@anops.internal",
-    phone: "+216 23 456 789",
-    jobTitle: "Financial Analyst",
-    deptName: "Finance & Accounting",
-    hireDate: "2023-02-20",
-    baseSalary: 3900,
-    role: "employee" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Fatma Mansouri",
-    email: "fatma.mansouri@anops.internal",
-    phone: "+216 24 567 890",
-    jobTitle: "UI/UX Designer",
-    deptName: "Product & Design",
-    hireDate: "2023-08-01",
-    baseSalary: 3600,
-    role: "employee" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Yassine Dridi",
-    email: "yassine.dridi@anops.internal",
-    phone: "+216 25 678 901",
-    jobTitle: "Full Stack Developer",
-    deptName: "Engineering",
-    hireDate: "2024-01-10",
-    baseSalary: 3200,
-    role: "employee" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Sarra Bouazizi",
-    email: "sarra.bouazizi@anops.internal",
-    phone: "+216 26 789 012",
-    jobTitle: "Operations Manager",
-    deptName: "Operations",
-    hireDate: "2023-11-15",
-    baseSalary: 3700,
-    role: "manager" as const,
-    status: "active" as const,
-    leaveAllowance: 25,
-  },
-  {
-    fullName: "Amine Khelifi",
-    email: "amine.khelifi@anops.internal",
-    phone: "+216 27 890 123",
-    jobTitle: "QA Engineer",
-    deptName: "Engineering",
-    hireDate: "2024-04-01",
-    baseSalary: 2800,
-    role: "employee" as const,
-    status: "inactive" as const,
-    leaveAllowance: 25,
-  },
-];
+const DEFAULT_JOB_TITLES = DEFAULT_STRUCTURE.jobTitles;
 
 async function getDb() {
   const client = await clientPromise;
   return client.db();
 }
 
-import { getActiveTenant } from "@/server/tenant/context";
 
-async function resolveCompanyId(passedId?: string): Promise<ObjectId | undefined> {
-  if (passedId && ObjectId.isValid(passedId)) {
-    return new ObjectId(passedId);
+/**
+ * Every HR query is scoped to one company. The caller must pass the company it resolved from the
+ * active tenant (server/tenant/context.ts). There is no unscoped fallback.
+ */
+function requireCompanyId(companyId: string): ObjectId {
+  if (!companyId || !ObjectId.isValid(companyId)) {
+    throw new Error("A valid company is required for this operation.");
   }
-  try {
-    const tenant = await getActiveTenant();
-    if (tenant && ObjectId.isValid(tenant.companyId)) {
-      return new ObjectId(tenant.companyId);
-    }
-  } catch {}
-  return undefined;
+  return new ObjectId(companyId);
 }
 
 /**
@@ -212,304 +87,12 @@ export async function seedHrDefaultsForCompany(companyId: string): Promise<void>
   }
 }
 
-let seedPromise: Promise<void> | null = null;
 
-/**
- * Initializes and seeds default HR records (departments, predefined titles, demo employees,
- * sample leave requests, today's attendance, and sample payslips) if they do not exist yet.
- * Protected by a singleton in-flight seedPromise lock to eliminate concurrency race conditions.
- */
-export async function seedHrDefaults(): Promise<void> {
-  if (seedPromise) {
-    return seedPromise;
-  }
-
-  seedPromise = (async () => {
-    const db = await getDb();
-
-    // 0. Ensure Admin Account from .env exists
-    const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
-    const envAdminPassword = process.env.ADMIN_PASSWORD;
-    const envAdminName = process.env.ADMIN_NAME || "System Administrator";
-
-    if (envAdminEmail && envAdminPassword) {
-      const existingAdmin = await db.collection("users").findOne({ email: envAdminEmail });
-      if (!existingAdmin) {
-        const hashedPassword = await bcrypt.hash(envAdminPassword, 12);
-        await db.collection("users").insertOne({
-          name: envAdminName,
-          email: envAdminEmail,
-          password: hashedPassword,
-          role: "hr_admin",
-          status: "active",
-          emailVerified: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      } else if (existingAdmin.role !== "hr_admin") {
-        await db.collection("users").updateOne(
-          { _id: existingAdmin._id },
-          { $set: { role: "hr_admin", updatedAt: new Date() } }
-        );
-      }
-    }
-
-    // 1. Departments
-  const deptCount = await db.collection("departments").countDocuments();
-  if (deptCount === 0) {
-    const docs = DEFAULT_DEPARTMENTS.map((d) => ({
-      ...d,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
-    await db.collection("departments").insertMany(docs);
-  }
-
-  const allDepts = await db.collection("departments").find().toArray();
-  const deptMapByName = new Map<string, ObjectId>();
-  allDepts.forEach((d) => deptMapByName.set(d.name, d._id as ObjectId));
-
-  // 2. Predefined Job Titles
-  const titleCount = await db.collection("job_titles").countDocuments();
-  if (titleCount === 0) {
-    const titleDocs = DEFAULT_JOB_TITLES.map((t) => ({
-      title: t.title,
-      departmentId: deptMapByName.get(t.deptName)?.toString() ?? "",
-      isPredefined: true,
-      createdAt: new Date(),
-    }));
-    await db.collection("job_titles").insertMany(titleDocs);
-  }
-
-  // 3. Demo Employees
-  const demoMohamed = await db.collection("employees").findOne({ email: "mohamed.abidi@anops.internal" });
-  if (!demoMohamed) {
-    const empDocs = DEFAULT_EMPLOYEES.map((e) => {
-      const deptId = deptMapByName.get(e.deptName)?.toString() ?? "";
-      return {
-        fullName: e.fullName,
-        email: e.email.toLowerCase().trim(),
-        phone: e.phone,
-        jobTitle: e.jobTitle,
-        departmentId: deptId,
-        departmentName: e.deptName,
-        hireDate: e.hireDate,
-        baseSalary: e.baseSalary,
-        role: e.role,
-        status: e.status,
-        leaveAllowance: e.leaveAllowance,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    });
-    await db.collection("employees").insertMany(empDocs);
-  }
-
-  // 4. Sample Leave Requests
-  const leaveCount = await db.collection("leave_requests").countDocuments();
-  if (leaveCount === 0) {
-    const employees = await db.collection("employees").find().toArray();
-    const mohamed = employees.find((e) => e.email === "mohamed.abidi@anops.internal");
-    const karim = employees.find((e) => e.email === "karim.bensalah@anops.internal");
-    const nesrin = employees.find((e) => e.email === "nesrin.trabelsi@anops.internal");
-    const yassine = employees.find((e) => e.email === "yassine.dridi@anops.internal");
-
-    const sampleLeaves = [];
-
-    if (mohamed) {
-      sampleLeaves.push({
-        employeeId: (mohamed._id as ObjectId).toString(),
-        employeeName: mohamed.fullName as string,
-        departmentName: mohamed.departmentName as string,
-        leaveType: "annual",
-        isPaid: true,
-        startDate: "2026-10-05",
-        endDate: "2026-10-07",
-        days: 3,
-        reason: "Family vacation trip",
-        status: "approved",
-        adminComment: "Approved. Have a great vacation!",
-        reviewedBy: "HR Admin",
-        reviewedAt: new Date("2026-10-02"),
-        createdAt: new Date("2026-10-01"),
-        updatedAt: new Date("2026-10-02"),
-      });
-    }
-
-    if (karim) {
-      sampleLeaves.push({
-        employeeId: (karim._id as ObjectId).toString(),
-        employeeName: karim.fullName as string,
-        departmentName: karim.departmentName as string,
-        leaveType: "sick",
-        isPaid: true,
-        startDate: "2026-10-12",
-        endDate: "2026-10-13",
-        days: 2,
-        reason: "Seasonal flu and doctor appointment",
-        status: "approved",
-        adminComment: "Medical certificate verified.",
-        reviewedBy: "Mohamed Abidi",
-        reviewedAt: new Date("2026-10-12"),
-        createdAt: new Date("2026-10-11"),
-        updatedAt: new Date("2026-10-12"),
-      });
-    }
-
-    if (nesrin) {
-      // Unpaid leave - will demonstrate payroll deduction
-      sampleLeaves.push({
-        employeeId: (nesrin._id as ObjectId).toString(),
-        employeeName: nesrin.fullName as string,
-        departmentName: nesrin.departmentName as string,
-        leaveType: "unpaid",
-        isPaid: false,
-        startDate: "2026-10-19",
-        endDate: "2026-10-20",
-        days: 2,
-        reason: "Personal family event (leave allowance exhausted)",
-        status: "approved",
-        adminComment: "Approved as unpaid leave. Deductions will apply in October payroll.",
-        reviewedBy: "Mohamed Abidi",
-        reviewedAt: new Date("2026-10-15"),
-        createdAt: new Date("2026-10-14"),
-        updatedAt: new Date("2026-10-15"),
-      });
-    }
-
-    if (yassine) {
-      // Pending leave request for admin approval demo
-      sampleLeaves.push({
-        employeeId: (yassine._id as ObjectId).toString(),
-        employeeName: yassine.fullName as string,
-        departmentName: yassine.departmentName as string,
-        leaveType: "annual",
-        isPaid: true,
-        startDate: "2026-10-28",
-        endDate: "2026-10-30",
-        days: 3,
-        reason: "Attending tech conference workshop",
-        status: "pending",
-        createdAt: new Date("2026-10-22"),
-        updatedAt: new Date("2026-10-22"),
-      });
-    }
-
-    if (sampleLeaves.length > 0) {
-      await db.collection("leave_requests").insertMany(sampleLeaves);
-    }
-  }
-
-  // 5. Sample Attendance for Today
-  const todayYMD = formatDateYMD(new Date());
-  const todayAttendanceCount = await db.collection("attendance").countDocuments({ date: todayYMD });
-  if (todayAttendanceCount === 0) {
-    const employees = await db.collection("employees").find({ status: "active" }).toArray();
-    const mohamed = employees.find((e) => e.email === "mohamed.abidi@anops.internal");
-    const karim = employees.find((e) => e.email === "karim.bensalah@anops.internal");
-    const oussema = employees.find((e) => e.email === "oussema.gharbi@anops.internal");
-    const fatma = employees.find((e) => e.email === "fatma.mansouri@anops.internal");
-
-    const sampleAttendance = [];
-    const checkInBase = new Date();
-    checkInBase.setHours(8, 30, 0, 0);
-
-    if (mohamed) {
-      sampleAttendance.push({
-        employeeId: (mohamed._id as ObjectId).toString(),
-        employeeName: mohamed.fullName as string,
-        departmentName: mohamed.departmentName as string,
-        date: todayYMD,
-        checkIn: new Date(checkInBase),
-        checkOut: null,
-        hoursWorked: 0,
-        status: "present",
-        createdAt: new Date(),
-      });
-    }
-
-    if (karim) {
-      const karimIn = new Date(checkInBase);
-      karimIn.setMinutes(45);
-      sampleAttendance.push({
-        employeeId: (karim._id as ObjectId).toString(),
-        employeeName: karim.fullName as string,
-        departmentName: karim.departmentName as string,
-        date: todayYMD,
-        checkIn: karimIn,
-        checkOut: null,
-        hoursWorked: 0,
-        status: "present",
-        createdAt: new Date(),
-      });
-    }
-
-    if (oussema) {
-      const oussemaIn = new Date(checkInBase);
-      oussemaIn.setHours(8, 15, 0, 0);
-      const oussemaOut = new Date(checkInBase);
-      oussemaOut.setHours(17, 15, 0, 0);
-      sampleAttendance.push({
-        employeeId: (oussema._id as ObjectId).toString(),
-        employeeName: oussema.fullName as string,
-        departmentName: oussema.departmentName as string,
-        date: todayYMD,
-        checkIn: oussemaIn,
-        checkOut: oussemaOut,
-        hoursWorked: 8.0,
-        status: "checked_out",
-        createdAt: new Date(),
-      });
-    }
-
-    if (fatma) {
-      const fatmaIn = new Date(checkInBase);
-      fatmaIn.setHours(9, 0, 0, 0);
-      sampleAttendance.push({
-        employeeId: (fatma._id as ObjectId).toString(),
-        employeeName: fatma.fullName as string,
-        departmentName: fatma.departmentName as string,
-        date: todayYMD,
-        checkIn: fatmaIn,
-        checkOut: null,
-        hoursWorked: 0,
-        status: "present",
-        createdAt: new Date(),
-      });
-    }
-
-    if (sampleAttendance.length > 0) {
-      for (const att of sampleAttendance) {
-        await db.collection("attendance").updateOne(
-          { employeeId: att.employeeId, date: att.date },
-          { $setOnInsert: att },
-          { upsert: true }
-        );
-      }
-    }
-  }
-  })().catch((err) => {
-    seedPromise = null;
-    throw err;
-  });
-
-  return seedPromise;
-}
-
-// ==========================================
-// Department Service Methods
-// ==========================================
-
-export async function getDepartments(companyId?: string): Promise<Department[]> {
+export async function getDepartments(companyId: string): Promise<Department[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
 
-  if (cId) {
-    await seedHrDefaultsForCompany(cId.toString());
-  } else {
-    await seedHrDefaults();
-  }
 
   const [departments, employees] = await Promise.all([
     db.collection("departments").find(filter).sort({ name: 1 }).toArray(),
@@ -532,10 +115,10 @@ export async function getDepartments(companyId?: string): Promise<Department[]> 
   }));
 }
 
-export async function createDepartment(name: string, description?: string, companyId?: string): Promise<Department> {
+export async function createDepartment(name: string, description: string | undefined, companyId: string): Promise<Department> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
   const trimmed = name.trim();
 
   const existing = await db.collection("departments").findOne({
@@ -549,7 +132,7 @@ export async function createDepartment(name: string, description?: string, compa
   const result = await db.collection("departments").insertOne({
     name: trimmed,
     description: description?.trim() || "",
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -563,12 +146,12 @@ export async function createDepartment(name: string, description?: string, compa
   };
 }
 
-export async function updateDepartment(id: string, name: string, description?: string, companyId?: string): Promise<Department> {
+export async function updateDepartment(id: string, name: string, description: string | undefined, companyId: string): Promise<Department> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) throw new Error("Invalid department ID.");
   const objId = new ObjectId(id);
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
   const trimmed = name.trim();
 
   const duplicate = await db.collection("departments").findOne({
@@ -600,12 +183,12 @@ export async function updateDepartment(id: string, name: string, description?: s
   };
 }
 
-export async function deleteDepartment(id: string, companyId?: string): Promise<void> {
+export async function deleteDepartment(id: string, companyId: string): Promise<void> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) throw new Error("Invalid department ID.");
   const objId = new ObjectId(id);
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
 
   const dept = await db.collection("departments").findOne({ _id: objId, ...filter });
   if (!dept) throw new Error("Department not found.");
@@ -620,10 +203,10 @@ export async function deleteDepartment(id: string, companyId?: string): Promise<
   await db.collection("departments").deleteOne({ _id: objId, ...filter });
 }
 
-export async function getEmployeesByDepartment(departmentId: string, companyId?: string): Promise<Employee[]> {
+export async function getEmployeesByDepartment(departmentId: string, companyId: string): Promise<Employee[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
 
   const docs = await db.collection("employees")
     .find({ departmentId, ...filter })
@@ -652,16 +235,11 @@ export async function getEmployeesByDepartment(departmentId: string, companyId?:
 // Job Title Service Methods
 // ==========================================
 
-export async function getJobTitles(companyId?: string): Promise<JobTitle[]> {
+export async function getJobTitles(companyId: string): Promise<JobTitle[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
 
-  if (cId) {
-    await seedHrDefaultsForCompany(cId.toString());
-  } else {
-    await seedHrDefaults();
-  }
 
   const [jobTitles, employees] = await Promise.all([
     db.collection("job_titles").find(filter).sort({ isPredefined: -1, title: 1 }).toArray(),
@@ -689,10 +267,10 @@ export async function getJobTitles(companyId?: string): Promise<JobTitle[]> {
   });
 }
 
-export async function ensureJobTitle(title: string, departmentId?: string, isPredefined = false, companyId?: string): Promise<JobTitle> {
+export async function ensureJobTitle(title: string, departmentId: string | undefined, isPredefined: boolean, companyId: string): Promise<JobTitle> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
   const trimmed = title.trim();
   if (!trimmed) {
     throw new Error("Job title cannot be empty.");
@@ -715,7 +293,7 @@ export async function ensureJobTitle(title: string, departmentId?: string, isPre
   const insertResult = await db.collection("job_titles").insertOne({
     title: trimmed,
     departmentId: departmentId || "",
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
     isPredefined,
     createdAt: new Date(),
   });
@@ -729,12 +307,12 @@ export async function ensureJobTitle(title: string, departmentId?: string, isPre
   };
 }
 
-export async function updateJobTitle(id: string, title: string, departmentId?: string, companyId?: string): Promise<JobTitle> {
+export async function updateJobTitle(id: string, title: string, departmentId: string | undefined, companyId: string): Promise<JobTitle> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) throw new Error("Invalid job title ID.");
   const objId = new ObjectId(id);
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
 
   const existing = await db.collection("job_titles").findOne({ _id: objId, ...filter });
   if (!existing) throw new Error("Job title not found.");
@@ -769,11 +347,11 @@ export async function updateJobTitle(id: string, title: string, departmentId?: s
   };
 }
 
-export async function deleteJobTitle(id: string, companyId?: string): Promise<void> {
+export async function deleteJobTitle(id: string, companyId: string): Promise<void> {
   const db = await getDb();
   const objId = new ObjectId(id);
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const filter = { companyId: cId };
 
   const titleDoc = await db.collection("job_titles").findOne({ _id: objId, ...filter });
 
@@ -830,10 +408,10 @@ export async function getEmployeesByJobTitle(title: string): Promise<Employee[]>
 // Employee Service Methods
 // ==========================================
 
-export async function getEmployees(filters: EmployeeFilterParams = {}, companyId?: string): Promise<Employee[]> {
+export async function getEmployees(filters: EmployeeFilterParams, companyId: string): Promise<Employee[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const query: Record<string, unknown> = { companyId: cId };
 
   if (filters.status && filters.status !== "all") {
     query.status = filters.status;
@@ -872,12 +450,12 @@ export async function getEmployees(filters: EmployeeFilterParams = {}, companyId
   }));
 }
 
-export async function getEmployeeById(id: string, companyId?: string): Promise<Employee | null> {
+export async function getEmployeeById(id: string, companyId: string): Promise<Employee | null> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) return null;
 
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { _id: new ObjectId(id), companyId: cId } : { _id: new ObjectId(id) };
+  const cId = requireCompanyId(companyId);
+  const filter = { _id: new ObjectId(id), companyId: cId };
 
   const doc = await db.collection("employees").findOne(filter);
   if (!doc) return null;
@@ -900,11 +478,11 @@ export async function getEmployeeById(id: string, companyId?: string): Promise<E
   };
 }
 
-export async function getEmployeeByEmail(email: string, companyId?: string): Promise<Employee | null> {
+export async function getEmployeeByEmail(email: string, companyId: string): Promise<Employee | null> {
   const db = await getDb();
   const normalized = email.toLowerCase().trim();
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { email: normalized, companyId: cId } : { email: normalized };
+  const cId = requireCompanyId(companyId);
+  const filter = { email: normalized, companyId: cId };
 
   const doc = await db.collection("employees").findOne(filter);
   if (!doc) return null;
@@ -927,12 +505,12 @@ export async function getEmployeeByEmail(email: string, companyId?: string): Pro
   };
 }
 
-export async function createEmployee(data: EmployeeInput, companyId?: string): Promise<Employee & { tempPassword: string }> {
+export async function createEmployee(data: EmployeeInput, companyId: string): Promise<Employee & { tempPassword: string }> {
   const db = await getDb();
   const normalizedEmail = data.email.toLowerCase().trim();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
 
-  const existingFilter = cId ? { email: normalizedEmail, companyId: cId } : { email: normalizedEmail };
+  const existingFilter = { email: normalizedEmail, companyId: cId };
   const existing = await db.collection("employees").findOne(existingFilter);
   if (existing) {
     throw new Error(`An employee with email "${normalizedEmail}" already exists in this organization.`);
@@ -942,9 +520,10 @@ export async function createEmployee(data: EmployeeInput, companyId?: string): P
   if (ObjectId.isValid(data.departmentId)) {
     const dept = await db.collection("departments").findOne({
       _id: new ObjectId(data.departmentId),
-      ...(cId ? { companyId: cId } : {}),
+      ...({ companyId: cId }),
     });
-    if (dept) deptName = dept.name as string;
+    if (!dept) throw new Error("Choose a department that belongs to this company.");
+    deptName = dept.name as string;
   }
 
   await ensureJobTitle(data.jobTitle, data.departmentId, false, cId?.toString());
@@ -961,7 +540,7 @@ export async function createEmployee(data: EmployeeInput, companyId?: string): P
     role: data.role,
     status: data.status,
     leaveAllowance: data.leaveAllowance,
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -1026,15 +605,15 @@ export async function createEmployee(data: EmployeeInput, companyId?: string): P
   };
 }
 
-export async function updateEmployee(id: string, data: EmployeeInput, companyId?: string): Promise<Employee> {
+export async function updateEmployee(id: string, data: EmployeeInput, companyId: string): Promise<Employee> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) {
     throw new Error("Invalid employee ID.");
   }
   const objId = new ObjectId(id);
   const normalizedEmail = data.email.toLowerCase().trim();
-  const cId = await resolveCompanyId(companyId);
-  const compFilter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const compFilter = { companyId: cId };
 
   const existingWithEmail = await db.collection("employees").findOne({
     _id: { $ne: objId },
@@ -1048,7 +627,8 @@ export async function updateEmployee(id: string, data: EmployeeInput, companyId?
   let deptName = "General";
   if (ObjectId.isValid(data.departmentId)) {
     const dept = await db.collection("departments").findOne({ _id: new ObjectId(data.departmentId), ...compFilter });
-    if (dept) deptName = dept.name as string;
+    if (!dept) throw new Error("Choose a department that belongs to this company.");
+    deptName = dept.name as string;
   }
 
   await ensureJobTitle(data.jobTitle, data.departmentId, false, cId?.toString());
@@ -1077,14 +657,14 @@ export async function updateEmployee(id: string, data: EmployeeInput, companyId?
   return updated;
 }
 
-export async function toggleEmployeeStatus(id: string, companyId?: string): Promise<{ id: string; newStatus: "active" | "inactive" }> {
+export async function toggleEmployeeStatus(id: string, companyId: string): Promise<{ id: string; newStatus: "active" | "inactive" }> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) {
     throw new Error("Invalid employee ID.");
   }
   const objId = new ObjectId(id);
-  const cId = await resolveCompanyId(companyId);
-  const compFilter = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const compFilter = { companyId: cId };
 
   const emp = await db.collection("employees").findOne({ _id: objId, ...compFilter });
   if (!emp) {
@@ -1100,17 +680,12 @@ export async function toggleEmployeeStatus(id: string, companyId?: string): Prom
   return { id, newStatus };
 }
 
-export async function getHRDashboardStats(companyId?: string): Promise<HRDashboardStats> {
+export async function getHRDashboardStats(companyId: string): Promise<HRDashboardStats> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
 
-  if (cId) {
-    await seedHrDefaultsForCompany(cId.toString());
-  } else {
-    await seedHrDefaults();
-  }
 
-  const filter = cId ? { companyId: cId } : {};
+  const filter = { companyId: cId };
 
   const [employees, departments, jobTitles] = await Promise.all([
     db.collection("employees").find(filter).toArray(),
@@ -1147,9 +722,9 @@ export async function getHRDashboardStats(companyId?: string): Promise<HRDashboa
 // Feature 2: Leave & Time-off Service Methods
 // ==========================================
 
-export async function getLeaveBalance(employeeId: string, year = new Date().getFullYear(), companyId?: string): Promise<LeaveBalance> {
+export async function getLeaveBalance(employeeId: string, year = new Date().getFullYear(), companyId: string): Promise<LeaveBalance> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const emp = await getEmployeeById(employeeId, cId?.toString());
   const employeeName = emp?.fullName || "Employee";
   const allowance = emp?.leaveAllowance ?? 25;
@@ -1163,7 +738,7 @@ export async function getLeaveBalance(employeeId: string, year = new Date().getF
       employeeId,
       status: "approved",
       startDate: { $gte: yearStart, $lte: yearEnd },
-      ...(cId ? { companyId: cId } : {}),
+      ...({ companyId: cId }),
     })
     .toArray();
 
@@ -1194,18 +769,13 @@ export async function getLeaveBalance(employeeId: string, year = new Date().getF
 
 export async function getLeaveRequests(
   filter: { employeeId?: string; status?: string } = {},
-  companyId?: string
+  companyId: string
 ): Promise<LeaveRequest[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
 
-  if (cId) {
-    await seedHrDefaultsForCompany(cId.toString());
-  } else {
-    await seedHrDefaults();
-  }
 
-  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
+  const query: Record<string, unknown> = { companyId: cId };
   if (filter.employeeId) {
     query.employeeId = filter.employeeId;
   }
@@ -1235,9 +805,9 @@ export async function getLeaveRequests(
   }));
 }
 
-export async function createLeaveRequest(data: LeaveRequestInput, companyId?: string): Promise<LeaveRequest> {
+export async function createLeaveRequest(data: LeaveRequestInput, companyId: string): Promise<LeaveRequest> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const emp = await getEmployeeById(data.employeeId, cId?.toString());
   if (!emp) {
     throw new Error("Employee not found.");
@@ -1252,7 +822,7 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId?: st
   const overlap = await db.collection("leave_requests").findOne({
     employeeId: data.employeeId,
     status: { $in: ["approved", "pending"] },
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
     $or: [
       { startDate: { $lte: data.endDate }, endDate: { $gte: data.startDate } },
     ],
@@ -1288,7 +858,7 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId?: st
     days,
     reason: data.reason.trim(),
     status: "pending" as LeaveStatus,
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -1315,15 +885,15 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId?: st
 export async function reviewLeaveRequest(
   input: LeaveReviewInput,
   reviewerName = "HR Administrator",
-  companyId?: string
+  companyId: string
 ): Promise<LeaveRequest> {
   const db = await getDb();
   if (!ObjectId.isValid(input.requestId)) {
     throw new Error("Invalid leave request ID.");
   }
   const objId = new ObjectId(input.requestId);
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { _id: objId, companyId: cId } : { _id: objId };
+  const cId = requireCompanyId(companyId);
+  const filter = { _id: objId, companyId: cId };
 
   const existing = await db.collection("leave_requests").findOne(filter);
   if (!existing) {
@@ -1372,19 +942,14 @@ export async function reviewLeaveRequest(
 // Feature 3: Attendance Tracking Service Methods
 // ==========================================
 
-export async function getTodayAttendance(companyId?: string): Promise<TodayAttendanceSummary> {
+export async function getTodayAttendance(companyId: string): Promise<TodayAttendanceSummary> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
 
-  if (cId) {
-    await seedHrDefaultsForCompany(cId.toString());
-  } else {
-    await seedHrDefaults();
-  }
 
   const todayStr = formatDateYMD(new Date());
-  const empFilter = cId ? { status: "active", companyId: cId } : { status: "active" };
-  const attFilter = cId ? { date: todayStr, companyId: cId } : { date: todayStr };
+  const empFilter = { status: "active", companyId: cId };
+  const attFilter = { date: todayStr, companyId: cId };
 
   const [activeEmployees, records] = await Promise.all([
     db.collection("employees").find(empFilter).toArray(),
@@ -1432,14 +997,14 @@ export async function getTodayAttendance(companyId?: string): Promise<TodayAtten
   };
 }
 
-export async function getEmployeeTodayAttendance(employeeId: string, companyId?: string): Promise<AttendanceRecord | null> {
+export async function getEmployeeTodayAttendance(employeeId: string, companyId: string): Promise<AttendanceRecord | null> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const todayStr = formatDateYMD(new Date());
   const filter = {
     employeeId,
     date: todayStr,
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
   };
 
   const doc = await db.collection("attendance").findOne(filter);
@@ -1459,9 +1024,9 @@ export async function getEmployeeTodayAttendance(employeeId: string, companyId?:
   };
 }
 
-export async function checkInEmployee(employeeId: string, companyId?: string): Promise<AttendanceRecord> {
+export async function checkInEmployee(employeeId: string, companyId: string): Promise<AttendanceRecord> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const todayStr = formatDateYMD(new Date());
 
   const emp = await getEmployeeById(employeeId, cId?.toString());
@@ -1470,7 +1035,7 @@ export async function checkInEmployee(employeeId: string, companyId?: string): P
   const existing = await db.collection("attendance").findOne({
     employeeId,
     date: todayStr,
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
   });
 
   if (existing) {
@@ -1491,7 +1056,7 @@ export async function checkInEmployee(employeeId: string, companyId?: string): P
     checkOut: null,
     hoursWorked: 0,
     status: "present",
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
     createdAt: now,
     updatedAt: now,
   };
@@ -1511,15 +1076,15 @@ export async function checkInEmployee(employeeId: string, companyId?: string): P
   };
 }
 
-export async function checkOutEmployee(employeeId: string, companyId?: string): Promise<AttendanceRecord> {
+export async function checkOutEmployee(employeeId: string, companyId: string): Promise<AttendanceRecord> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const todayStr = formatDateYMD(new Date());
 
   const existing = await db.collection("attendance").findOne({
     employeeId,
     date: todayStr,
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
   });
 
   if (!existing) {
@@ -1567,11 +1132,11 @@ export async function getAttendanceHistory(
     startDate?: string;
     endDate?: string;
   } = {},
-  companyId?: string
+  companyId: string
 ): Promise<AttendanceRecord[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const query: Record<string, unknown> = { companyId: cId };
 
   if (filter.employeeId) query.employeeId = filter.employeeId;
   if (filter.startDate || filter.endDate) {
@@ -1604,10 +1169,10 @@ export async function calculateEmployeePayrollPreview(
   employeeId: string,
   period: string, // YYYY-MM
   workingDaysInMonth = 22,
-  companyId?: string
+  companyId: string
 ) {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const emp = await getEmployeeById(employeeId, cId?.toString());
   if (!emp) throw new Error("Employee not found.");
 
@@ -1623,7 +1188,7 @@ export async function calculateEmployeePayrollPreview(
       employeeId,
       status: "approved",
       isPaid: false,
-      ...(cId ? { companyId: cId } : {}),
+      ...({ companyId: cId }),
       $or: [
         { startDate: { $gte: monthStart, $lte: monthEnd } },
         { endDate: { $gte: monthStart, $lte: monthEnd } },
@@ -1659,15 +1224,15 @@ export async function calculateEmployeePayrollPreview(
 
 export async function generatePayslips(
   period: string,
-  employeeIds?: string[],
-  workingDaysInMonth = 22,
-  companyId?: string
+  employeeIds: string[] | undefined,
+  workingDaysInMonth: number,
+  companyId: string
 ): Promise<PayslipRecord[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const query: Record<string, unknown> = {
     status: "active",
-    ...(cId ? { companyId: cId } : {}),
+    ...({ companyId: cId }),
   };
   if (employeeIds && employeeIds.length > 0) {
     query._id = { $in: employeeIds.map((id) => new ObjectId(id)) };
@@ -1694,7 +1259,7 @@ export async function generatePayslips(
       netSalary: calculation.netSalary,
       currency: "TND",
       status: "generated" as const,
-      ...(cId ? { companyId: cId } : {}),
+      ...({ companyId: cId }),
       generatedAt: new Date(),
     };
 
@@ -1703,7 +1268,7 @@ export async function generatePayslips(
       {
         employeeId: empId,
         period,
-        ...(cId ? { companyId: cId } : {}),
+        ...({ companyId: cId }),
       },
       { $set: payslipDoc },
       { upsert: true, returnDocument: "after" }
@@ -1734,11 +1299,11 @@ export async function generatePayslips(
 
 export async function getPayslips(
   filter: { period?: string; employeeId?: string } = {},
-  companyId?: string
+  companyId: string
 ): Promise<PayslipRecord[]> {
   const db = await getDb();
-  const cId = await resolveCompanyId(companyId);
-  const query: Record<string, unknown> = cId ? { companyId: cId } : {};
+  const cId = requireCompanyId(companyId);
+  const query: Record<string, unknown> = { companyId: cId };
 
   if (filter.period) query.period = filter.period;
   if (filter.employeeId) query.employeeId = filter.employeeId;
@@ -1764,11 +1329,11 @@ export async function getPayslips(
   }));
 }
 
-export async function getPayslipById(id: string, companyId?: string): Promise<PayslipRecord | null> {
+export async function getPayslipById(id: string, companyId: string): Promise<PayslipRecord | null> {
   const db = await getDb();
   if (!ObjectId.isValid(id)) return null;
-  const cId = await resolveCompanyId(companyId);
-  const filter = cId ? { _id: new ObjectId(id), companyId: cId } : { _id: new ObjectId(id) };
+  const cId = requireCompanyId(companyId);
+  const filter = { _id: new ObjectId(id), companyId: cId };
 
   const doc = await db.collection("payslips").findOne(filter);
   if (!doc) return null;
@@ -1792,10 +1357,10 @@ export async function getPayslipById(id: string, companyId?: string): Promise<Pa
   };
 }
 
-export async function getPayrollSummary(period: string, companyId?: string): Promise<PayrollSummary> {
-  const cId = await resolveCompanyId(companyId);
+export async function getPayrollSummary(period: string, companyId: string): Promise<PayrollSummary> {
+  const cId = requireCompanyId(companyId);
   const payslips = await getPayslips({ period }, cId?.toString());
-  const empFilter = cId ? { status: "active", companyId: cId } : { status: "active" };
+  const empFilter = { status: "active", companyId: cId };
   const totalEmployees = await (await getDb()).collection("employees").countDocuments(empFilter);
 
   let totalGross = 0;
@@ -1822,9 +1387,9 @@ export async function getPayrollSummary(period: string, companyId?: string): Pro
 // Feature 5: AI HR Assistant Engine
 // ==========================================
 
-export async function askHRAssistant(promptText: string, employeeId: string, companyId?: string): Promise<AIChatMessage> {
+export async function askHRAssistant(promptText: string, employeeId: string, companyId: string): Promise<AIChatMessage> {
   const query = promptText.trim().toLowerCase();
-  const cId = await resolveCompanyId(companyId);
+  const cId = requireCompanyId(companyId);
   const emp = await getEmployeeById(employeeId, cId?.toString());
   const employeeName = emp?.fullName || "Employee";
 

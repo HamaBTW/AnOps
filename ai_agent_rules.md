@@ -20,6 +20,10 @@
 - **Mandatory `companyId`:** Every database query and insert must be filtered or populated with the active tenant's `companyId`.
 - **Zero Cross-Tenant Leaks:** Never query business entities (employees, departments, attendance, payroll, invoices) globally without `companyId`.
 - **Onboarding Flow:** Users without a company must be guided to create an initial company before accessing module dashboards.
+- **One tenant boundary:** the company. Do not introduce organization, workspace or team scopes. Tenant-owned documents carry `companyId` only.
+- **Required scope in code:** service functions take a required `companyId`. Never write `companyId?`, `cId ? {...} : {}`, or any fallback that runs without a company.
+- **Selection is not authority:** the active-company cookie only chooses among companies the user already belongs to. Re-read the membership on every request.
+- **Attendance and staff are per company:** employees, job titles, departments and attendance records belong to exactly one company. Never copy them between companies.
 
 ## UI/UX Rules
 - Touch target sizes must be at least `44x44px`.
@@ -41,4 +45,4 @@
 - **Prefer `ai.ask()`** for simple prompts; use `ai.complete()` when you need provider/model/usage metadata.
 - **Always handle AI errors gracefully** — wrap calls in try/catch; AI outages must not break core features.
 - **Multi-tenancy:** AI calls operating on company data must still scope queries with `companyId` before passing to AI.
-- **Provider order (automatic):** Groq → OpenRouter → Gemini. Keys rotate on 429 automatically.
+- **Provider order (automatic):** Groq → OpenRouter → Gemini. Keys rotate on 429 automatically.

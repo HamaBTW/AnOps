@@ -142,18 +142,13 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           {user ? (
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="hidden sm:flex items-center">
+              {/* /dashboard opens the active company. Accounts without a company are sent to onboarding by the dashboard layout. */}
               <Link
                 href="/dashboard"
-                className="inline-flex min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/hr"
                 className={cn(btnPrimary, "px-4 inline-flex items-center gap-1.5 shadow-sm")}
               >
-                Go to Console
+                Open workspace
               </Link>
             </div>
           ) : (
@@ -226,14 +221,9 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               <div className="px-3 text-xs text-[var(--color-text-secondary)]">
                 Signed in as <span className="font-semibold text-[var(--color-text-primary)]">{user.name || user.email}</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Link href="/dashboard" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
-                  Dashboard
-                </Link>
-                <Link href="/hr" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
-                  Console
-                </Link>
-              </div>
+              <Link href="/dashboard" onClick={closeAll} className={cn(btnPrimary, "flex w-full justify-center")}>
+                Open workspace
+              </Link>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 pt-3">

@@ -29,7 +29,7 @@ export const MOVEMENT_PAGE_SIZE = 25;
 export const BALANCE_PAGE_SIZE = 25;
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 /** Parses a signed user-entered quantity such as "-2.5" into signed micro-units. */
@@ -222,7 +222,6 @@ async function commitManualMovement(
     await recordAudit(
       ctx.db,
       {
-        organizationId: ctx.organizationId,
         companyId: ctx.companyId,
         actorUserId: ctx.userId,
         action: audit.action,

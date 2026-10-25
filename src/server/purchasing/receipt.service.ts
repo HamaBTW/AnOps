@@ -28,7 +28,7 @@ import type { Paged, ReceiptDetailDto, ReceiptSummaryDto } from "@/features/purc
 export const RECEIPT_PAGE_SIZE = 25;
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 async function warehouseCodes(ctx: WorkspaceContext, ids: ObjectId[]): Promise<Map<string, string>> {
@@ -291,7 +291,6 @@ export async function postReceipt(ctx: WorkspaceContext, receiptId: string): Pro
     await recordAudit(
       ctx.db,
       {
-        organizationId: ctx.organizationId,
         companyId: ctx.companyId,
         actorUserId: ctx.userId,
         action: "purchasing.receipt.posted",

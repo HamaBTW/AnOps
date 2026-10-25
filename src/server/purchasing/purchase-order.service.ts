@@ -43,7 +43,7 @@ import type {
 import { PURCHASE_ORDER_PAGE_SIZE } from "@/features/purchasing/schemas/purchasing.schema";
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 export function toSummaryDto(doc: PurchaseOrderDoc): PurchaseOrderSummaryDto {
@@ -305,7 +305,6 @@ export async function approvePurchaseOrder(ctx: WorkspaceContext, orderId: strin
     await recordAudit(
       ctx.db,
       {
-        organizationId: ctx.organizationId,
         companyId: ctx.companyId,
         actorUserId: ctx.userId,
         action: "purchasing.order.approved",
@@ -360,7 +359,6 @@ export async function cancelPurchaseOrder(ctx: WorkspaceContext, orderId: string
     await recordAudit(
       ctx.db,
       {
-        organizationId: ctx.organizationId,
         companyId: ctx.companyId,
         actorUserId: ctx.userId,
         action: "purchasing.order.cancelled",

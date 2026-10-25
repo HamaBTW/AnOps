@@ -13,9 +13,9 @@ export { UNITS_OF_MEASURE, type UnitOfMeasure } from "@/shared/domain/units";
  */
 
 export const COLLECTIONS = {
-  organizations: "organizations",
+  /** Tenant boundary. One document per company; shared with features/company (the multi-tenant model). */
   companies: "companies",
-  memberships: "memberships",
+  companyMembers: "company_members",
   counters: "counters",
   auditEvents: "audit_events",
   inventoryCategories: "inventory_categories",
@@ -30,43 +30,13 @@ export const COLLECTIONS = {
   manufacturingWorkOrders: "manufacturing_work_orders",
 } as const;
 
+/** Every tenant-owned document carries exactly this scope. There is no other tenancy level. */
 export type TenantScope = {
-  organizationId: ObjectId;
   companyId: ObjectId;
-};
-
-export type OrganizationDoc = {
-  _id: ObjectId;
-  name: string;
-  slug: string;
-  ownerUserId: ObjectId;
-  status: "active";
-  createdAt: Date;
-};
-
-export type CompanyDoc = {
-  _id: ObjectId;
-  organizationId: ObjectId;
-  name: string;
-  currencyCode: string;
-  timezone: string;
-  isActive: boolean;
-  createdAt: Date;
-};
-
-export type MembershipDoc = {
-  _id: ObjectId;
-  organizationId: ObjectId;
-  userId: ObjectId;
-  role: "owner" | "admin" | "operator" | "viewer";
-  status: "active" | "suspended";
-  isPersonal: boolean;
-  createdAt: Date;
 };
 
 export type AuditEventDoc = {
   _id: ObjectId;
-  organizationId: ObjectId;
   companyId: ObjectId | null;
   actorUserId: ObjectId;
   action: string;

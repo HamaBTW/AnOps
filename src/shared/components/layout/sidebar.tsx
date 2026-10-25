@@ -184,6 +184,14 @@ export function Sidebar({
               <IconHelpCircle size={16} className="text-[var(--color-text-secondary)]" />
               Help
             </button>
+            <Link
+              href="/"
+              onClick={onMobileClose}
+              className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
+            >
+              <IconBuilding size={16} className="text-[var(--color-text-secondary)]" />
+              Public portal
+            </Link>
             <div className="my-1 h-px bg-[var(--color-border-subtle)]" />
             <form action={logoutAction}>
               <button

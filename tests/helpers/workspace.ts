@@ -1,6 +1,6 @@
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import { ensureIndexes } from "@/server/db/indexes";
-import { permissionsForRole, type MembershipRole } from "@/server/security/permissions";
+import { permissionsForRole, type WorkspaceRole } from "@/server/security/permissions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 
 /**
@@ -11,9 +11,9 @@ import type { WorkspaceContext } from "@/server/tenancy/workspace";
 export type TestHarness = {
   db: Db;
   /** The primary tenant. */
-  ctx: (role?: MembershipRole) => WorkspaceContext;
+  ctx: (role?: WorkspaceRole) => WorkspaceContext;
   /** A second tenant that shares the same database, for isolation tests. */
-  otherTenant: (role?: MembershipRole) => WorkspaceContext;
+  otherTenant: (role?: WorkspaceRole) => WorkspaceContext;
   cleanup: () => Promise<void>;
 };
 
@@ -27,14 +27,13 @@ export async function createHarness(): Promise<TestHarness> {
   const db = client.db(`anops_test_${new ObjectId().toHexString()}`);
   await ensureIndexes(db);
 
-  const primary = { organizationId: new ObjectId(), companyId: new ObjectId(), userId: new ObjectId() };
-  const secondary = { organizationId: new ObjectId(), companyId: new ObjectId(), userId: new ObjectId() };
+  const primary = { companyId: new ObjectId(), userId: new ObjectId() };
+  const secondary = { companyId: new ObjectId(), userId: new ObjectId() };
 
-  const build = (tenant: typeof primary, role: MembershipRole): WorkspaceContext => ({
+  const build = (tenant: typeof primary, role: WorkspaceRole): WorkspaceContext => ({
     db,
     requestId: `test-${new ObjectId().toHexString()}`,
     userId: tenant.userId,
-    organizationId: tenant.organizationId,
     companyId: tenant.companyId,
     role,
     currencyCode: "TND",

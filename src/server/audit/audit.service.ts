@@ -4,7 +4,6 @@ import type { Tx } from "@/server/db/transactions";
 import { COLLECTIONS, type AuditEventDoc } from "@/server/db/documents";
 
 export type AuditInput = {
-  organizationId: ObjectId;
   companyId: ObjectId | null;
   actorUserId: ObjectId;
   action: string;
@@ -22,7 +21,6 @@ export type AuditInput = {
 export async function recordAudit(db: Db, input: AuditInput, tx?: Tx): Promise<void> {
   const doc: AuditEventDoc = {
     _id: new ObjectId(),
-    organizationId: input.organizationId,
     companyId: input.companyId,
     actorUserId: input.actorUserId,
     action: input.action,

@@ -13,7 +13,7 @@ import { idKey } from "@/server/inventory/mappers";
 export const SUPPLIER_PAGE_SIZE = 25;
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 export function toSupplierDto(doc: SupplierDoc): SupplierDto {

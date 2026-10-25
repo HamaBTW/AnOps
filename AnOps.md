@@ -4,7 +4,7 @@
 - **Name:** AnOps (Odoo-like ERP System)[cite: 1]
 - **Target Audience:** Small and Medium Businesses[cite: 1]
 - **Timeframe:** 2 Weeks
-- **Architecture:** Multi-Tenant Modular ERP with independent feature modules and integrated AI capabilities. Each user manages or belongs to one or more organizations (companies), with strict tenant-level data isolation.
+- **Architecture:** Multi-Tenant Modular ERP with independent feature modules and integrated AI capabilities. Each user creates or belongs to one or more companies. Each company's data (staff, job titles, attendance, stock, orders) is strictly isolated from every other company.
 
 ---
 

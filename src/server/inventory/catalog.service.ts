@@ -36,7 +36,7 @@ function isDuplicateKey(error: unknown): boolean {
 }
 
 function scope(ctx: WorkspaceContext): TenantScope {
-  return { organizationId: ctx.organizationId, companyId: ctx.companyId };
+  return { companyId: ctx.companyId };
 }
 
 async function sumOnHandByProduct(db: Db, ctx: WorkspaceContext, productIds: ObjectId[]): Promise<Map<string, number>> {

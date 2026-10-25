@@ -1,0 +1,2 @@
+export function facebookConfig() { return { appId: process.env.META_APP_ID, appSecret: process.env.META_APP_SECRET, graphVersion: process.env.META_GRAPH_API_VERSION, callbackUrl: process.env.META_OAUTH_CALLBACK_URL }; }
+export function facebookConfigured() { const config = facebookConfig(); return Boolean(config.appId && config.appSecret && config.graphVersion && config.callbackUrl && process.env.SOCIAL_TOKEN_ENCRYPTION_KEY); }

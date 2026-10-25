@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/server/auth";
+import { addAudienceMember, marketingScopeForUser } from "@/server/services/marketing.service";
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { await addAudienceMember(await marketingScopeForUser(session.user.email), (await context.params).id, await request.json()); return NextResponse.json({ ok: true }, { status: 201 }); } catch (error) { if (error instanceof Error && error.message === "MEMBER_DUPLICATE") return NextResponse.json({ error: "Contact is already in this audience." }, { status: 409 }); if (error instanceof Error && error.message === "NOT_FOUND") return NextResponse.json({ error: "Audience or contact not found." }, { status: 404 }); return NextResponse.json({ error: "Invalid membership." }, { status: 400 }); } }

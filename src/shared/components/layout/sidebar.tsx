@@ -21,6 +21,7 @@ import {
   IconClose,
   IconProfileCard,
   IconBuilding,
+  IconMessage,
 } from "@/shared/components/ui/brand-icons";
 import { cn } from "@/shared/lib/utils";
 import { logoutAction } from "@/features/auth/actions/auth.action";
@@ -37,6 +38,7 @@ const navigation = [
   { name: "Manufacturing", href: "/manufacturing", icon: IconSettings },
   { name: "Projects", href: "/projects", icon: IconBarChart },
   { name: "Documents", href: "/documents", icon: IconDocument },
+  { name: "Marketing & Socials", href: "/marketing", icon: IconMessage },
   { name: "Notifications", href: "/notifications", icon: IconNotification },
   { name: "Administration", href: "/admin", icon: IconSettings },
 ];

@@ -1,0 +1,3 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { NextResponse } from "next/server";
+export async function POST(request: Request) { const secret = process.env.MARKETING_WEBHOOK_SECRET; if (!secret) return NextResponse.json({ error: "Webhook provider is not configured." }, { status: 503 }); const raw = await request.text(); const signature = request.headers.get("x-anops-signature") ?? ""; const expected = createHmac("sha256", secret).update(raw).digest("hex"); if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return NextResponse.json({ error: "Invalid webhook signature." }, { status: 401 }); return NextResponse.json({ error: "No verified provider adapter is configured." }, { status: 503 }); }

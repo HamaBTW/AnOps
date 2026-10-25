@@ -148,11 +148,19 @@ export function ProductForm({
         </div>
         <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
           <label className="inline-flex min-h-[44px] items-center gap-3 text-sm text-[var(--color-text-primary)]">
-            <input type="checkbox" className="h-5 w-5 accent-[var(--color-action-primary)]" {...register("isStorable")} />
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
+              {...register("isStorable")}
+            />
             Stored item (tracked in stock)
           </label>
           <label className="inline-flex min-h-[44px] items-center gap-3 text-sm text-[var(--color-text-primary)]">
-            <input type="checkbox" className="h-5 w-5 accent-[var(--color-action-primary)]" {...register("isActive")} />
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
+              {...register("isActive")}
+            />
             Active (available for orders and stock moves)
           </label>
         </div>

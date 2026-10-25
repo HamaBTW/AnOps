@@ -53,7 +53,11 @@ function WarehouseForm({
         <TextField label="Address" error={errors.address?.message} {...register("address")} />
       </div>
       <label className="inline-flex min-h-[44px] items-center gap-3 text-sm sm:col-span-2">
-        <input type="checkbox" className="h-5 w-5 accent-[var(--color-action-primary)]" {...register("isActive")} />
+        <input
+          type="checkbox"
+          className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
+          {...register("isActive")}
+        />
         Active (accepts stock and receipts)
       </label>
       {formError && <div className="sm:col-span-2"><FormMessage kind="error">{formError}</FormMessage></div>}

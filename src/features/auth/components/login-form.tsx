@@ -60,7 +60,10 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       />
       <div className="flex items-center justify-between text-sm">
         <label className="flex items-center gap-2">
-          <input type="checkbox" className="rounded" />
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
+          />
           <span>Remember me</span>
         </label>
         <Link href="/forgot-password" className="text-[var(--color-text-secondary)] hover:underline">

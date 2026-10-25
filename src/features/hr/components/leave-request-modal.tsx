@@ -284,7 +284,7 @@ export function LeaveRequestModal({
                 checked={isPaid}
                 onChange={(e) => setIsPaid(e.target.checked)}
                 disabled={isPending || leaveType === "unpaid"}
-                className="h-4 w-4 rounded border-gray-300 text-[var(--color-action-primary)] focus:ring-[var(--color-action-primary)] shrink-0"
+                className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
               />
               <label htmlFor="isPaidCheckbox" className="text-xs text-[var(--color-text-primary)] cursor-pointer select-none">
                 Mark as Paid Leave{" "}

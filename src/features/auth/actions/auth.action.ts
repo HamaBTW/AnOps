@@ -32,7 +32,9 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     if (error instanceof AuthError) {
       const code = (error as AuthError & { code?: string }).code;
       if (code === "banned") redirect("/banned");
-      if (code === "unverified") redirect("/unverified");
+      if (code === "unverified") {
+        redirect(`/unverified?email=${encodeURIComponent(email)}`);
+      }
       return { error: "Invalid email or password." };
     }
     throw error;

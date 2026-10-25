@@ -13,6 +13,10 @@ class BannedError extends CredentialsSignin {
   code = "banned";
 }
 
+class UnverifiedError extends CredentialsSignin {
+  code = "unverified";
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   adapter: MongoDBAdapter(clientPromise),
@@ -96,6 +100,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               `[auth] auto verification email skipped for ${normalizedEmail} (one was sent less than 1 minute ago)`
             );
           }
+
+          console.warn(`[auth] sign-in blocked for ${normalizedEmail}: not verified`);
+          // Throw so no session cookie is created for unverified users —
+          // loginAction catches the "unverified" code and redirects to
+          // /unverified?email=… instead.
+          throw new UnverifiedError();
         }
 
         const employee = await db.collection("employees").findOne({ email: normalizedEmail });

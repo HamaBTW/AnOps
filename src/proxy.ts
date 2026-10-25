@@ -63,7 +63,9 @@ export default auth((req) => {
 
   // 3. Unverified users cannot access protected routes → /unverified
   if (isLoggedIn && status === "unverified" && isProtected) {
-    return NextResponse.redirect(new URL("/unverified", nextUrl.origin));
+    const unverifiedUrl = new URL("/unverified", nextUrl.origin);
+    if (req.auth?.user?.email) unverifiedUrl.searchParams.set("email", req.auth.user.email);
+    return NextResponse.redirect(unverifiedUrl);
   }
 
   // 4. Force-password-reset: must visit /reset-password before accessing app
@@ -79,8 +81,18 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
   }
 
-  // 6. Auth-only pages: send active logged-in users to dashboard
+  // 6. Auth-only pages: active logged-in users go to dashboard; logged-in
+  //    UNVERIFIED users go to /unverified. Never redirect a route onto
+  //    itself — that caused an infinite redirect loop in production.
   if (isAuthOnlyRoute && isLoggedIn && !forceReset) {
+    if (status === "unverified") {
+      if (nextUrl.pathname !== "/unverified") {
+        const unverifiedUrl = new URL("/unverified", nextUrl.origin);
+        if (req.auth?.user?.email) unverifiedUrl.searchParams.set("email", req.auth.user.email);
+        return NextResponse.redirect(unverifiedUrl);
+      }
+      return NextResponse.next();
+    }
     return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
   }
 

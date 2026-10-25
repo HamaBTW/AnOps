@@ -12,7 +12,7 @@ type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
 };
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
-  function TextField({ label, error, hint, id, className, ...props }, ref) {
+  function TextField({ label, error, hint, id, className, type, ...props }, ref) {
     const inputId = id ?? props.name ?? label.toLowerCase().replace(/\s+/g, "-");
     const describedBy = error
       ? `${inputId}-error`
@@ -20,7 +20,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
       ? `${inputId}-hint`
       : undefined;
     const [showPassword, setShowPassword] = useState(false);
-    const isPassword = props.type === "password";
+    const isPassword = type === "password";
 
     return (
       <div className="space-y-1.5">
@@ -33,7 +33,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
             id={inputId}
             aria-invalid={Boolean(error)}
             aria-describedby={describedBy}
-            type={isPassword && showPassword ? "text" : props.type}
+            type={isPassword && showPassword ? "text" : type}
             className={cn(
               "w-full h-12 px-3 rounded-[var(--radius-control)] border bg-[var(--color-bg-surface)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] min-h-[44px]",
               "focus:outline-none focus:ring-[3px] focus:ring-offset-[2px] focus:ring-offset-[var(--color-bg-surface)]",

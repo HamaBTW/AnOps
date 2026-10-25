@@ -25,6 +25,16 @@ export const PERMISSIONS = {
   MANUFACTURING_BOM_MANAGE: "manufacturing.bom.manage",
   MANUFACTURING_WORK_ORDER_MANAGE: "manufacturing.work_order.manage",
   MANUFACTURING_WORK_ORDER_EXECUTE: "manufacturing.work_order.execute",
+  FINANCE_READ: "finance.read",
+  FINANCE_CUSTOMER_MANAGE: "finance.customer.manage",
+  FINANCE_INVOICE_MANAGE: "finance.invoice.manage",
+  FINANCE_INVOICE_POST: "finance.invoice.post",
+  FINANCE_PAYMENT_ALLOCATE: "finance.payment.allocate",
+  FINANCE_EXPENSE_MANAGE: "finance.expense.manage",
+  FINANCE_EXPENSE_APPROVE: "finance.expense.approve",
+  FINANCE_EXPENSE_PAY: "finance.expense.pay",
+  FINANCE_RECEIPT_OCR: "finance.receipt.ocr",
+  FINANCE_REPORT_VIEW: "finance.report.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -53,6 +63,8 @@ const READ_PERMISSIONS: Permission[] = [
   PERMISSIONS.INVENTORY_READ,
   PERMISSIONS.PURCHASING_READ,
   PERMISSIONS.MANUFACTURING_READ,
+  PERMISSIONS.FINANCE_READ,
+  PERMISSIONS.FINANCE_REPORT_VIEW,
 ];
 
 /**
@@ -77,6 +89,10 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
     PERMISSIONS.MANUFACTURING_BOM_MANAGE,
     PERMISSIONS.MANUFACTURING_WORK_ORDER_MANAGE,
     PERMISSIONS.MANUFACTURING_WORK_ORDER_EXECUTE,
+    PERMISSIONS.FINANCE_CUSTOMER_MANAGE,
+    PERMISSIONS.FINANCE_INVOICE_MANAGE,
+    PERMISSIONS.FINANCE_EXPENSE_MANAGE,
+    PERMISSIONS.FINANCE_RECEIPT_OCR,
   ],
   viewer: [...READ_PERMISSIONS],
 };

@@ -53,6 +53,16 @@ rules in Part B below are the enforced behaviour, and the `hr.*` rows are the ta
 | `manufacturing.bom.manage` | ✓ | ✓ | ✓ | |
 | `manufacturing.work_order.manage` | ✓ | ✓ | ✓ | |
 | `manufacturing.work_order.execute` (start, complete) | ✓ | ✓ | ✓ | |
+| `finance.read` | ✓ | ✓ | ✓ | ✓ |
+| `finance.report.view` | ✓ | ✓ | ✓ | ✓ |
+| `finance.customer.manage` | ✓ | ✓ | ✓ | |
+| `finance.invoice.manage` (create/edit drafts) | ✓ | ✓ | ✓ | |
+| `finance.invoice.post` (post/void) | ✓ | ✓ | | |
+| `finance.payment.allocate` (record/allocate payments) | ✓ | ✓ | | |
+| `finance.expense.manage` (create/edit drafts/submitted) | ✓ | ✓ | ✓ | |
+| `finance.expense.approve` (approve/reject) | ✓ | ✓ | | |
+| `finance.expense.pay` (mark approved expense paid) | ✓ | ✓ | | |
+| `finance.receipt.ocr` (upload/scan receipts) | ✓ | ✓ | ✓ | |
 
 ## 3. HR role (employee record)
 

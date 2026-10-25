@@ -1,6 +1,7 @@
 import { AuthCard } from "@/features/auth/components/auth-form";
 import { ResendVerificationForm } from "@/features/auth/components/resend-verification-form";
 import { auth } from "@/server/auth";
+import { logoutAction } from "@/features/auth/actions/auth.action";
 import Link from "next/link";
 
 export default async function UnverifiedPage({
@@ -39,12 +40,23 @@ export default async function UnverifiedPage({
           </p>
         )}
         <ResendVerificationForm email={email} />
-        <Link
-          href="/login"
-          className="inline-flex h-12 items-center justify-center w-full rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-sm font-semibold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)]"
-        >
-          Back to sign in
-        </Link>
+        {session?.user ? (
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="inline-flex h-12 items-center justify-center w-full rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-sm font-semibold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] cursor-pointer"
+            >
+              Sign out
+            </button>
+          </form>
+        ) : (
+          <Link
+            href="/login"
+            className="inline-flex h-12 items-center justify-center w-full rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-sm font-semibold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)]"
+          >
+            Back to sign in
+          </Link>
+        )}
       </div>
     </AuthCard>
   );

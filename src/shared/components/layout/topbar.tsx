@@ -2,6 +2,7 @@
 
 import { IconSearch, IconNotification, IconMenu } from "@/shared/components/ui/brand-icons";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
+import { CompanySwitcher } from "@/shared/components/layout/company-switcher";
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
@@ -29,6 +30,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           />
         </div>
       </div>
+      <CompanySwitcher />
       <ThemeToggle />
       <button
         className="relative h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"

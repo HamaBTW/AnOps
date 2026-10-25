@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/server/auth";
+import { createTemplate, listTemplates, marketingScopeForUser } from "@/server/services/marketing.service";
+export async function GET(request: Request) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); const search = new URL(request.url).searchParams.get("search") ?? ""; try { return NextResponse.json(await listTemplates(await marketingScopeForUser(session.user.email), search)); } catch { return NextResponse.json({ error: "Unable to load templates." }, { status: 500 }); } }
+export async function POST(request: Request) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { return NextResponse.json(await createTemplate(await marketingScopeForUser(session.user.email), session.user.email, await request.json()), { status: 201 }); } catch { return NextResponse.json({ error: "Invalid template data." }, { status: 400 }); } }

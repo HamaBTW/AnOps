@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowUpRight,
   CalendarDays,
@@ -61,6 +62,12 @@ export function MarketingDashboard() {
           <button type="button" className="flex min-h-11 items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-sm font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)]"><Plus className="h-4 w-4" /> New campaign</button>
         </div>
       </header>
+
+      <nav aria-label="Marketing sections" className="flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] pb-1">
+        {[{ label: "Overview", href: "/marketing" }, { label: "Contacts", href: "/marketing/contacts" }, { label: "Audiences", href: "/marketing/audiences" }, { label: "Campaigns", href: "/marketing/campaigns" }, { label: "Templates", href: "/marketing/templates" }, { label: "Social planner", href: "/marketing/social" }, { label: "AI Copywriter", href: "/marketing/ai-copywriter" }].map((item) => (
+          <Link key={item.href} href={item.href} className={`min-h-10 shrink-0 rounded-t-[var(--radius-control)] px-3 py-2 text-sm font-semibold ${item.href === "/marketing" ? "border-b-2 border-[var(--color-action-primary)] text-[var(--color-text-primary)]" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"}`}>{item.label}</Link>
+        ))}
+      </nav>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4" aria-label="Marketing overview">
         {[{ label: "Active campaigns", value: "4", detail: "+1 this month", icon: Send }, { label: "Reach this month", value: "18.4k", detail: "+12.6% vs Sep", icon: Users }, { label: "Avg. open rate", value: "38.6%", detail: "+4.2% vs Sep", icon: Mail }, { label: "Qualified leads", value: "126", detail: "+18 this month", icon: ArrowUpRight }].map(({ label, value, detail, icon: Icon }) => (

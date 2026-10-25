@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test tests/*.test.mjs",
+    "test:integration": "node --test tests/integration/*.test.mjs",
+    "marketing:worker": "node --experimental-strip-types scripts/marketing-worker.ts"
+    ,"marketing:social-worker": "node --experimental-strip-types scripts/marketing-social-worker.ts"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.11.3",

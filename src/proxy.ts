@@ -20,6 +20,7 @@ const protectedRoutes = [
   "/admin",
   "/onboarding",
   "/company",
+  "/community",
   "/settings",
 ];
 

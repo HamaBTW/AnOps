@@ -35,6 +35,7 @@ const navigation = [
   { name: "Inventory", href: "/inventory", icon: IconPackage },
   { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
   { name: "Manufacturing", href: "/manufacturing", icon: IconSettings },
+  { name: "Marketing", href: "/marketing", icon: IconNotification },
   { name: "Projects", href: "/projects", icon: IconBarChart },
   { name: "Documents", href: "/documents", icon: IconDocument },
   { name: "Notifications", href: "/notifications", icon: IconNotification },

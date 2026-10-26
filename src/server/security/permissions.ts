@@ -35,6 +35,18 @@ export const PERMISSIONS = {
   FINANCE_EXPENSE_PAY: "finance.expense.pay",
   FINANCE_RECEIPT_OCR: "finance.receipt.ocr",
   FINANCE_REPORT_VIEW: "finance.report.view",
+  MARKETING_READ: "marketing.read",
+  MARKETING_CONTACT_MANAGE: "marketing.contact.manage",
+  MARKETING_TAG_MANAGE: "marketing.tag.manage",
+  MARKETING_AUDIENCE_MANAGE: "marketing.audience.manage",
+  MARKETING_TEMPLATE_MANAGE: "marketing.template.manage",
+  MARKETING_CONSENT_MANAGE: "marketing.consent.manage",
+  MARKETING_CAMPAIGN_MANAGE: "marketing.campaign.manage",
+  MARKETING_CAMPAIGN_APPROVE: "marketing.campaign.approve",
+  MARKETING_CAMPAIGN_DISPATCH: "marketing.campaign.dispatch",
+  MARKETING_SOCIAL_MANAGE: "marketing.social.manage",
+  MARKETING_SOCIAL_PUBLISH: "marketing.social.publish",
+  MARKETING_AI_GENERATE: "marketing.ai.generate",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -65,12 +77,15 @@ const READ_PERMISSIONS: Permission[] = [
   PERMISSIONS.MANUFACTURING_READ,
   PERMISSIONS.FINANCE_READ,
   PERMISSIONS.FINANCE_REPORT_VIEW,
+  PERMISSIONS.MARKETING_READ,
 ];
 
 /**
  * owner/admin: full control, including approvals, manual stock adjustments and HR administration.
  * operator (company manager): day-to-day execution: staff, job titles, attendance, stock moves,
  *   receipts, production. Cannot approve purchase orders or adjust stock counts.
+ *   Marketing: operators draft, manage contacts and social accounts, and generate AI copy.
+ *   Approving and dispatching campaigns (which contact real people) is owner/admin only.
  * viewer (company employee): read-only access to company data.
  */
 const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
@@ -93,6 +108,15 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
     PERMISSIONS.FINANCE_INVOICE_MANAGE,
     PERMISSIONS.FINANCE_EXPENSE_MANAGE,
     PERMISSIONS.FINANCE_RECEIPT_OCR,
+    PERMISSIONS.MARKETING_CONTACT_MANAGE,
+    PERMISSIONS.MARKETING_TAG_MANAGE,
+    PERMISSIONS.MARKETING_AUDIENCE_MANAGE,
+    PERMISSIONS.MARKETING_TEMPLATE_MANAGE,
+    PERMISSIONS.MARKETING_CONSENT_MANAGE,
+    PERMISSIONS.MARKETING_CAMPAIGN_MANAGE,
+    PERMISSIONS.MARKETING_SOCIAL_MANAGE,
+    PERMISSIONS.MARKETING_SOCIAL_PUBLISH,
+    PERMISSIONS.MARKETING_AI_GENERATE,
   ],
   viewer: [...READ_PERMISSIONS],
 };

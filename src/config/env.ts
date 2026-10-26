@@ -25,6 +25,14 @@ const envSchema = z.object({
   EMAIL_SERVER_PASSWORD: z.string().optional(),
   EMAIL_FROM: z.string().min(1).optional(),
   EMAIL_LOGO_URL: z.string().url().optional(),
+
+  // Marketing. All optional: a missing value makes only its integration unavailable, never the app.
+  // Formats are validated where each integration is used (server/marketing/config.ts).
+  FACEBOOK_APP_ID: z.string().min(1).optional(),
+  FACEBOOK_APP_SECRET: z.string().min(1).optional(),
+  SOCIAL_TOKEN_ENCRYPTION_KEY: z.string().min(1).optional(),
+  MARKETING_WEBHOOK_SECRET: z.string().min(1).optional(),
+  MARKETING_WORKER_SECRET: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -42,6 +50,11 @@ function loadEnv(): Env {
     EMAIL_SERVER_PASSWORD: process.env.EMAIL_SERVER_PASSWORD,
     EMAIL_FROM: process.env.EMAIL_FROM,
     EMAIL_LOGO_URL: process.env.EMAIL_LOGO_URL,
+    FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID,
+    FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET,
+    SOCIAL_TOKEN_ENCRYPTION_KEY: process.env.SOCIAL_TOKEN_ENCRYPTION_KEY,
+    MARKETING_WEBHOOK_SECRET: process.env.MARKETING_WEBHOOK_SECRET,
+    MARKETING_WORKER_SECRET: process.env.MARKETING_WORKER_SECRET,
   });
 
   if (!parsed.success) {

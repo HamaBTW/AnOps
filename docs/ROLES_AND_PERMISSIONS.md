@@ -64,6 +64,26 @@ rules in Part B below are the enforced behaviour, and the `hr.*` rows are the ta
 | `finance.expense.pay` (mark approved expense paid) | ✓ | ✓ | | |
 | `finance.receipt.ocr` (upload/scan receipts) | ✓ | ✓ | ✓ | |
 
+### Marketing permissions
+
+| Permission | owner | admin | operator | viewer |
+| --- | :-: | :-: | :-: | :-: |
+| `marketing.read` | ✓ | ✓ | ✓ | ✓ |
+| `marketing.contact.manage` | ✓ | ✓ | ✓ | |
+| `marketing.tag.manage` | ✓ | ✓ | ✓ | |
+| `marketing.audience.manage` | ✓ | ✓ | ✓ | |
+| `marketing.template.manage` | ✓ | ✓ | ✓ | |
+| `marketing.consent.manage` | ✓ | ✓ | ✓ | |
+| `marketing.campaign.manage` | ✓ | ✓ | ✓ | |
+| `marketing.campaign.approve` | ✓ | ✓ | | |
+| `marketing.campaign.dispatch` | ✓ | ✓ | | |
+| `marketing.social.manage` | ✓ | ✓ | ✓ | |
+| `marketing.social.publish` | ✓ | ✓ | ✓ | |
+| `marketing.ai.generate` | ✓ | ✓ | ✓ | |
+
+Approval and dispatch contact real people, so they are owner/admin only. The campaign creator cannot approve their own campaign
+unless they hold dispatch rights. See `docs/MARKETING.md`.
+
 ## 3. HR role (employee record)
 
 HR screens and HR server actions also use an HR role, derived in `src/server/auth/rbac.ts` on every request:

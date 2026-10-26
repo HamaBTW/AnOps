@@ -13,7 +13,7 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const BASE =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[var(--radius-control)] border px-4 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] border px-4 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60";
 
 export function buttonClass(variant: Variant = "secondary", extra?: string): string {
   return cn(BASE, VARIANTS[variant], extra);

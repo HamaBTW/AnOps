@@ -12,6 +12,7 @@ const protectedRoutes = [
   "/inventory",
   "/purchasing",
   "/manufacturing",
+  "/marketing",
   "/hr",
   "/projects",
   "/documents",

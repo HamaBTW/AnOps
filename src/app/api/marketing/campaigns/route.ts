@@ -1,5 +1,40 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { createCampaign, listCampaigns, marketingScopeForUser } from "@/server/services/marketing.service";
-export async function GET() { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { return NextResponse.json(await listCampaigns(await marketingScopeForUser(session.user.email))); } catch { return NextResponse.json({ error: "Unable to load campaigns." }, { status: 500 }); } }
-export async function POST(request: Request) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { return NextResponse.json(await createCampaign(await marketingScopeForUser(session.user.email), await request.json()), { status: 201 }); } catch (error) { if (error instanceof Error && error.message === "AUDIENCE_NOT_FOUND") return NextResponse.json({ error: "Select an active audience from this workspace." }, { status: 404 }); return NextResponse.json({ error: "Invalid campaign data." }, { status: 400 }); } }
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { listCampaigns, createCampaign } from "@/server/services/marketing.service";
+import { isAppError } from "@/shared/lib/errors";
+
+export async function GET() {
+  try {
+    const ctx = await resolveWorkspace();
+    const campaigns = await listCampaigns(ctx);
+    return NextResponse.json(campaigns);
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to load campaigns." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const ctx = await resolveWorkspace();
+    const body: unknown = await request.json();
+    const campaign = await createCampaign(ctx, body);
+    return NextResponse.json(campaign, { status: 201 });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "NOT_FOUND"
+          ? 404
+          : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Invalid campaign data." }, { status: 400 });
+  }
+}

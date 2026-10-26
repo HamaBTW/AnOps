@@ -1,8 +1,92 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { cancelDelivery, enqueueCampaignDeliveries, getDeliverySummary, listDeliveries, retryDelivery } from "@/server/marketing/delivery.service";
-import { marketingScopeForUser } from "@/server/services/marketing.service";
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { const id = (await context.params).id; const url = new URL(request.url); const page = Number(url.searchParams.get("page") ?? "1"); return NextResponse.json({ summary: await getDeliverySummary(await marketingScopeForUser(session.user.email), id), deliveries: await listDeliveries(await marketingScopeForUser(session.user.email), id, page) }); } catch { return NextResponse.json({ error: "Unable to load delivery records." }, { status: 404 }); } }
-export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { const result = await enqueueCampaignDeliveries(await marketingScopeForUser(session.user.email), (await context.params).id); return NextResponse.json({ ...result, message: result.providerConfigured ? "Deliveries queued." : "Deliveries are queued, but the provider is not configured; nothing has been sent." }, { status: 202 }); } catch (error) { if (error instanceof Error && error.message === "CAMPAIGN_NOT_ELIGIBLE") return NextResponse.json({ error: "Only approved or scheduled campaigns can be queued." }, { status: 409 }); return NextResponse.json({ error: "Unable to queue deliveries." }, { status: 400 }); } }
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); const body: unknown = await request.json(); const deliveryId = body && typeof body === "object" && "deliveryId" in body && typeof body.deliveryId === "string" ? body.deliveryId : ""; const action = body && typeof body === "object" && "action" in body && typeof body.action === "string" ? body.action : ""; try { if (action === "cancel") await cancelDelivery(await marketingScopeForUser(session.user.email), deliveryId); else if (action === "retry") await retryDelivery(await marketingScopeForUser(session.user.email), deliveryId); else return NextResponse.json({ error: "Unsupported delivery action." }, { status: 400 }); return NextResponse.json({ ok: true }); } catch (error) { if (error instanceof Error && error.message === "NOT_ELIGIBLE") return NextResponse.json({ error: "Delivery is no longer eligible for that action." }, { status: 409 }); return NextResponse.json({ error: "Unable to update delivery." }, { status: 400 }); } }
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import {
+  enqueueCampaignDeliveries,
+  getDeliverySummary,
+  listDeliveries,
+  retryDelivery,
+  cancelDelivery,
+} from "@/server/marketing/delivery.service";
+import { isAppError } from "@/shared/lib/errors";
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const { id } = await context.params;
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const pageSize = Number(url.searchParams.get("pageSize") ?? "20");
+
+    const [summary, deliveries] = await Promise.all([
+      getDeliverySummary(ctx, id),
+      listDeliveries(ctx, id, page, pageSize),
+    ]);
+
+    return NextResponse.json({ summary, deliveries });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 404;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to load delivery records." }, { status: 404 });
+  }
+}
+
+export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const { id } = await context.params;
+    const result = await enqueueCampaignDeliveries(ctx, id);
+    return NextResponse.json(
+      {
+        ...result,
+        message: result.providerConfigured
+          ? "Deliveries queued for sending."
+          : "Deliveries queued, but external provider is unconfigured. No live messages will be sent.",
+      },
+      { status: 202 }
+    );
+  } catch (error) {
+    if (isAppError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "CONFLICT"
+          ? 409
+          : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to queue deliveries." }, { status: 400 });
+  }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const body: any = await request.json();
+    const deliveryId = String(body?.deliveryId ?? "");
+    const action = String(body?.action ?? "");
+
+    if (action === "retry") {
+      const ok = await retryDelivery(ctx, deliveryId);
+      if (!ok) return NextResponse.json({ error: "Delivery not eligible for retry." }, { status: 409 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "cancel") {
+      const ok = await cancelDelivery(ctx, deliveryId);
+      if (!ok) return NextResponse.json({ error: "Delivery not eligible for cancellation." }, { status: 409 });
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: "Unsupported delivery action." }, { status: 400 });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to update delivery." }, { status: 400 });
+  }
+}

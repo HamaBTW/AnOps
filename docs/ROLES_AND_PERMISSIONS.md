@@ -63,6 +63,18 @@ rules in Part B below are the enforced behaviour, and the `hr.*` rows are the ta
 | `finance.expense.approve` (approve/reject) | ✓ | ✓ | | |
 | `finance.expense.pay` (mark approved expense paid) | ✓ | ✓ | | |
 | `finance.receipt.ocr` (upload/scan receipts) | ✓ | ✓ | ✓ | |
+| `marketing.read` (dashboard, contacts, campaigns) | ✓ | ✓ | ✓ | ✓ |
+| `marketing.contacts.manage` (create, edit, archive) | ✓ | ✓ | ✓ | |
+| `marketing.tags.manage` (create, delete tags) | ✓ | ✓ | ✓ | |
+| `marketing.audiences.manage` (create, segment) | ✓ | ✓ | ✓ | |
+| `marketing.templates.manage` (create, edit, version) | ✓ | ✓ | ✓ | |
+| `marketing.campaigns.manage` (draft, schedule, edit) | ✓ | ✓ | ✓ | |
+| `marketing.campaigns.approve` (approve for send) | ✓ | ✓ | | |
+| `marketing.campaigns.dispatch` (enqueue delivery) | ✓ | ✓ | | |
+| `marketing.social.manage` (draft, schedule posts) | ✓ | ✓ | ✓ | |
+| `marketing.social.publish` (publish, retry) | ✓ | ✓ | | |
+| `marketing.ai.generate` (AI copy generation) | ✓ | ✓ | ✓ | |
+| `marketing.export` (CSV data export) | ✓ | ✓ | ✓ | |
 
 ## 3. HR role (employee record)
 

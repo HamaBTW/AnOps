@@ -28,6 +28,20 @@ export const COLLECTIONS = {
   goodsReceipts: "goods_receipts",
   manufacturingBoms: "manufacturing_boms",
   manufacturingWorkOrders: "manufacturing_work_orders",
+  marketingContacts: "marketing_contacts",
+  marketingTags: "marketing_tags",
+  marketingTagAssignments: "marketing_tag_assignments",
+  marketingConsents: "marketing_consents",
+  marketingAudiences: "marketing_audiences",
+  marketingAudienceMembers: "marketing_audience_members",
+  marketingTemplates: "marketing_templates",
+  marketingCampaigns: "marketing_campaigns",
+  marketingCampaignDeliveries: "marketing_campaign_deliveries",
+  marketingCampaignEvents: "marketing_campaign_events",
+  marketingSocialAccounts: "marketing_social_accounts",
+  marketingSocialPosts: "marketing_social_posts",
+  marketingSocialPublishAttempts: "marketing_social_publish_attempts",
+  marketingAiGenerations: "marketing_ai_generations",
 } as const;
 
 /** Every tenant-owned document carries exactly this scope. There is no other tenancy level. */

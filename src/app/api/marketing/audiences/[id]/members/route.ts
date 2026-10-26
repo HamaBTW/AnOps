@@ -1,5 +1,48 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { addAudienceMember, marketingScopeForUser } from "@/server/services/marketing.service";
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { addAudienceMember, removeAudienceMember } from "@/server/services/marketing.service";
+import { isAppError } from "@/shared/lib/errors";
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { await addAudienceMember(await marketingScopeForUser(session.user.email), (await context.params).id, await request.json()); return NextResponse.json({ ok: true }, { status: 201 }); } catch (error) { if (error instanceof Error && error.message === "MEMBER_DUPLICATE") return NextResponse.json({ error: "Contact is already in this audience." }, { status: 409 }); if (error instanceof Error && error.message === "NOT_FOUND") return NextResponse.json({ error: "Audience or contact not found." }, { status: 404 }); return NextResponse.json({ error: "Invalid membership." }, { status: 400 }); } }
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const { id: audienceId } = await context.params;
+    const body: any = await request.json();
+    const contactId = String(body.contactId ?? "");
+    await addAudienceMember(ctx, audienceId, contactId);
+    return NextResponse.json({ ok: true }, { status: 201 });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "NOT_FOUND"
+          ? 404
+          : error.code === "CONFLICT"
+          ? 409
+          : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Invalid membership." }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const { id: audienceId } = await context.params;
+    const url = new URL(request.url);
+    const contactId = url.searchParams.get("contactId") || "";
+    const ok = await removeAudienceMember(ctx, audienceId, contactId);
+    if (!ok) return NextResponse.json({ error: "Member not found." }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to remove member." }, { status: 400 });
+  }
+}

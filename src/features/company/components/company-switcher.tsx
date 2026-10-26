@@ -16,6 +16,7 @@ type CompanySwitcherProps = {
 export function CompanySwitcher({ companies, activeCompanyId }: CompanySwitcherProps) {
   const [open, setOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -38,12 +39,18 @@ export function CompanySwitcher({ companies, activeCompanyId }: CompanySwitcherP
       return;
     }
 
+    setError(null);
     startTransition(async () => {
       const result = await switchCompanyAction(companyId);
       if (result.success) {
         setOpen(false);
+        // The dashboard shell keys its page content by active company, so this
+        // refresh replaces client-held lists as well as server-rendered data.
         router.refresh();
+        return;
       }
+
+      setError(result.error ?? "Unable to switch organization. Please try again.");
     });
   };
 
@@ -71,6 +78,11 @@ export function CompanySwitcher({ companies, activeCompanyId }: CompanySwitcherP
             <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
               Organizations ({companies.length})
             </div>
+            {error && (
+              <p role="alert" className="mx-1.5 mb-1 rounded-[var(--radius-control)] bg-[var(--color-status-error)]/10 px-2 py-1.5 text-xs text-[var(--color-status-error)]">
+                {error}
+              </p>
+            )}
 
             <div className="max-h-56 overflow-y-auto space-y-0.5">
               {companies.map((company) => {

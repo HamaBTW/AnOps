@@ -1,6 +1,44 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { createSocialPost, listSocialPosts } from "@/server/services/social.service";
-import { requireMarketingPermission } from "@/server/services/marketing.service";
-export async function GET(request: Request) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { return NextResponse.json(await listSocialPosts(await requireMarketingPermission(session.user.email, "marketing.social.read"), new URL(request.url).searchParams.get("status") ?? undefined)); } catch { return NextResponse.json({ error: "Unable to load social posts." }, { status: 403 }); } }
-export async function POST(request: Request) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { return NextResponse.json(await createSocialPost(await requireMarketingPermission(session.user.email, "marketing.social.manage"), await request.json()), { status: 201 }); } catch { return NextResponse.json({ error: "Invalid social post data." }, { status: 400 }); } }
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { listSocialPosts, createSocialPost } from "@/server/services/social.service";
+import { isAppError } from "@/shared/lib/errors";
+
+export async function GET(request: Request) {
+  try {
+    const ctx = await resolveWorkspace();
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status") ?? undefined;
+    const posts = await listSocialPosts(ctx, status);
+    return NextResponse.json(posts);
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to load social posts." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const ctx = await resolveWorkspace();
+    const body: unknown = await request.json();
+    const post = await createSocialPost(ctx, body);
+    return NextResponse.json(post, { status: 201 });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "NOT_FOUND"
+          ? 404
+          : error.code === "VALIDATION_ERROR"
+          ? 400
+          : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Invalid social post data." }, { status: 400 });
+  }
+}

@@ -1,5 +1,20 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
+import { resolveWorkspace } from "@/server/tenancy/workspace";
 import { disconnectSocialAccount } from "@/server/services/social-account.service";
-import { requireMarketingPermission } from "@/server/services/marketing.service";
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { await disconnectSocialAccount(await requireMarketingPermission(session.user.email, "marketing.social.accounts.manage"), (await context.params).id); return new NextResponse(null, { status: 204 }); } catch { return NextResponse.json({ error: "Account not found." }, { status: 404 }); } }
+import { isAppError } from "@/shared/lib/errors";
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const { id } = await context.params;
+    const ok = await disconnectSocialAccount(ctx, id);
+    if (!ok) return NextResponse.json({ error: "Social account not found." }, { status: 404 });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 404;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to disconnect account." }, { status: 400 });
+  }
+}

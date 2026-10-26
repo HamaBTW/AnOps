@@ -35,6 +35,19 @@ export const PERMISSIONS = {
   FINANCE_EXPENSE_PAY: "finance.expense.pay",
   FINANCE_RECEIPT_OCR: "finance.receipt.ocr",
   FINANCE_REPORT_VIEW: "finance.report.view",
+  MARKETING_READ: "marketing.read",
+  MARKETING_CONTACTS_MANAGE: "marketing.contacts.manage",
+  MARKETING_CONSENT_MANAGE: "marketing.consent.manage",
+  MARKETING_TAGS_MANAGE: "marketing.tags.manage",
+  MARKETING_AUDIENCES_MANAGE: "marketing.audiences.manage",
+  MARKETING_TEMPLATES_MANAGE: "marketing.templates.manage",
+  MARKETING_CAMPAIGNS_MANAGE: "marketing.campaigns.manage",
+  MARKETING_CAMPAIGNS_APPROVE: "marketing.campaigns.approve",
+  MARKETING_CAMPAIGNS_DISPATCH: "marketing.campaigns.dispatch",
+  MARKETING_SOCIAL_MANAGE: "marketing.social.manage",
+  MARKETING_SOCIAL_PUBLISH: "marketing.social.publish",
+  MARKETING_AI_GENERATE: "marketing.ai.generate",
+  MARKETING_EXPORT: "marketing.export",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -65,12 +78,14 @@ const READ_PERMISSIONS: Permission[] = [
   PERMISSIONS.MANUFACTURING_READ,
   PERMISSIONS.FINANCE_READ,
   PERMISSIONS.FINANCE_REPORT_VIEW,
+  PERMISSIONS.MARKETING_READ,
 ];
 
 /**
  * owner/admin: full control, including approvals, manual stock adjustments and HR administration.
  * operator (company manager): day-to-day execution: staff, job titles, attendance, stock moves,
- *   receipts, production. Cannot approve purchase orders or adjust stock counts.
+ *   receipts, production. Cannot approve purchase orders or adjust stock counts. In marketing, can manage
+ *   contacts, audiences, templates, drafts, and AI generation, but cannot approve/dispatch campaigns or publish social posts.
  * viewer (company employee): read-only access to company data.
  */
 const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
@@ -93,6 +108,15 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
     PERMISSIONS.FINANCE_INVOICE_MANAGE,
     PERMISSIONS.FINANCE_EXPENSE_MANAGE,
     PERMISSIONS.FINANCE_RECEIPT_OCR,
+    PERMISSIONS.MARKETING_CONTACTS_MANAGE,
+    PERMISSIONS.MARKETING_CONSENT_MANAGE,
+    PERMISSIONS.MARKETING_TAGS_MANAGE,
+    PERMISSIONS.MARKETING_AUDIENCES_MANAGE,
+    PERMISSIONS.MARKETING_TEMPLATES_MANAGE,
+    PERMISSIONS.MARKETING_CAMPAIGNS_MANAGE,
+    PERMISSIONS.MARKETING_SOCIAL_MANAGE,
+    PERMISSIONS.MARKETING_AI_GENERATE,
+    PERMISSIONS.MARKETING_EXPORT,
   ],
   viewer: [...READ_PERMISSIONS],
 };

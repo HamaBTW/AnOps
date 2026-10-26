@@ -1,22 +1,42 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { createContact, listContacts, marketingScopeForUser } from "@/server/services/marketing.service";
-import { contactInputSchema } from "@/features/marketing/schemas/marketing.schema";
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { listContacts, createContact } from "@/server/services/marketing.service";
+import { isAppError } from "@/shared/lib/errors";
 
 export async function GET(request: Request) {
-  const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  const url = new URL(request.url); const raw = Object.fromEntries(url.searchParams.entries());
-  try { return NextResponse.json(await listContacts(await marketingScopeForUser(session.user.email), raw)); } catch { return NextResponse.json({ error: "Unable to load contacts." }, { status: 400 }); }
+  try {
+    const ctx = await resolveWorkspace();
+    const url = new URL(request.url);
+    const raw = Object.fromEntries(url.searchParams.entries());
+    const result = await listContacts(ctx, raw);
+    return NextResponse.json(result);
+  } catch (error) {
+    if (isAppError(error)) {
+      const status = error.code === "UNAUTHENTICATED" ? 401 : error.code === "FORBIDDEN" ? 403 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to load contacts." }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
-  const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   try {
-    const body: unknown = await request.json(); const input = contactInputSchema.parse(body);
-    const contact = await createContact(await marketingScopeForUser(session.user.email), input);
+    const ctx = await resolveWorkspace();
+    const body: unknown = await request.json();
+    const contact = await createContact(ctx, body);
     return NextResponse.json(contact, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "CONTACT_DUPLICATE") return NextResponse.json({ error: "A contact with this email or phone already exists." }, { status: 409 });
+    if (isAppError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "CONFLICT"
+          ? 409
+          : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
     return NextResponse.json({ error: "Invalid contact data." }, { status: 400 });
   }
 }

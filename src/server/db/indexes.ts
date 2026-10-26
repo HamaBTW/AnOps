@@ -80,6 +80,75 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, orderNumber: 1 }, name: "wo_number_unique", unique: true },
     { key: { companyId: 1, status: 1, createdAt: -1 }, name: "wo_status_time" },
   ],
+  [COLLECTIONS.marketingContacts]: [
+    {
+      key: { companyId: 1, normalizedEmail: 1 },
+      name: "contact_company_email_unique",
+      unique: true,
+      partialFilterExpression: { normalizedEmail: { $type: "string" } },
+    },
+    {
+      key: { companyId: 1, normalizedPhone: 1 },
+      name: "contact_company_phone_unique",
+      unique: true,
+      partialFilterExpression: { normalizedPhone: { $type: "string" } },
+    },
+    { key: { companyId: 1, isActive: 1, updatedAt: -1 }, name: "contact_active_updated" },
+    { key: { companyId: 1, lifecycleStage: 1, source: 1 }, name: "contact_stage_source" },
+  ],
+  [COLLECTIONS.marketingTags]: [
+    { key: { companyId: 1, normalizedName: 1 }, name: "tag_company_name_unique", unique: true },
+    { key: { companyId: 1, createdAt: -1 }, name: "tag_company_time" },
+  ],
+  [COLLECTIONS.marketingTagAssignments]: [
+    { key: { companyId: 1, contactId: 1, tagId: 1 }, name: "tag_assignment_unique", unique: true },
+    { key: { companyId: 1, tagId: 1 }, name: "tag_assignment_by_tag" },
+    { key: { companyId: 1, contactId: 1 }, name: "tag_assignment_by_contact" },
+  ],
+  [COLLECTIONS.marketingConsents]: [
+    { key: { companyId: 1, contactId: 1, channel: 1, purpose: 1, recordedAt: -1 }, name: "consent_history" },
+    { key: { companyId: 1, contactId: 1, channel: 1, status: 1 }, name: "consent_status" },
+  ],
+  [COLLECTIONS.marketingAudiences]: [
+    { key: { companyId: 1, name: 1 }, name: "audience_company_name_unique", unique: true },
+    { key: { companyId: 1, isActive: 1, updatedAt: -1 }, name: "audience_active_updated" },
+  ],
+  [COLLECTIONS.marketingAudienceMembers]: [
+    { key: { companyId: 1, audienceId: 1, contactId: 1 }, name: "audience_member_unique", unique: true },
+    { key: { companyId: 1, audienceId: 1 }, name: "audience_member_by_audience" },
+  ],
+  [COLLECTIONS.marketingTemplates]: [
+    { key: { companyId: 1, channel: 1, name: 1, version: 1 }, name: "template_channel_name_version_unique", unique: true },
+    { key: { companyId: 1, archived: 1, updatedAt: -1 }, name: "template_active_updated" },
+  ],
+  [COLLECTIONS.marketingCampaigns]: [
+    { key: { companyId: 1, status: 1, scheduledAt: 1 }, name: "campaign_status_scheduled" },
+    { key: { companyId: 1, createdAt: -1 }, name: "campaign_created" },
+  ],
+  [COLLECTIONS.marketingCampaignDeliveries]: [
+    { key: { companyId: 1, campaignId: 1, contactId: 1 }, name: "delivery_campaign_contact_unique", unique: true },
+    { key: { companyId: 1, idempotencyKey: 1 }, name: "delivery_company_idempotency_unique", unique: true },
+    { key: { status: 1, nextAttemptAt: 1, leaseExpiresAt: 1 }, name: "delivery_worker_claim" },
+    { key: { companyId: 1, campaignId: 1, status: 1 }, name: "delivery_campaign_status" },
+  ],
+  [COLLECTIONS.marketingCampaignEvents]: [
+    { key: { provider: 1, providerEventId: 1 }, name: "campaign_event_provider_unique", unique: true, sparse: true },
+    { key: { companyId: 1, deliveryId: 1, occurredAt: -1 }, name: "campaign_event_delivery" },
+  ],
+  [COLLECTIONS.marketingSocialAccounts]: [
+    { key: { companyId: 1, platform: 1, providerAccountId: 1 }, name: "social_account_unique", unique: true },
+    { key: { companyId: 1, connectionStatus: 1 }, name: "social_account_status" },
+  ],
+  [COLLECTIONS.marketingSocialPosts]: [
+    { key: { companyId: 1, status: 1, scheduledAt: 1 }, name: "social_post_status_scheduled" },
+    { key: { status: 1, scheduledAt: 1, socialLeaseExpiresAt: 1 }, name: "social_post_worker_claim" },
+  ],
+  [COLLECTIONS.marketingSocialPublishAttempts]: [
+    { key: { companyId: 1, postId: 1, attemptNumber: 1 }, name: "social_attempt_unique", unique: true },
+  ],
+  [COLLECTIONS.marketingAiGenerations]: [
+    { key: { companyId: 1, createdAt: -1 }, name: "ai_generation_time" },
+  ],
 };
 
 const initialized = new WeakMap<Db, Promise<void>>();
@@ -100,7 +169,22 @@ export function ensureIndexes(db: Db): Promise<void> {
 
 async function createAll(db: Db): Promise<void> {
   for (const [collectionName, indexes] of Object.entries(INDEXES)) {
-    await db.collection(collectionName).createIndexes(indexes);
+    try {
+      await db.collection(collectionName).createIndexes(indexes);
+    } catch (error: any) {
+      if (error && (error.code === 85 || error.codeName === "IndexOptionsConflict")) {
+        console.warn(`[db] index option conflict on ${collectionName}, creating individually...`);
+        for (const idx of indexes) {
+          try {
+            await db.collection(collectionName).createIndex(idx.key, idx as any);
+          } catch (inner: any) {
+            console.warn(`[db] skipped index "${idx.name}" on ${collectionName}: ${inner?.message}`);
+          }
+        }
+      } else {
+        throw error;
+      }
+    }
   }
 }
 

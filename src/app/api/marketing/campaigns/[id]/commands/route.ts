@@ -1,4 +1,42 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { marketingScopeForUser, transitionCampaign } from "@/server/services/marketing.service";
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) { const session = await auth(); if (!session?.user?.email) return NextResponse.json({ error: "Authentication required." }, { status: 401 }); try { const body: unknown = await request.json(); const command = body && typeof body === "object" && "command" in body && typeof body.command === "string" ? body.command : ""; if (!["submit", "approve", "reject", "schedule", "cancel"].includes(command)) return NextResponse.json({ error: "Unsupported campaign command." }, { status: 400 }); const status = await transitionCampaign(await marketingScopeForUser(session.user.email), (await context.params).id, command as "submit" | "approve" | "reject" | "schedule" | "cancel"); return NextResponse.json({ status }); } catch (error) { if (error instanceof Error && error.message === "INVALID_TRANSITION") return NextResponse.json({ error: "This campaign cannot perform that action from its current state." }, { status: 409 }); return NextResponse.json({ error: "Unable to update campaign." }, { status: 400 }); } }
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { transitionCampaign } from "@/server/services/marketing.service";
+import { enqueueCampaignDeliveries } from "@/server/marketing/delivery.service";
+import { isAppError } from "@/shared/lib/errors";
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await resolveWorkspace();
+    const { id } = await context.params;
+    const body: any = await request.json();
+    const command = String(body?.command ?? "");
+
+    if (!["submit", "approve", "reject", "schedule", "dispatch", "cancel", "retry"].includes(command)) {
+      return NextResponse.json({ error: "Unsupported campaign command." }, { status: 400 });
+    }
+
+    const nextStatus = await transitionCampaign(ctx, id, command as any);
+
+    // If dispatching, also enqueue deliveries
+    if (command === "dispatch") {
+      await enqueueCampaignDeliveries(ctx, id);
+    }
+
+    return NextResponse.json({ status: nextStatus });
+  } catch (error) {
+    if (isAppError(error)) {
+      const status =
+        error.code === "UNAUTHENTICATED"
+          ? 401
+          : error.code === "FORBIDDEN"
+          ? 403
+          : error.code === "CONFLICT"
+          ? 409
+          : error.code === "NOT_FOUND"
+          ? 404
+          : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    return NextResponse.json({ error: "Unable to update campaign." }, { status: 400 });
+  }
+}

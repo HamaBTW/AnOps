@@ -265,3 +265,31 @@ import { ai } from "@/server/ai";
 
 const answer = await ai.ask("Summarise attendance for this week", "You are an HR assistant.");
 ```
+
+## Marketing & Social Management Module
+
+The Marketing & Social Management module (`src/features/marketing/` and `src/server/services/marketing*.service.ts` / `src/server/marketing/`) provides multichannel marketing automation, audience segmentation, campaign delivery, and social post publishing.
+
+### 1. Canonical Multi-Tenancy
+- **WorkspaceContext**: All marketing services require a canonical `WorkspaceContext` resolved via `resolveWorkspace()`.
+- **Zero cross-tenant leakage**: Every query and mutation unconditionally scopes by `ctx.companyId`.
+- **Compound unique constraints**: Email and phone uniqueness are enforced per-tenant using compound indexes with `partialFilterExpression` on non-null string values.
+- **Auditing**: All mutations write structured records to the shared audit collection via `recordAudit()`.
+
+### 2. Campaign Delivery Worker Architecture
+- **Enqueueing**: Enqueues recipient delivery records per audience member upon campaign dispatch with unique idempotency keys (`cmp_<campaignId>_<contactId>`).
+- **Distributed Lease Lock**: The background delivery worker claims batches atomically using `findOneAndUpdate` with lease timeouts (`leaseExpiresAt`). Crashed workers release claims automatically once the lease expires.
+- **Last-Second Consent Validation**: Consent is checked twice: first at enqueue time, and re-verified at the millisecond of dispatch. Revoked consent permanently cancels delivery.
+- **Provider Truthfulness**: Delivery returns accurate configured/unconfigured provider state. Fake metrics and simulated deliveries are strictly prohibited.
+- **Webhook Deduplication**: Webhook delivery events are deduplicated via unique compound index (`provider` + `providerEventId`).
+
+### 3. Social Publishing & Secrets Protection
+- **AES-256-GCM Encryption**: OAuth tokens and social secrets are encrypted at rest with `SOCIAL_TOKEN_ENCRYPTION_KEY` using AES-256-GCM with unique 12-byte initialization vectors and authentication tags.
+- **Zero Token Leakage**: Projection filters unconditionally exclude `encryptedAccessToken` and `encryptedRefreshToken` from list and get queries.
+- **Post State Machine**: Lifecycle transitions (`draft` → `scheduled` → `publishing` → `published` / `failed`) are protected by atomic worker claims.
+
+### 4. Background Workers
+- Delivery worker: `npm run marketing:delivery-worker` (`scripts/run-delivery-worker.mjs`)
+- Social worker: `npm run marketing:social-worker` (`scripts/run-social-worker.mjs`)
+- Tenancy migration: `npm run db:migrate-marketing` (`scripts/migrate-marketing-tenancy.mjs`)
+

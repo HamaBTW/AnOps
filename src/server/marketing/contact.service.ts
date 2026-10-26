@@ -8,7 +8,7 @@ import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import type { ContactCreateInput, ContactListQuery, ContactUpdateInput } from "@/features/marketing/schemas/marketing.schema";
 import { normalizeEmail, normalizePhone, searchNameOf } from "@/features/marketing/utils/normalize";
-import { appendConsentEvent, getConsentState, type ConsentDto } from "@/server/marketing/consent.service";
+import { appendConsentEvent, getConsentState, syncConsentStatuses, type ConsentDto } from "@/server/marketing/consent.service";
 import {
   literalRegex,
   MARKETING_PAGE_SIZE,
@@ -273,31 +273,59 @@ export async function updateContact(ctx: WorkspaceContext, contactIdRaw: string,
     updatedAt: new Date(),
   };
 
+  const contacts = ctx.db.collection<ContactDoc>(MARKETING_COLLECTIONS.contacts);
   try {
-    const result = await ctx.db.collection<ContactDoc>(MARKETING_COLLECTIONS.contacts).findOneAndUpdate(
-      { _id: contactId, companyId: ctx.companyId, version: input.expectedVersion },
-      {
-        // Clearing the email removes the dedupe key, so the partial unique index stops applying.
-        $set: normalizedEmail ? { ...changes, normalizedEmail } : changes,
-        ...(normalizedEmail ? {} : { $unset: { normalizedEmail: "" } }),
-        $inc: { version: 1 },
-      },
-      { returnDocument: "after" }
-    );
-    if (!result) {
-      await loadContact(ctx.db, ctx.companyId, contactId);
-      throw new AppError("CONFLICT", "This contact was changed by someone else. Reload and try again.");
-    }
-    await recordAudit(ctx.db, {
-      companyId: ctx.companyId,
-      actorUserId: ctx.userId,
-      action: "marketing.contact.updated",
-      entityType: "marketing_contact",
-      entityId: contactIdRaw,
-      requestId: ctx.requestId,
-      metadata: { isActive: input.isActive, lifecycleStage: input.lifecycleStage },
+    return await withTransaction(ctx.db, async (tx) => {
+      const before = await loadContact(ctx.db, ctx.companyId, contactId);
+      let result: ContactDoc | null;
+      try {
+        result = await contacts.findOneAndUpdate(
+          { _id: contactId, companyId: ctx.companyId, version: input.expectedVersion },
+          {
+            // Clearing the email removes the dedupe key, so the partial unique index stops applying.
+            $set: normalizedEmail ? { ...changes, normalizedEmail } : changes,
+            ...(normalizedEmail ? {} : { $unset: { normalizedEmail: "" } }),
+            $inc: { version: 1 },
+          },
+          { returnDocument: "after", session: tx.session }
+        );
+      } catch (error) {
+        if (isDuplicateKey(error)) throw duplicateEmailError();
+        throw error;
+      }
+      if (!result) {
+        throw new AppError("CONFLICT", "This contact was changed by someone else. Reload and try again.");
+      }
+      tx.onRollback(() => contacts.replaceOne({ _id: contactId }, before));
+
+      // Consent is written in the same transaction, so a failed consent change never leaves a half-saved contact.
+      const consentChanged = await syncConsentStatuses(
+        ctx.db,
+        {
+          companyId: ctx.companyId,
+          contactId,
+          hasAddress: { email: Boolean(result.normalizedEmail), sms: result.phone !== "" },
+          desired: input.consent,
+          recordedBy: ctx.userId,
+          requestId: ctx.requestId,
+        },
+        tx
+      );
+      await recordAudit(
+        ctx.db,
+        {
+          companyId: ctx.companyId,
+          actorUserId: ctx.userId,
+          action: "marketing.contact.updated",
+          entityType: "marketing_contact",
+          entityId: contactIdRaw,
+          requestId: ctx.requestId,
+          metadata: { isActive: input.isActive, lifecycleStage: input.lifecycleStage, consentChanged: consentChanged.join(",") },
+        },
+        tx
+      );
+      return toContactDto(result);
     });
-    return toContactDto(result);
   } catch (error) {
     if (isDuplicateKey(error)) throw duplicateEmailError();
     throw error;

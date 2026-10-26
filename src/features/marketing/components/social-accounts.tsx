@@ -1,10 +1,10 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { disconnectSocialAccountAction, startSocialConnectionAction } from "@/features/marketing/actions/social.action";
 import { Button } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { formatDateTime } from "@/shared/lib/format";
 import type { SocialAccountDto, SocialIntegrationDto } from "@/server/marketing/social/accounts.service";
@@ -32,13 +32,12 @@ export function SocialAccounts({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
 
   const connect = () =>
     startTransition(async () => {
-      setMessage(null);
       const result = await startSocialConnectionAction();
-      if (!result.ok) return setMessage({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       window.location.assign(result.data.authorizationUrl);
     });
 
@@ -46,16 +45,14 @@ export function SocialAccounts({
     if (!window.confirm(`Disconnect "${account.displayName}"? Scheduled posts for this page will be cancelled.`)) return;
     startTransition(async () => {
       const result = await disconnectSocialAccountAction(account.id, { expectedVersion: account.version });
-      if (!result.ok) return setMessage({ kind: "error", text: result.error.message });
-      setMessage({ kind: "success", text: "Account disconnected. Its stored token has been removed." });
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success("Account disconnected. Its stored token has been removed.");
       router.refresh();
     });
   };
 
   return (
     <div className="space-y-4">
-      {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
-      {message && <FormMessage kind={message.kind}>{message.text}</FormMessage>}
 
       {!integration.configured ? (
         <div role="status" className="rounded-[var(--radius-card)] border border-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] p-4 text-sm">

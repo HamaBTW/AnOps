@@ -102,3 +102,20 @@ export function consentLabel(status: "granted" | "withdrawn" | "not_granted"): s
   if (status === "withdrawn") return "Withdrawn";
   return "Not granted";
 }
+
+/** Plain-language guidance shown under each contact field, so the user knows what to enter. */
+export const SOURCE_HINTS: Record<ContactSource, string> = {
+  manual: "You added this person yourself.",
+  import: "Came from a spreadsheet or list you imported.",
+  website: "Signed up or enquired through your website.",
+  referral: "Recommended by an existing customer or partner.",
+  event: "Met at a fair, webinar or event.",
+  other: "Any other origin.",
+};
+
+export const LIFECYCLE_HINTS: Record<LifecycleStage, string> = {
+  lead: "Showed interest, not yet in talks with you.",
+  prospect: "Actively considering buying from you.",
+  customer: "Has bought from you before.",
+  inactive: "No longer engaged. Kept on record for history.",
+};

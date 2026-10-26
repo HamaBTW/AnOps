@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { DashboardShell } from "@/shared/components/layout/dashboard-shell";
+import { ToastProvider } from "@/shared/components/ui/toast";
 import { requireActive } from "@/features/auth/actions/auth.action";
 import { getUserCompanies } from "@/server/services/company.service";
 import { ACTIVE_COMPANY_COOKIE } from "@/server/tenant/context";
@@ -21,15 +22,17 @@ export default async function DashboardLayout({
   const activeCompanyId = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value || companies[0].id;
 
   return (
-    <DashboardShell
-      user={{
-        name: session.user.name ?? "Account",
-        email: session.user.email ?? "",
-      }}
-      companies={companies}
-      activeCompanyId={activeCompanyId}
-    >
-      {children}
-    </DashboardShell>
+    <ToastProvider>
+      <DashboardShell
+        user={{
+          name: session.user.name ?? "Account",
+          email: session.user.email ?? "",
+        }}
+        companies={companies}
+        activeCompanyId={activeCompanyId}
+      >
+        {children}
+      </DashboardShell>
+    </ToastProvider>
   );
 }

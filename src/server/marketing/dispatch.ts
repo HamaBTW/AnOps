@@ -194,6 +194,33 @@ async function dispatchCampaign(ctx: DispatchContext, job: JobDoc): Promise<JobO
 }
 
 /**
+ * Decides whether a failed send may be retried.
+ * - Before the provider was called: nothing was sent, so a retry is safe only for provider-signalled throttling.
+ * - ProviderError.retryable (HTTP 429): the provider did not process the request. Retry.
+ * - A definite rejection (bad request, bad key, not allowlisted): the message was not sent. Fail, no retry.
+ * - Everything else (timeout, network error, 5xx, unreadable reply): the message may have been accepted.
+ *   Fail as AMBIGUOUS_SEND. Retrying could duplicate a message the provider already sent.
+ */
+const DEFINITE_REJECTIONS = new Set(["REQUEST_REJECTED", "AUTH_REJECTED", "NOT_ALLOWLISTED", "INVALID_DESTINATION"]);
+
+export function classifySendFailure(
+  error: unknown,
+  timedOut: boolean,
+  providerCalled: boolean
+): { kind: "retry" | "fail"; code: string } {
+  if (!providerCalled) {
+    return { kind: "fail", code: "CONTENT_INVALID" };
+  }
+  if (error instanceof ProviderError && error.retryable && !timedOut) {
+    return { kind: "retry", code: error.code };
+  }
+  if (error instanceof ProviderError && DEFINITE_REJECTIONS.has(error.code) && !timedOut) {
+    return { kind: "fail", code: error.code };
+  }
+  return { kind: "fail", code: "AMBIGUOUS_SEND" };
+}
+
+/**
  * Sends one delivery. The recipient is checked against the current eligibility rules immediately before
  * the provider call, so a consent withdrawal or suppression after approval still stops the send.
  */
@@ -232,6 +259,7 @@ async function sendDelivery(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+  let providerCalled = false;
   try {
     const unsubscribeUrl = `${getAppUrl()}/unsubscribe?token=${createUnsubscribeToken({
       companyId: campaign.companyId.toHexString(),
@@ -250,6 +278,7 @@ async function sendDelivery(
         unsubscribe_url: unsubscribeUrl,
       }
     );
+    providerCalled = true;
     const result = await provider.send(
       { idempotencyKey: delivery._id.toHexString(), to: eligibility.destination, subject: rendered.subject, text: rendered.text, html: rendered.html },
       { signal: controller.signal }
@@ -268,28 +297,27 @@ async function sendDelivery(
       }
     );
   } catch (error) {
-    const code = controller.signal.aborted
-      ? "TIMEOUT"
-      : error instanceof ProviderError
-      ? error.code
-      : "SEND_FAILED";
-    const retryable = controller.signal.aborted || (error instanceof ProviderError ? error.retryable : true);
-    if (retryable && attempt < MAX_DELIVERY_ATTEMPTS) {
+    const now = new Date();
+    const failure = classifySendFailure(error, controller.signal.aborted, providerCalled);
+    if (failure.kind === "retry" && attempt < MAX_DELIVERY_ATTEMPTS) {
+      // The provider certainly did not process this request, so a later attempt cannot duplicate a message.
       await deliveries.updateOne(
         { _id: delivery._id },
         {
           $set: {
             status: "pending",
             nextAttemptAt: new Date(Date.now() + retryDelayMs(attempt)),
-            lastErrorCode: code,
-            updatedAt: new Date(),
+            lastErrorCode: failure.code,
+            updatedAt: now,
           },
         }
       );
     } else {
+      // Terminal. For AMBIGUOUS_SEND the provider may have accepted the message, so it is never retried
+      // automatically. An operator must check the provider's records before anything else happens.
       await deliveries.updateOne(
         { _id: delivery._id },
-        { $set: { status: "failed", failedAt: new Date(), lastErrorCode: code, nextAttemptAt: null, updatedAt: new Date() } }
+        { $set: { status: "failed", failedAt: now, lastErrorCode: failure.code, nextAttemptAt: null, updatedAt: now } }
       );
     }
   } finally {

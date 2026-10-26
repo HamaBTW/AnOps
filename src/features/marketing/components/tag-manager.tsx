@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -28,7 +29,7 @@ function TagForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [formError, setFormError] = useState<string | null>(null);
+  const toast = useToast();
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<TagInput>({
     resolver: zodResolver(tagInputSchema),
     mode: "onBlur",
@@ -42,9 +43,8 @@ function TagForm({
       className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
       onSubmit={handleSubmit((values) =>
         startTransition(async () => {
-          setFormError(null);
           const result = tagId ? await updateTagAction(tagId, values) : await createTagAction(values);
-          if (!result.ok) return setFormError(result.error.message);
+          if (!result.ok) return toast.fromError(result.error);
           onDone();
           router.refresh();
         })
@@ -69,7 +69,6 @@ function TagForm({
         <input type="hidden" {...register("color")} />
         {errors.color?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.color.message}</p>}
       </fieldset>
-      {formError && <div className="sm:col-span-2"><FormMessage kind="error">{formError}</FormMessage></div>}
       <div className="flex gap-2 sm:col-span-2 sm:justify-end">
         <Button onClick={onDone} disabled={pending}>Cancel</Button>
         <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : submitLabel}</Button>
@@ -81,15 +80,15 @@ function TagForm({
 export function TagManager({ tags, canManage }: { tags: TagDto[]; canManage: boolean }) {
   const router = useRouter();
   const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   const remove = (tag: TagDto) => {
     if (!window.confirm(`Delete the tag "${tag.name}"? It will be removed from ${tag.contactCount} contact(s).`)) return;
     startTransition(async () => {
       const result = await deleteTagAction(tag.id);
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
-      setNotice({ kind: "success", text: `Tag "${tag.name}" deleted.` });
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(`Tag "${tag.name}" deleted.`);
       router.refresh();
     });
   };
@@ -97,7 +96,6 @@ export function TagManager({ tags, canManage }: { tags: TagDto[]; canManage: boo
   return (
     <div className="space-y-5">
       {canManage && editing === null && <Button variant="primary" onClick={() => setEditing("new")}>New tag</Button>}
-      {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
 
       {canManage && editing === "new" && (
         <section aria-labelledby="new-tag" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">

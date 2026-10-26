@@ -1,7 +1,7 @@
 import "server-only";
 import { ObjectId, type Db } from "mongodb";
 import { MARKETING_COLLECTIONS, type ConsentEventDoc, type ConsentSource, type ConsentStateDoc, type ConsentStatus, type ContactDoc } from "@/server/marketing/documents";
-import type { MarketingChannel } from "@/features/marketing/types/constants";
+import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
 import { recordAudit } from "@/server/audit/audit.service";
 import type { Tx } from "@/server/db/transactions";
 import { withTransaction } from "@/server/db/transactions";
@@ -81,17 +81,21 @@ export async function appendConsentEvent(
   const previous = await states.findOne(key, { session: tx?.session });
   const order = args.status === "withdrawn" ? { $lte: args.occurredAt } : { $lt: args.occurredAt };
 
-  let stateChanged = false;
-  try {
-    const result = await states.updateOne(
-      { ...key, occurredAt: order },
-      { $set: { status: args.status, occurredAt: args.occurredAt, eventId, updatedAt: now } },
-      { upsert: true, session: tx?.session }
+  // Never issue an operation that can hit the unique index on the normal path. Inside a transaction a duplicate
+  // key aborts the whole transaction, and the driver retries it for a long time. So: update only when this
+  // event is newer (or equal with a withdrawal), otherwise insert only when no state exists yet.
+  const update = await states.updateOne(
+    { ...key, occurredAt: order },
+    { $set: { status: args.status, occurredAt: args.occurredAt, eventId, updatedAt: now } },
+    { session: tx?.session }
+  );
+  let stateChanged = update.modifiedCount > 0;
+  if (!stateChanged && !previous) {
+    await states.insertOne(
+      { _id: new ObjectId(), ...key, status: args.status, occurredAt: args.occurredAt, eventId, updatedAt: now },
+      { session: tx?.session }
     );
-    stateChanged = result.upsertedCount > 0 || result.modifiedCount > 0;
-  } catch (error) {
-    // A duplicate key means a newer state already exists. The event stays in history.
-    if ((error as { code?: number }).code !== 11000) throw error;
+    stateChanged = true;
   }
 
   if (stateChanged) {
@@ -112,6 +116,62 @@ async function assertContact(db: Db, companyId: ObjectId, contactId: ObjectId): 
     .findOne({ _id: contactId, companyId });
   if (!contact) throw new AppError("NOT_FOUND", "Contact not found");
   return contact;
+}
+
+/**
+ * Brings the stored consent to the statuses chosen on the contact form. Runs inside the caller's
+ * transaction. Only channels whose status actually changes are written, so saving an unrelated field
+ * never adds history. A grant needs an address on that channel. A withdrawal is only written where
+ * consent is currently granted. Returns the channels that changed.
+ */
+export async function syncConsentStatuses(
+  db: Db,
+  args: {
+    companyId: ObjectId;
+    contactId: ObjectId;
+    hasAddress: Record<MarketingChannel, boolean>;
+    desired: Record<MarketingChannel, boolean>;
+    recordedBy: ObjectId;
+    requestId: string;
+  },
+  tx: Tx
+): Promise<MarketingChannel[]> {
+  const states = await db
+    .collection<ConsentStateDoc>(MARKETING_COLLECTIONS.consentStates)
+    .find({ companyId: args.companyId, contactId: args.contactId, purpose: PURPOSE }, { session: tx.session })
+    .toArray();
+  const changed: MarketingChannel[] = [];
+
+  for (const channel of MARKETING_CHANNELS) {
+    const granted = states.some((state) => state.channel === channel && state.status === "granted");
+    const wanted = args.desired[channel];
+    if (wanted === granted) continue;
+
+    if (wanted && !args.hasAddress[channel]) {
+      const message =
+        channel === "email"
+          ? { field: "email", text: "Add an email address before recording email consent" }
+          : { field: "phone", text: "Add a phone number before recording SMS consent" };
+      throw new AppError("VALIDATION_ERROR", message.text, { [message.field]: message.text });
+    }
+
+    await appendConsentEvent(
+      db,
+      {
+        companyId: args.companyId,
+        contactId: args.contactId,
+        channel,
+        status: wanted ? "granted" : "withdrawn",
+        source: "manual",
+        occurredAt: new Date(),
+        recordedBy: args.recordedBy,
+        requestId: args.requestId,
+      },
+      tx
+    );
+    changed.push(channel);
+  }
+  return changed;
 }
 
 /** Records a grant or withdrawal from a company user. Requires marketing.consent.manage. */

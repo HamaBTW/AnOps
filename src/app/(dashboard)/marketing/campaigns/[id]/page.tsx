@@ -9,8 +9,9 @@ import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { CampaignForm } from "@/features/marketing/components/campaign-form";
 import { CampaignActions } from "@/features/marketing/components/campaign-actions";
+import { DeliveryFilter } from "@/features/marketing/components/delivery-filter";
 import { CAMPAIGN_STATUS_LABELS, CAMPAIGN_STATUS_TONE, CHANNEL_LABELS, DELIVERY_STATUS_LABELS, DELIVERY_STATUS_TONE, EXCLUSION_LABELS, ERROR_CODE_MESSAGES } from "@/features/marketing/labels";
-import { DELIVERY_STATUSES, type DeliveryStatus } from "@/features/marketing/types/constants";
+import { type DeliveryStatus } from "@/features/marketing/types/constants";
 import { formatDateTime } from "@/shared/lib/format";
 import { orNotFound } from "@/server/marketing/page-guard";
 import { getConfiguredProviders } from "@/server/marketing/providers";
@@ -42,6 +43,7 @@ export default async function CampaignDetailPage({
   const templateList = templates.map((template) => ({ ...template, channel: campaign.channel }));
   const exclusions = campaign.snapshot?.exclusions ?? {};
   const job = campaign.job;
+  const totalDeliveries = Object.values(campaign.deliverySummary).reduce((sum, count) => sum + count, 0);
 
   return (
     <div className="space-y-6">
@@ -110,16 +112,7 @@ export default async function CampaignDetailPage({
       <section aria-labelledby="deliveries" className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <h2 id="deliveries" className="text-base font-semibold">Deliveries</h2>
-          <form method="get" className="flex items-end gap-2">
-            <div className="space-y-1">
-              <label htmlFor="delivery-status" className="text-xs font-semibold">Filter</label>
-              <select id="delivery-status" name="status" defaultValue={statusParam} className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm">
-                <option value="all">All</option>
-                {DELIVERY_STATUSES.map((status) => <option key={status} value={status}>{DELIVERY_STATUS_LABELS[status]}</option>)}
-              </select>
-            </div>
-            <button type="submit" className={buttonClass("secondary")}>Apply</button>
-          </form>
+          <DeliveryFilter campaignId={id} current={statusParam} matching={deliveries.total} total={totalDeliveries} />
         </div>
         {deliveries.items.length === 0 ? (
           <p className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-control)] p-6 text-sm text-[var(--color-text-secondary)]">No deliveries match.</p>

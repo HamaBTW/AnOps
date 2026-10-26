@@ -1,12 +1,12 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { audienceRuleSchema, type AudienceRuleInput } from "@/features/marketing/schemas/marketing.schema";
 import { createAudienceAction, deleteAudienceAction, previewAudienceAction, updateAudienceAction } from "@/features/marketing/actions/audiences.action";
 import { Button, selectClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import { CONTACT_SOURCES, LIFECYCLE_STAGES, MARKETING_CHANNELS } from "@/features/marketing/types/constants";
 import { CHANNEL_LABELS, EXCLUSION_LABELS, LIFECYCLE_LABELS, SOURCE_LABELS } from "@/features/marketing/labels";
@@ -62,10 +62,10 @@ export function AudienceBuilder({
   const [isActive, setIsActive] = useState(audience?.isActive ?? true);
   const [rule, setRule] = useState<AudienceRuleInput>(audience?.rule ?? { match: "all", conditions: [{ type: "lifecycle_stage", values: ["lead"] }] });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [preview, setPreview] = useState<AudiencePreviewDto | null>(null);
   const [previewChannel, setPreviewChannel] = useState<MarketingChannel>("email");
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
   const firstTag = tags[0]?.id;
 
   const setCondition = (index: number, next: Condition) =>
@@ -85,17 +85,15 @@ export function AudienceBuilder({
 
   const runPreview = () =>
     startTransition(async () => {
-      setNotice(null);
       const parsed = audienceRuleSchema.safeParse(rule);
-      if (!parsed.success) return setNotice({ kind: "error", text: parsed.error.issues[0]?.message ?? "Check the rule." });
+      if (!parsed.success) return toast.error(parsed.error.issues[0]?.message ?? "Check the rule.");
       const result = await previewAudienceAction({ rule: parsed.data, channel: previewChannel });
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       setPreview(result.data);
     });
 
   const save = () =>
     startTransition(async () => {
-      setNotice(null);
       setErrors({});
       const payload = { name, description, isActive, rule };
       const result = audience
@@ -103,10 +101,10 @@ export function AudienceBuilder({
         : await createAudienceAction(payload);
       if (!result.ok) {
         setErrors(result.error.details ?? {});
-        return setNotice({ kind: "error", text: result.error.message });
+        return toast.fromError(result.error);
       }
       if (audience) {
-        setNotice({ kind: "success", text: "Audience saved." });
+        toast.success("Audience saved.");
         router.refresh();
       } else {
         router.push(`/marketing/audiences/${result.data.id}`);
@@ -118,7 +116,7 @@ export function AudienceBuilder({
     if (!audience || !window.confirm(`Delete the audience "${audience.name}"?`)) return;
     startTransition(async () => {
       const result = await deleteAudienceAction(audience.id);
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       router.push("/marketing/audiences");
       router.refresh();
     });
@@ -313,7 +311,6 @@ export function AudienceBuilder({
         )}
       </section>
 
-      {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
 
       {canManage && (
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">

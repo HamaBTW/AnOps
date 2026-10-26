@@ -1,25 +1,24 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { cancelSocialPostAction, deleteSocialPostAction, scheduleSocialPostAction } from "@/features/marketing/actions/social.action";
 import { Button } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
-import { tunisiaLocalToIso } from "@/features/marketing/components/campaign-actions";
+import { tunisiaLocalToIso } from "@/features/marketing/utils/datetime";
 import type { SocialPostDto } from "@/server/marketing/social/post.service";
 import { SOCIAL_POST_STATUS_LABELS } from "@/features/marketing/utils/social-state";
 
 export function SocialPostActions({ post, integrationReady }: { post: SocialPostDto; integrationReady: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
   const [when, setWhen] = useState("");
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const run = (task: () => Promise<{ ok: boolean; error?: { message: string } }>, success: string) =>
     startTransition(async () => {
-      setNotice(null);
       const result = await task();
-      if (!result.ok) return setNotice({ kind: "error", text: result.error?.message ?? "Something went wrong." });
-      setNotice({ kind: "success", text: success });
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(success);
       router.refresh();
     });
 
@@ -39,14 +38,17 @@ export function SocialPostActions({ post, integrationReady }: { post: SocialPost
       {post.lastErrorCode && post.status === "failed" && (
         <p className="text-sm text-[var(--color-status-error)]">Last error: {post.lastErrorCode}. Fix the cause, then schedule again.</p>
       )}
-      {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
 
       {canSchedule && (
         <div className="space-y-3 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-4">
           <label htmlFor="post-when" className="text-sm font-semibold">Publish at (Tunisia time, optional)</label>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <input id="post-when" type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm" />
-            <Button variant="primary" disabled={pending} onClick={() => run(() => scheduleSocialPostAction(post.id, { scheduledAt: tunisiaLocalToIso(when), expectedVersion: post.version }), when ? "Scheduled." : "Queued to publish now.")}>
+            <Button variant="primary" disabled={pending} onClick={() => {
+                const at = tunisiaLocalToIso(when);
+                if (!at.ok) return toast.error("Check the publish time", at.message);
+                run(() => scheduleSocialPostAction(post.id, { scheduledAt: at.iso, expectedVersion: post.version }), when ? "Post scheduled" : "Queued to publish now");
+              }}>
               {when ? "Schedule" : "Publish now"}
             </Button>
           </div>
@@ -66,7 +68,7 @@ export function SocialPostActions({ post, integrationReady }: { post: SocialPost
             if (!window.confirm("Delete this post?")) return;
             startTransition(async () => {
               const result = await deleteSocialPostAction(post.id);
-              if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+              if (!result.ok) return toast.fromError(result.error);
               router.push("/marketing/social");
               router.refresh();
             });

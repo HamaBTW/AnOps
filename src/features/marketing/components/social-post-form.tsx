@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -8,7 +9,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { socialPostInputSchema } from "@/features/marketing/schemas/marketing.schema";
 import { createSocialPostAction, updateSocialPostAction } from "@/features/marketing/actions/social.action";
 import { Button, selectClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { SOCIAL_CONTENT_LIMITS } from "@/features/marketing/utils/social-state";
 import type { SocialPostDto } from "@/server/marketing/social/post.service";
 
@@ -23,7 +23,7 @@ export function SocialPostForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
   const {
     register,
     handleSubmit,
@@ -39,13 +39,12 @@ export function SocialPostForm({
 
   const submit = (values: FormValues) =>
     startTransition(async () => {
-      setNotice(null);
       const result = post
         ? await updateSocialPostAction(post.id, { ...values, expectedVersion: post.version })
         : await createSocialPostAction(values);
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       if (post) {
-        setNotice({ kind: "success", text: "Draft saved." });
+        toast.success("Draft saved.");
         router.refresh();
       } else {
         router.push(`/marketing/social/posts/${result.data.id}`);
@@ -79,7 +78,6 @@ export function SocialPostForm({
           </p>
           {errors.content?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.content.message}</p>}
         </div>
-        {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Link href="/marketing/social" className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm">Back</Link>
           <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : post ? "Save draft" : "Create draft"}</Button>

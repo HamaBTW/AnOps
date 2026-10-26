@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { objectIdSchema, optionalText, pageSchema, requiredText } from "@/shared/lib/schema-primitives";
 import { normalizeEmail, isPlausibleEmail, normalizePhone } from "@/features/marketing/utils/normalize";
+import { parseStrictInstant } from "@/features/marketing/utils/datetime";
 import {
   EMAIL_BODY_MAX,
   EMAIL_SUBJECT_MAX,
@@ -59,18 +60,19 @@ export const contactShape = z
   })
   .strict();
 
-export const contactCreateSchema = contactShape
-  .extend({
-    consent: z
-      .object({
-        email: z.boolean(),
-        sms: z.boolean(),
-      })
-      .strict(),
+/** The consent the user wants on the contact, per channel. Stored status is compared server-side. */
+export const contactConsentShape = z
+  .object({
+    email: z.boolean(),
+    sms: z.boolean(),
   })
   .strict();
 
-export const contactUpdateSchema = contactShape
+export const contactCreateSchema = contactShape
+  .extend({ consent: contactConsentShape })
+  .strict();
+
+export const contactUpdateSchema = contactCreateSchema
   .extend({ expectedVersion: z.number().int().min(1) })
   .strict();
 
@@ -124,10 +126,10 @@ export const consentChangeSchema = z
       .max(40)
       .refine((value) => {
         if (value === "") return true;
-        const time = Date.parse(value);
-        return !Number.isNaN(time) && time <= Date.now() + 5 * 60_000;
-      }, "Enter a valid date that is not in the future")
-      .transform((value) => (value === "" ? "" : new Date(value).toISOString())),
+        const instant = parseStrictInstant(value);
+        return instant !== null && instant.getTime() <= Date.now() + 5 * 60_000;
+      }, "Enter a real date and time that is not in the future")
+      .transform((value) => (value === "" ? "" : (parseStrictInstant(value)?.toISOString() ?? value))),
   })
   .strict();
 

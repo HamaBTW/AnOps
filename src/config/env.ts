@@ -33,6 +33,7 @@ const envSchema = z.object({
   SOCIAL_TOKEN_ENCRYPTION_KEY: z.string().min(1).optional(),
   MARKETING_WEBHOOK_SECRET: z.string().min(1).optional(),
   MARKETING_WORKER_SECRET: z.string().min(1).optional(),
+
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -73,4 +74,43 @@ export function getAppUrl(): string {
 
 export function isEmailConfigured(): boolean {
   return Boolean(env.EMAIL_SERVER_HOST && env.EMAIL_FROM);
+}
+
+/**
+ * Brevo and marketing-delivery settings. Validated lazily on first use, not at startup, so a malformed
+ * value disables only the delivery integration and never stops sign-in or unrelated features.
+ * Errors name variables and rules, never values.
+ */
+const brevoEnvSchema = z.object({
+  BREVO_API_key: z.string().min(1).optional(),
+  BREVO_SENDER_EMAIL: z.string().email().max(254).optional(),
+  BREVO_SENDER_NAME: z.string().min(1).max(80).optional(),
+  BREVO_SMS_SENDER: z.string().max(15).optional(),
+  BREVO_WEBHOOK_TOKEN: z.string().min(1).optional(),
+  BREVO_EMAIL_MARKETING_APPROVED: booleanString.optional(),
+  MARKETING_SEND_ALLOWLIST: z.string().max(2000).optional(),
+});
+
+export type BrevoEnv = z.infer<typeof brevoEnvSchema>;
+
+let brevoEnvCache: { value: BrevoEnv; issues: string[] } | null = null;
+
+export function getBrevoEnv(): { value: BrevoEnv; issues: string[] } {
+  if (brevoEnvCache) return brevoEnvCache;
+  const parsed = brevoEnvSchema.safeParse({
+    BREVO_API_key: process.env.BREVO_API_key,
+    BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL,
+    BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME,
+    BREVO_SMS_SENDER: process.env.BREVO_SMS_SENDER,
+    BREVO_WEBHOOK_TOKEN: process.env.BREVO_WEBHOOK_TOKEN,
+    BREVO_EMAIL_MARKETING_APPROVED: process.env.BREVO_EMAIL_MARKETING_APPROVED,
+    MARKETING_SEND_ALLOWLIST: process.env.MARKETING_SEND_ALLOWLIST,
+  });
+  brevoEnvCache = parsed.success
+    ? { value: parsed.data, issues: [] }
+    : {
+        value: {},
+        issues: parsed.error.issues.map((issue) => `${String(issue.path[0])}: ${issue.message}`),
+      };
+  return brevoEnvCache;
 }

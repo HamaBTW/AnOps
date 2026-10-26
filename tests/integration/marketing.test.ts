@@ -104,10 +104,43 @@ describe("contacts", () => {
 
   it("uses optimistic concurrency on edits", async () => {
     const created = await createContact(owner, parsed(contactCreateSchema, contactInput({ firstName: "Version" })));
-    const edit = { firstName: "Version", lastName: "Two", email: "", phone: "", source: "import", lifecycleStage: "prospect", isActive: true, expectedVersion: created.version };
+    const edit = { firstName: "Version", lastName: "Two", email: "", phone: "", source: "import", lifecycleStage: "prospect", isActive: true, consent: { email: false, sms: false }, expectedVersion: created.version };
     const updated = await updateContact(owner, created.id, parsed((await import("@/features/marketing/schemas/marketing.schema")).contactUpdateSchema, edit));
     expect(updated.version).toBe(created.version + 1);
     await expectCode(updateContact(owner, created.id, parsed((await import("@/features/marketing/schemas/marketing.schema")).contactUpdateSchema, edit)), "CONFLICT");
+  });
+
+  it("syncs email and SMS consent on edit, writing history only for channels that change", async () => {
+    const schema = (await import("@/features/marketing/schemas/marketing.schema")).contactUpdateSchema;
+    const created = await createContact(owner, parsed(contactCreateSchema, contactInput({ firstName: "Edit", email: "edit-consent@example.test", phone: "+21655555555" })));
+    const base = { firstName: "Edit", lastName: "Consent", email: "edit-consent@example.test", phone: "+21655555555", source: "manual", lifecycleStage: "lead", isActive: true };
+
+    const granted = await updateContact(owner, created.id, parsed(schema, { ...base, consent: { email: true, sms: true }, expectedVersion: created.version }));
+    let detail = await getContact(owner, granted.id);
+    expect(detail.consent.email?.status).toBe("granted");
+    expect(detail.consent.sms?.status).toBe("granted");
+    expect(await h.db.collection(MARKETING_COLLECTIONS.consentEvents).countDocuments({ contactId: new ObjectId(created.id) })).toBe(2);
+
+    // Saving again with the same choice must not add history.
+    const unchanged = await updateContact(owner, created.id, parsed(schema, { ...base, consent: { email: true, sms: true }, expectedVersion: granted.version }));
+    expect(await h.db.collection(MARKETING_COLLECTIONS.consentEvents).countDocuments({ contactId: new ObjectId(created.id) })).toBe(2);
+
+    // Withdrawing SMS keeps the email grant and the history.
+    await updateContact(owner, created.id, parsed(schema, { ...base, consent: { email: true, sms: false }, expectedVersion: unchanged.version }));
+    detail = await getContact(owner, created.id);
+    expect(detail.consent.email?.status).toBe("granted");
+    expect(detail.consent.sms?.status).toBe("withdrawn");
+    expect(await h.db.collection(MARKETING_COLLECTIONS.consentEvents).countDocuments({ contactId: new ObjectId(created.id) })).toBe(3);
+  });
+
+  it("refuses an edit that grants consent on a missing address, and saves nothing", async () => {
+    const schema = (await import("@/features/marketing/schemas/marketing.schema")).contactUpdateSchema;
+    const created = await createContact(owner, parsed(contactCreateSchema, contactInput({ firstName: "NoAddress", email: "no-address@example.test" })));
+    const edit = { firstName: "Renamed", lastName: "", email: "", phone: "", source: "manual", lifecycleStage: "lead", isActive: true, consent: { email: true, sms: false }, expectedVersion: created.version };
+    await expectCode(updateContact(owner, created.id, parsed(schema, edit)), "VALIDATION_ERROR");
+    const detail = await getContact(owner, created.id);
+    expect(detail.firstName).toBe("NoAddress");
+    expect(detail.version).toBe(created.version);
   });
 
   it("deletes a contact without history, but only deactivates one with consent history", async () => {
@@ -186,6 +219,19 @@ describe("consent ordering and history", () => {
     expect(await h.db.collection(MARKETING_COLLECTIONS.consentEvents).countDocuments({ contactId })).toBe(3);
     const newer = await appendConsentEvent(h.db, { ...base, status: "granted", occurredAt: new Date("2026-03-01T10:00:00Z") });
     expect(newer.effectiveStatus).toBe("granted");
+  });
+
+  it("records an older consent date through the transactional action quickly, without changing the newer state", async () => {
+    // Regression: an older date used to hit the unique index inside a transaction, which aborted and retried
+    // for a long time. It must now finish at once, keep the newer state, and still keep the history row.
+    const contact = await createContact(owner, parsed(contactCreateSchema, contactInput({ firstName: "OlderDate", email: "older@example.test", consent: { email: true, sms: false } })));
+    const started = Date.now();
+    const result = await changeConsent(owner, contact.id, parsed(consentChangeSchema, { channel: "email", status: "withdrawn", source: "manual", occurredAt: "2020-01-01T09:00:00.000Z" }));
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(result.effectiveStatus).toBe("granted");
+    expect(result.stateChanged).toBe(false);
+    const history = await listConsentHistory(owner, contact.id);
+    expect(history.length).toBe(2);
   });
 
   it("treats equal timestamps as withdrawal-wins", async () => {

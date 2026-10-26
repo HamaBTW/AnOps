@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -8,7 +9,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { templateInputSchema, type TemplateInput } from "@/features/marketing/schemas/marketing.schema";
 import { createTemplateAction, updateTemplateAction } from "@/features/marketing/actions/templates.action";
 import { Button, selectClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
 import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
@@ -30,7 +30,7 @@ const SAMPLE: Record<TemplateVariable, string> = {
 export function TemplateForm({ template, canManage }: { template?: TemplateDto; canManage: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
   const {
     register,
     handleSubmit,
@@ -61,14 +61,13 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
 
   const submit = (values: TemplateInput) =>
     startTransition(async () => {
-      setNotice(null);
       const payload = { ...values, subject: values.channel === "email" ? values.subject : "" };
       const result = template
         ? await updateTemplateAction(template.id, { ...payload, expectedVersion: template.version })
         : await createTemplateAction(payload);
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       if (template) {
-        setNotice({ kind: "success", text: "Template saved. Campaigns that already copied it keep their own text." });
+        toast.success("Template saved. Campaigns that already copied it keep their own text.");
         router.refresh();
       } else {
         router.push(`/marketing/templates/${result.data.id}`);
@@ -135,7 +134,6 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
           Available for new campaigns
         </label>
 
-        {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
         {canManage && (
           <div className="flex justify-end gap-2">
             <Link href="/marketing/templates" className="inline-flex min-h-[44px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm">Back</Link>

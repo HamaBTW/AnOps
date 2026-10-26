@@ -342,3 +342,31 @@ describe("recipient destinations shown to users", () => {
     expect(maskDestination("sms", "+21620123456")).toBe("••••3456");
   });
 });
+
+describe("contact edit form contract", () => {
+  // Regression: the edit form validated against the update schema, which requires expectedVersion. The form
+  // never has that field, so every save failed silently. The form must validate the visible fields only.
+  const visible = {
+    firstName: "Amina",
+    lastName: "Ben Ali",
+    email: "amina@example.test",
+    phone: "+216 20 123 456",
+    source: "manual",
+    lifecycleStage: "customer",
+    isActive: true,
+  };
+  it("keeps the resolver shape free of the version and requires the consent choice on save", async () => {
+    const { contactShape, contactUpdateSchema } = await import("@/features/marketing/schemas/marketing.schema");
+    const withConsent = { ...visible, consent: { email: true, sms: false } };
+    expect(contactShape.safeParse(visible).success).toBe(true);
+    expect(contactUpdateSchema.safeParse(withConsent).success).toBe(false);
+    expect(contactUpdateSchema.safeParse(visible).success).toBe(false);
+    expect(contactUpdateSchema.safeParse({ ...withConsent, expectedVersion: 3 }).success).toBe(true);
+  });
+  it("rejects a malformed phone with a message the field can show", async () => {
+    const { contactShape } = await import("@/features/marketing/schemas/marketing.schema");
+    const result = contactShape.safeParse({ ...visible, phone: "call me" });
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.error.issues[0]?.path).toEqual(["phone"]);
+  });
+});

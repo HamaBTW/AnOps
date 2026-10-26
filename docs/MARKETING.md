@@ -16,7 +16,8 @@ listed as implemented here is not implemented.
 | Campaigns (state machine, approval, recipient snapshot, scheduling) | Implemented, tested |
 | Dispatch worker (durable jobs, leases, retries, per-send consent recheck) | Implemented, tested against a fake provider |
 | Delivery events and webhook receiver (signed, deduplicated) | Implemented, tested; not verified against any real provider |
-| Email and SMS sending | **Not connected.** No provider adapter exists. See §9 |
+| SMS sending (Brevo API) | Implemented, unit and integration tested with a fake Brevo client. **Not verified against a live Brevo account.** Requires a registered SMS sender |
+| Email sending (Brevo API) | Implemented, tested with a fake client. Disabled until `BREVO_EMAIL_MARKETING_APPROVED=true`. Policy confirmation pending |
 | Facebook Page connection and publishing | Implemented against Meta's Graph API; **not verified against a live Meta app** |
 | Instagram publishing | Not implemented (needs separate Meta review) |
 | Social posts (draft, schedule, publish, cancel, ambiguous-result handling) | Implemented, tested with a fake publisher |
@@ -163,8 +164,12 @@ Scheduled work is stored as a row in `marketing_jobs` with a `runAt` time. Nothi
 - Campaign dispatch advances at most 20 deliveries per run and requeues itself until none are pending.
 - Per-delivery retry: exponential backoff with full jitter, up to 5 attempts. Permanent errors fail immediately.
 - Job retry: up to 6 attempts, then `dead`. A dead campaign job marks the campaign `failed`.
-- Provider rate limit: `minIntervalMs` on the provider adapter (sequential sends).
+- Provider rate limit: `minIntervalMs` (200 ms) between sends, sequential. Tune to your Brevo plan.
 - Send timeout: 15 seconds per provider call.
+- **Duplicate-send safety:** a delivery is retried only when the provider did not process the request (HTTP 429, or a
+  failure before the provider was called). A timeout, network error, 5xx, or unreadable reply may mean the message was
+  accepted, so the delivery ends as `failed` with code `AMBIGUOUS_SEND` and is never retried automatically. Check
+  the provider's logs before resending. Definite rejections (400, 401/403, not allowlisted) also fail without retry.
 
 **Operating requirement:** an external scheduler must call the worker endpoint every minute:
 
@@ -177,20 +182,43 @@ it cannot verify that a scheduler is calling.
 
 ## 8. Providers, webhooks and what "sent" means
 
-- `src/server/marketing/providers.ts` defines `MessageProvider` and `getConfiguredProviders()`. **The registry is empty.**
-  Campaigns cannot be scheduled for a channel without an adapter, and nothing is reported as sent by a stub.
-- Webhook contract: header `x-anops-signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`, tolerance 300 seconds,
-  body ≤ 16 KB. The company is resolved from the stored delivery by `providerMessageId`, never from the payload.
-  Duplicate `eventId` values are stored once.
-- This is a generic signed contract. Real providers each sign differently; an adapter must translate its format to this
-  contract, or a provider-specific receiver must be added. No provider-specific verification has been implemented.
+- `src/server/marketing/providers.ts` returns an adapter for a channel only when its settings are valid. Otherwise the
+  channel is unconfigured and scheduling is refused. **Nothing is reported as sent unless Brevo returns a message id.**
+- Brevo SMS: `POST https://api.brevo.com/v3/transactionalSMS/send` with `type: "marketing"`. The response `messageId`
+  is stored. Recipients are digits with the country code. The sender must be 11 letters/digits or 15 digits.
+- Brevo email: `POST https://api.brevo.com/v3/smtp/email`, response `messageId`. Offered only when
+  `BREVO_EMAIL_MARKETING_APPROVED=true`. Brevo's policy for marketing mail through this transactional endpoint must be
+  confirmed by the account owner first.
+- Gmail SMTP (`EMAIL_SERVER_*`) is used only for verification and password reset. It is never a campaign provider.
+- **Brevo webhooks are not signed.** Brevo's documentation describes no signature, shared secret or IP allowlist for
+  event callbacks. The receiver is therefore `POST /api/v1/marketing/webhooks/brevo/<BREVO_WEBHOOK_TOKEN>`, with the
+  token compared in constant time. Treat the full URL as a secret. Rotate `BREVO_WEBHOOK_TOKEN` if it leaks. This is a
+  weaker control than a signature.
+- Event dedupe: Brevo events carry no documented unique id per event. A SHA-256 over the event's stable fields is the
+  dedupe key, so a repeated event is stored once. A company is taken from the stored delivery, never the payload.
+- Brevo email events mapped: delivered, hard bounce (bounced), spam (complained), blocked and invalid email (failed),
+  opened, click, unsubscribed. Soft bounces and deferrals are ignored. SMS mapping (`delivered`, `hard_bounce`,
+  `rejected`, `blacklisted`, `unsubscribe`) is based on documented event names. Confirm the exact status strings against
+  a real payload from your account before relying on SMS reporting. Unknown values are ignored.
+- Controlled recipients: set `MARKETING_SEND_ALLOWLIST` for the first live sends. Non-listed destinations are refused
+  before any request is made.
 
 ## 9. Integrations setup
 
-### Email and SMS (not configured)
-Implement `MessageProvider` for the chosen provider, register it in `getConfiguredProviders()`, then set its credentials.
-Choose a provider that supports marketing mail (opt-out handling, bounce and complaint feedback, sender domain
-authentication). Do not reuse the account-verification SMTP account for campaigns.
+### Brevo (SMS and marketing email)
+1. Create the API key in Brevo under SMTP & API. Set `BREVO_API_key`. Do not use Brevo's SMTP key or MCP key here.
+2. Verify the sender domain for email (SPF, DKIM, DMARC) in Brevo, then set `BREVO_SENDER_EMAIL` and `BREVO_SENDER_NAME`.
+3. For SMS, register the sender ID in every country you message (required for accounts created after 13 March 2026, per
+   Brevo's help centre). Set `BREVO_SMS_SENDER`.
+4. Generate `BREVO_WEBHOOK_TOKEN` (for example `openssl rand -base64 48`). In Brevo, add the event callback URL
+   `<NEXTAUTH_URL>/api/v1/marketing/webhooks/brevo/<BREVO_WEBHOOK_TOKEN>`. For SMS, the adapter also sends this URL per
+   message as `webUrl`.
+5. Start with `MARKETING_SEND_ALLOWLIST` set to your own test numbers and addresses. Remove it only after successful
+   controlled sends.
+6. Leave `BREVO_EMAIL_MARKETING_APPROVED=false` until you have confirmed Brevo's policy for this use.
+
+Required live checks before production: a controlled SMS send, a delivered callback, a bounce callback, and an
+unsubscribe callback, each observed in Brevo and in the Campaign delivery list.
 
 ### Facebook Pages
 1. Create a Meta app. Add the *Facebook Login* product. Set the valid OAuth redirect URI to
@@ -256,7 +284,9 @@ social and AI tests mock the Meta configuration, Graph API and AI provider. No r
 
 ## 12. Known limitations
 
-- No email or SMS provider is connected, so no campaign can reach a real recipient. This is the largest gap.
+- Brevo has not been exercised against a live account from this repository. Every Brevo call is mocked in tests.
+- Brevo webhooks are unauthenticated apart from the URL token. Delivery reporting is only as trustworthy as that token.
+- Email marketing through the transactional endpoint is disabled until policy is confirmed.
 - Facebook publishing and OAuth follow Meta's documented endpoints but were not exercised against a live Meta app.
 - Rate limits and AI quotas are per process. They are not global across instances.
 - Provider webhooks use a generic signed contract; no provider-specific verification exists.

@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { MARKETING_COLLECTIONS, type DeliveryDoc, type DeliveryEventDoc, type SuppressionDoc } from "@/server/marketing/documents";
 import type { DeliveryEventType } from "@/features/marketing/types/constants";
 import { type DeliveryWebhookInput } from "@/features/marketing/schemas/marketing.schema";
+import { appendConsentEvent } from "@/server/marketing/consent.service";
 
 export type DeliveryEventOutcome = "recorded" | "duplicate" | "unmatched";
 
@@ -102,4 +103,54 @@ export async function suppress(
   } catch (error) {
     if ((error as { code?: number }).code !== 11000) throw error;
   }
+}
+
+/**
+ * A provider reported that a recipient unsubscribed. Records a withdrawal through the same consent path as
+ * the public link, adds the suppression entry, and stores the event once. The delivery's company and
+ * contact are taken from the stored delivery, never from the provider payload.
+ */
+export async function applyProviderUnsubscribe(
+  db: Db,
+  input: { providerMessageId: string; eventId: string; occurredAt: string },
+  requestId: string,
+  now: Date = new Date()
+): Promise<DeliveryEventOutcome> {
+  const delivery = await db
+    .collection<DeliveryDoc>(MARKETING_COLLECTIONS.deliveries)
+    .findOne({ providerMessageId: input.providerMessageId });
+  if (!delivery) return "unmatched";
+
+  try {
+    await db.collection<DeliveryEventDoc>(MARKETING_COLLECTIONS.deliveryEvents).insertOne({
+      _id: new ObjectId(),
+      companyId: delivery.companyId,
+      campaignId: delivery.campaignId,
+      deliveryId: delivery._id,
+      type: "unsubscribed",
+      providerName: "brevo",
+      providerEventId: input.eventId,
+      occurredAt: new Date(input.occurredAt),
+      receivedAt: now,
+    });
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) return "duplicate";
+    throw error;
+  }
+
+  await appendConsentEvent(
+    db,
+    {
+      companyId: delivery.companyId,
+      contactId: delivery.contactId,
+      channel: delivery.channel,
+      status: "withdrawn",
+      source: "unsubscribe_link",
+      occurredAt: new Date(input.occurredAt),
+      recordedBy: null,
+      requestId,
+    }
+  );
+  await suppress(db, delivery, "unsubscribed", now);
+  return "recorded";
 }

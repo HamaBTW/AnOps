@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm, type Resolver } from "react-hook-form";
@@ -7,7 +8,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { aiRequestSchema, type AiRequestInput } from "@/features/marketing/schemas/marketing.schema";
 import { generateCopyAction } from "@/features/marketing/actions/ai.action";
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import { AI_CHANNELS, AI_LANGUAGES, AI_TONES } from "@/features/marketing/types/constants";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
@@ -26,7 +26,7 @@ const CHANNEL_NAMES: Record<(typeof AI_CHANNELS)[number], string> = { email: CHA
 export function AiCopyForm({ aiReady, initial }: { aiReady: boolean; initial?: Partial<AiRequestInput> }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
   const { register, handleSubmit, formState: { errors } } = useForm<AiRequestInput>({
     resolver: zodResolver(aiRequestSchema) as unknown as Resolver<AiRequestInput>,
     mode: "onBlur",
@@ -42,9 +42,8 @@ export function AiCopyForm({ aiReady, initial }: { aiReady: boolean; initial?: P
 
   const submit = (values: AiRequestInput) =>
     startTransition(async () => {
-      setNotice(null);
       const result = await generateCopyAction(values);
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       router.push(`/marketing/ai/${result.data.id}`);
       router.refresh();
     });
@@ -85,7 +84,6 @@ export function AiCopyForm({ aiReady, initial }: { aiReady: boolean; initial?: P
         <input id="targetAudience" maxLength={300} aria-invalid={Boolean(errors.targetAudience)} className="min-h-[44px] w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm" {...register("targetAudience")} />
         {errors.targetAudience?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.targetAudience.message}</p>}
       </div>
-      {notice && <div className="sm:col-span-2"><FormMessage kind={notice.kind}>{notice.text}</FormMessage></div>}
       <div className="flex justify-end sm:col-span-2">
         <Button type="submit" variant="primary" disabled={pending || !aiReady}>{pending ? "Generating…" : "Generate draft"}</Button>
       </div>

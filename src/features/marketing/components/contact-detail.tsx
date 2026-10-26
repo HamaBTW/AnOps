@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { consentChangeSchema } from "@/features/marketing/schemas/marketing.schema";
 import {
   assignTagsAction,
@@ -13,18 +14,29 @@ import {
   setContactActiveAction,
 } from "@/features/marketing/actions/contacts.action";
 import { Button, selectClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { formatDateTime } from "@/shared/lib/format";
 import { consentLabel, LIFECYCLE_LABELS, SOURCE_LABELS } from "@/features/marketing/labels";
 import { ContactForm } from "@/features/marketing/components/contact-form";
+import { tunisiaLocalToIso } from "@/features/marketing/utils/datetime";
+import { MARKETING_CHANNELS } from "@/features/marketing/types/constants";
 import type { ContactDetailDto } from "@/server/marketing/contact.service";
 import type { ConsentEventDto } from "@/server/marketing/consent.service";
 import type { TagDto } from "@/server/marketing/tag.service";
 import type { MarketingChannel } from "@/features/marketing/types/constants";
-import { useActionFeedback } from "@/features/marketing/components/use-action-feedback";
+import { useToast } from "@/shared/components/ui/toast";
 
-type ConsentForm = { channel: MarketingChannel; status: "granted" | "withdrawn"; source: "manual" | "import" | "form"; occurredAt: string };
+/**
+ * The form holds the browser's local date-time text. It is checked here, on the field, and converted to a UTC
+ * instant only at submit. Server validation still applies to the converted value.
+ */
+const consentFormSchema = z.object({
+  channel: z.enum(MARKETING_CHANNELS),
+  status: z.enum(["granted", "withdrawn"]),
+  source: z.enum(["manual", "import", "form"]),
+  occurredAt: z.string().refine((value) => tunisiaLocalToIso(value).ok, "Enter a complete date and time, or leave it empty."),
+});
+type ConsentForm = z.infer<typeof consentFormSchema>;
 
 /** Full contact view: edit, activate/deactivate, tags, consent with history, and deletion (only without history). */
 export function ContactDetail({
@@ -44,7 +56,7 @@ export function ContactDetail({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const feedback = useActionFeedback();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [tagChoice, setTagChoice] = useState("");
   const assigned = new Set(contact.tags.map((tag) => tag.id));
@@ -52,16 +64,14 @@ export function ContactDetail({
 
   const run = (fn: () => Promise<{ ok: boolean; error?: { message: string } }>, success: string) =>
     startTransition(async () => {
-      feedback.clear();
       const result = await fn();
-      if (!result.ok) return feedback.error(result.error?.message ?? "Something went wrong.");
-      feedback.success(success);
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(success);
       router.refresh();
     });
 
   return (
     <div className="space-y-6">
-      {feedback.message && <FormMessage kind={feedback.message.kind}>{feedback.message.text}</FormMessage>}
 
       <section aria-labelledby="contact-summary" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -167,7 +177,7 @@ export function ContactDetail({
                   if (!window.confirm("Delete this contact permanently?")) return;
                   startTransition(async () => {
                     const result = await deleteContactAction(contact.id);
-                    if (!result.ok) return feedback.error(result.error.message);
+                    if (!result.ok) return toast.fromError(result.error);
                     router.push("/marketing/contacts");
                     router.refresh();
                   });
@@ -195,9 +205,9 @@ function ConsentSection({
   onChanged: () => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const feedback = useActionFeedback();
-  const { register, handleSubmit, watch } = useForm<ConsentForm>({
-    resolver: zodResolver(consentChangeSchema) as never,
+  const toast = useToast();
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<ConsentForm>({
+    resolver: zodResolver(consentFormSchema),
     mode: "onBlur",
     defaultValues: { channel: "email", status: "granted", source: "manual", occurredAt: "" },
   });
@@ -206,15 +216,16 @@ function ConsentSection({
 
   const submit = (values: ConsentForm) =>
     startTransition(async () => {
-      feedback.clear();
+      const when = tunisiaLocalToIso(values.occurredAt);
+      if (!when.ok) return toast.error("Check the date", when.message);
       const result = await changeConsentAction(contact.id, {
         channel: values.channel,
         status: values.status,
         source: values.source,
-        occurredAt: values.occurredAt ? new Date(`${values.occurredAt}:00+01:00`).toISOString() : "",
+        occurredAt: when.iso,
       });
-      if (!result.ok) return feedback.error(result.error.message);
-      feedback.success(values.status === "granted" ? "Consent recorded." : "Consent withdrawn.");
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(values.status === "granted" ? "Consent recorded." : "Consent withdrawn.");
       onChanged();
     });
 
@@ -271,11 +282,23 @@ function ConsentSection({
           </div>
           <div className="space-y-1.5">
             <label htmlFor="consent-when" className="text-sm font-semibold">When it happened (optional)</label>
-            <input id="consent-when" type="datetime-local" className="min-h-[44px] w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm" {...register("occurredAt")} />
-            <p className="text-xs text-[var(--color-text-secondary)]">Times are Tunisia time (UTC+1). Leave empty for now. Older dates never override a newer withdrawal.</p>
+            <input
+              id="consent-when"
+              type="datetime-local"
+              aria-invalid={Boolean(errors.occurredAt)}
+              aria-describedby="consent-when-hint"
+              className={`min-h-[44px] w-full rounded-[var(--radius-control)] border bg-[var(--color-bg-surface)] px-3 text-sm ${errors.occurredAt ? "border-[#c0392b]" : "border-[var(--color-border-control)]"}`}
+              {...register("occurredAt")}
+            />
+            {errors.occurredAt ? (
+              <p role="alert" className="text-xs text-[#c0392b]">{errors.occurredAt.message}</p>
+            ) : (
+              <p id="consent-when-hint" className="text-xs text-[var(--color-text-secondary)]">
+                Optional. Use the date the consent was actually given, in Tunisia time (UTC+1). Leave empty to record it now. A date older than the latest change is kept in history but does not replace it.
+              </p>
+            )}
           </div>
           <p className="text-xs text-[var(--color-text-secondary)] sm:col-span-2">Current {channel === "email" ? "email" : "SMS"} state: {current ? consentLabel(current.status) : consentLabel("not_granted")}</p>
-          {feedback.message && <div className="sm:col-span-2"><FormMessage kind={feedback.message.kind}>{feedback.message.text}</FormMessage></div>}
           <div className="sm:col-span-2 flex justify-end">
             <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : "Record"}</Button>
           </div>

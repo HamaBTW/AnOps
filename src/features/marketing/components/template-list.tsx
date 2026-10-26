@@ -1,11 +1,11 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { deleteTemplateAction, duplicateTemplateAction, setTemplateActiveAction } from "@/features/marketing/actions/templates.action";
 import { Button } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
 import type { TemplateDto } from "@/server/marketing/template.service";
@@ -14,20 +14,18 @@ import type { TemplateDto } from "@/server/marketing/template.service";
 export function TemplateList({ templates, canManage }: { templates: TemplateDto[]; canManage: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
 
   const run = (task: () => Promise<{ ok: boolean; error?: { message: string } }>, success: string) =>
     startTransition(async () => {
-      setNotice(null);
       const result = await task();
-      if (!result.ok) return setNotice({ kind: "error", text: result.error?.message ?? "Something went wrong." });
-      setNotice({ kind: "success", text: success });
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(success);
       router.refresh();
     });
 
   return (
     <div className="space-y-4">
-      {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
       <ul className="divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
         {templates.map((template) => (
           <li key={template.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">

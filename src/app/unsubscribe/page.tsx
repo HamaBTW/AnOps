@@ -3,6 +3,7 @@ import clientPromise from "@/server/db/client";
 import { ensureIndexes } from "@/server/db/indexes";
 import { viewUnsubscribe } from "@/server/marketing/unsubscribe.service";
 import { UnsubscribeConfirm } from "@/features/marketing/components/unsubscribe-confirm";
+import { ToastProvider } from "@/shared/components/ui/toast";
 
 export const metadata: Metadata = { title: "Unsubscribe | AnOps", robots: { index: false, follow: false } };
 
@@ -29,7 +30,9 @@ export default async function UnsubscribePage({ searchParams }: { searchParams: 
         ) : view.alreadyUnsubscribed ? (
           <p className="mt-3 text-sm text-[var(--color-text-secondary)]">You are already unsubscribed from {view.companyName} {view.channel === "email" ? "email" : "SMS"} messages.</p>
         ) : (
-          <UnsubscribeConfirm token={token} companyName={view.companyName} channel={view.channel} />
+          <ToastProvider>
+            <UnsubscribeConfirm token={token} companyName={view.companyName} channel={view.channel} />
+          </ToastProvider>
         )}
       </div>
     </main>

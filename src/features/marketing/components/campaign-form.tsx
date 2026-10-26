@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -9,7 +10,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { campaignInputSchema } from "@/features/marketing/schemas/marketing.schema";
 import { createCampaignAction, updateCampaignAction } from "@/features/marketing/actions/campaigns.action";
 import { Button, selectClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
 import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
@@ -44,7 +44,7 @@ export function CampaignForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
   const [templateChoice, setTemplateChoice] = useState<string>(campaign?.templateId ?? "");
   const {
     register,
@@ -89,14 +89,13 @@ export function CampaignForm({
 
   const submit = (values: CampaignFormValues) =>
     startTransition(async () => {
-      setNotice(null);
       const payload = { ...values, subject: values.channel === "email" ? values.subject : "" };
       const result = campaign
         ? await updateCampaignAction(campaign.id, { ...payload, expectedVersion: campaign.version })
         : await createCampaignAction(payload);
-      if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+      if (!result.ok) return toast.fromError(result.error);
       if (campaign) {
-        setNotice({ kind: "success", text: "Draft saved." });
+        toast.success("Draft saved.");
         router.refresh();
       } else {
         router.push(`/marketing/campaigns/${result.data.id}`);
@@ -150,7 +149,6 @@ export function CampaignForm({
           </p>
         </div>
 
-        {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Link href={campaign ? `/marketing/campaigns/${campaign.id}` : "/marketing/campaigns"} className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm">Back</Link>
           <Button type="submit" variant="primary" disabled={pending || audiences.length === 0}>{pending ? "Saving…" : campaign ? "Save draft" : "Create draft"}</Button>

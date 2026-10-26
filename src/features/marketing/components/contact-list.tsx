@@ -1,11 +1,11 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { assignTagsAction } from "@/features/marketing/actions/contacts.action";
 import { Button, selectClass } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { LIFECYCLE_LABELS, SOURCE_LABELS } from "@/features/marketing/labels";
 import type { ContactDto } from "@/server/marketing/contact.service";
@@ -27,8 +27,8 @@ export function ContactList({
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tagId, setTagId] = useState("");
-  const [message, setMessage] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
   const allSelected = useMemo(() => contacts.length > 0 && contacts.every((contact) => selected.has(contact.id)), [contacts, selected]);
 
   const toggle = (id: string) =>
@@ -41,10 +41,9 @@ export function ContactList({
 
   const applyTag = () =>
     startTransition(async () => {
-      setMessage(null);
       const result = await assignTagsAction({ contactIds: [...selected], tagId });
-      if (!result.ok) return setMessage({ kind: "error", text: result.error.message });
-      setMessage({ kind: "success", text: `Tag added to ${result.data.assigned} contact${result.data.assigned === 1 ? "" : "s"}.` });
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(`Tag added to ${result.data.assigned} contact${result.data.assigned === 1 ? "" : "s"}.`);
       setSelected(new Set());
       router.refresh();
     });
@@ -68,7 +67,6 @@ export function ContactList({
           </div>
         </div>
       )}
-      {message && <FormMessage kind={message.kind}>{message.text}</FormMessage>}
 
       <div className="hidden overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] md:block">
         <table className="w-full min-w-[720px] text-left text-sm">

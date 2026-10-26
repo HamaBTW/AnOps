@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -12,14 +13,10 @@ import {
   submitCampaignAction,
 } from "@/features/marketing/actions/campaigns.action";
 import { Button } from "@/shared/components/ui/button";
-import { FormMessage } from "@/shared/components/ui/form-message";
+import { tunisiaLocalToIso } from "@/features/marketing/utils/datetime";
 import type { CampaignDto } from "@/server/marketing/campaign.service";
 import Link from "next/link";
 
-/** Converts a Tunisia-local datetime-local value to an ISO instant. Tunisia has no daylight saving time (UTC+1). */
-export function tunisiaLocalToIso(value: string): string {
-  return value ? new Date(`${value}:00+01:00`).toISOString() : "";
-}
 
 /**
  * Lifecycle controls. Each button maps to one server action, which re-checks permission and the current
@@ -36,17 +33,16 @@ export function CampaignActions({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
   const [when, setWhen] = useState("");
   const actions = campaign.actions;
   const version = campaign.version;
 
   const run = (task: () => Promise<{ ok: boolean; error?: { message: string }; data?: unknown }>, success: string, after?: (data: unknown) => void) =>
     startTransition(async () => {
-      setNotice(null);
       const result = await task();
-      if (!result.ok) return setNotice({ kind: "error", text: result.error?.message ?? "Something went wrong." });
-      setNotice({ kind: "success", text: success });
+      if (!result.ok) return toast.fromError(result.error);
+      toast.success(success);
       if (after) after(result.data);
       router.refresh();
     });
@@ -56,7 +52,6 @@ export function CampaignActions({
   return (
     <section aria-labelledby="campaign-actions" className="space-y-4 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
       <h2 id="campaign-actions" className="text-base font-semibold">Lifecycle</h2>
-      {notice && <FormMessage kind={notice.kind}>{notice.text}</FormMessage>}
       {none && <p className="text-sm text-[var(--color-text-secondary)]">No actions are available for your role in this state.</p>}
 
       <div className="flex flex-wrap gap-2">
@@ -88,7 +83,7 @@ export function CampaignActions({
             if (!window.confirm("Delete this draft? This cannot be undone.")) return;
             startTransition(async () => {
               const result = await deleteCampaignAction(campaign.id);
-              if (!result.ok) return setNotice({ kind: "error", text: result.error.message });
+              if (!result.ok) return toast.fromError(result.error);
               router.push("/marketing/campaigns");
               router.refresh();
             });
@@ -124,7 +119,11 @@ export function CampaignActions({
                   <label htmlFor="when" className="text-sm font-semibold">Send at (Tunisia time, optional)</label>
                   <input id="when" type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="min-h-[44px] w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm sm:w-auto" />
                 </div>
-                <Button variant="primary" disabled={pending} onClick={() => run(() => scheduleCampaignAction(campaign.id, { scheduledAt: tunisiaLocalToIso(when), expectedVersion: version }), when ? "Scheduled." : "Queued to send now.")}>
+                <Button variant="primary" disabled={pending} onClick={() => {
+                  const at = tunisiaLocalToIso(when);
+                  if (!at.ok) return toast.error("Check the send time", at.message);
+                  run(() => scheduleCampaignAction(campaign.id, { scheduledAt: at.iso, expectedVersion: version }), when ? "Campaign scheduled" : "Queued to send now");
+                }}>
                   {when ? "Schedule" : "Send now"}
                 </Button>
               </div>

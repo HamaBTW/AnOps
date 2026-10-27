@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Megaphone } from "lucide-react";
 import {
   IconGrid,
   IconUsers,
@@ -118,12 +119,13 @@ export function Sidebar({
         </div>
         <ul className="space-y-0.5">
           {navigation.map((item) => {
-            const active = pathname === item.href;
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <li key={item.name}>
                 <Link
                   href={item.href}
                   onClick={onMobileClose}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
                     "group flex items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2.5 min-h-[44px] text-sm transition-colors",
                     active

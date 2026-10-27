@@ -1,53 +1,37 @@
+import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
+import { CustomerManager } from "@/features/finance/components/customer-manager";
+
+export const metadata: Metadata = {
+  title: "Customers | Finance | AnOps ERP",
+  description: "Manage client accounts, billing information, and tax identifiers.",
+};
 
 export default async function FinanceCustomersPage() {
   let customers: any[] = [];
+  let canManage = false;
+
   try {
     const service = await getFinanceService();
     customers = await service.listCustomers();
+    canManage = service.hasPermission("finance.customer.manage");
   } catch {
     customers = [];
+    canManage = false;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
-        <p className="text-sm text-muted-foreground">Manage customers for invoicing</p>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">
+          Customer Accounts
+        </h1>
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          Directory of business clients and accounts for invoicing and receivables
+        </p>
       </div>
 
-      <div className="p-4 bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] rounded-[var(--radius-control)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--color-border-subtle)]">
-                <th className="text-left py-2 pr-4 text-[var(--color-text-secondary)]">Name</th>
-                <th className="text-left py-2 pr-4 text-[var(--color-text-secondary)]">Email</th>
-                <th className="text-left py-2 pr-4 text-[var(--color-text-secondary)]">Phone</th>
-                <th className="text-left py-2 pr-4 text-[var(--color-text-secondary)]">Tax ID</th>
-                <th className="text-left py-2 pr-4 text-[var(--color-text-secondary)]">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-4 text-[var(--color-text-secondary)]">No customers yet</td>
-                </tr>
-              ) : (
-                customers.map((c) => (
-                  <tr key={c.id} className="border-b border-[var(--color-border-subtle)] last:border-0">
-                    <td className="py-2 pr-4 text-[var(--color-text-primary)]">{c.name}</td>
-                    <td className="py-2 pr-4 text-[var(--color-text-primary)]">{c.email || "-"}</td>
-                    <td className="py-2 pr-4 text-[var(--color-text-primary)]">{c.phone || "-"}</td>
-                    <td className="py-2 pr-4 text-[var(--color-text-primary)]">{c.taxId || "-"}</td>
-                    <td className="py-2 pr-4 capitalize text-[var(--color-text-primary)]">{c.status}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <CustomerManager customers={customers} canManage={canManage} />
     </div>
   );
 }

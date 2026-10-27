@@ -47,6 +47,10 @@ export class FinanceService {
     this.permissions = permissionsForRole(workspaceRole);
   }
 
+  hasPermission(permission: import("@/server/security/permissions").Permission): boolean {
+    return this.permissions.has(permission);
+  }
+
   private ensurePermission(permission: import("@/server/security/permissions").Permission) {
     assertPermission(this.permissions, permission);
   }
@@ -54,10 +58,11 @@ export class FinanceService {
   async getDashboard() {
     this.ensurePermission("finance.read");
     const db = await getDb();
+    const todayStr = new Date().toISOString().slice(0, 10);
 
-    const [invoiceAgg, expenseAgg] = await Promise.all([
+    const [invoiceAgg, expenseAgg, overdueAgg, overdueList, monthlyPayments, monthlyExpenses] = await Promise.all([
       db.collection("finance_invoices").aggregate([
-        { $match: { companyId: this.companyId } },
+        { $match: { companyId: this.companyId, status: { $ne: "void" } } },
         {
           $group: {
             _id: null,
@@ -69,25 +74,128 @@ export class FinanceService {
       ]).toArray(),
       db.collection("finance_expenses").aggregate([
         { $match: { companyId: this.companyId } },
-        { $group: { _id: "$status", count: { $sum: 1 } } },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+            amount: { $sum: "$total" },
+          },
+        },
       ]).toArray(),
+      db.collection("finance_invoices").aggregate([
+        {
+          $match: {
+            companyId: this.companyId,
+            status: { $nin: ["paid", "void", "draft"] },
+            dueDate: { $lt: todayStr },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            totalOverdue: { $sum: "$balance" },
+          },
+        },
+      ]).toArray(),
+      db.collection("finance_invoices").aggregate([
+        {
+          $match: {
+            companyId: this.companyId,
+            status: { $nin: ["paid", "void", "draft"] },
+            dueDate: { $lt: todayStr },
+          },
+        },
+        {
+          $lookup: {
+            from: "finance_customers",
+            localField: "customerId",
+            foreignField: "_id",
+            as: "customer",
+          },
+        },
+        { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
+        { $sort: { dueDate: 1 } },
+        { $limit: 5 },
+      ]).toArray(),
+      db.collection("finance_payments").find({
+        companyId: this.companyId,
+      }).sort({ paymentDate: -1 }).toArray(),
+      db.collection("finance_expenses").find({
+        companyId: this.companyId,
+        status: { $in: ["approved", "paid"] },
+      }).sort({ expenseDate: -1 }).toArray(),
     ]);
 
     const inv = (invoiceAgg[0] as any) || { totalInvoiced: 0, totalPaid: 0, outstanding: 0 };
-    const expenses: Record<string, number> = {};
+    const expensesCount: Record<string, number> = {};
+    const expensesAmount: Record<string, number> = {};
     for (const e of expenseAgg) {
-      expenses[(e as any)._id as string] = (e as any).count as number;
+      expensesCount[(e as any)._id as string] = (e as any).count || 0;
+      expensesAmount[(e as any)._id as string] = (e as any).amount || 0;
     }
+
+    const overdueData = (overdueAgg[0] as any) || { count: 0, totalOverdue: 0 };
+
+    // Format last 6 months timeline
+    const now = new Date();
+    const monthlySummary: Array<{
+      monthKey: string;
+      label: string;
+      income: number;
+      expenses: number;
+      net: number;
+    }> = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthNum = String(d.getMonth() + 1).padStart(2, "0");
+      const monthKey = `${year}-${monthNum}`;
+      const label = d.toLocaleString("default", { month: "short", year: "numeric" });
+
+      const incomeInMonth = monthlyPayments
+        .filter((p: any) => typeof p.paymentDate === "string" && p.paymentDate.startsWith(monthKey))
+        .reduce((acc: number, cur: any) => acc + (Number(cur.amount) || 0), 0);
+
+      const expensesInMonth = monthlyExpenses
+        .filter((e: any) => typeof e.expenseDate === "string" && e.expenseDate.startsWith(monthKey))
+        .reduce((acc: number, cur: any) => acc + (Number(cur.total) || 0), 0);
+
+      monthlySummary.push({
+        monthKey,
+        label,
+        income: incomeInMonth,
+        expenses: expensesInMonth,
+        net: incomeInMonth - expensesInMonth,
+      });
+    }
+
+    const totalExpensesPaid = expensesAmount.paid || 0;
+    const netCashFlow = (inv.totalPaid || 0) - totalExpensesPaid;
 
     return {
       totalInvoiced: inv.totalInvoiced || 0,
       totalPaid: inv.totalPaid || 0,
       outstanding: inv.outstanding || 0,
-      overdue: 0,
-      expensesDraft: expenses.draft || 0,
-      expensesSubmitted: expenses.submitted || 0,
-      expensesApproved: expenses.approved || 0,
-      expensesPaid: expenses.paid || 0,
+      overdue: overdueData.totalOverdue || 0,
+      overdueCount: overdueData.count || 0,
+      topOverdueInvoices: overdueList.map((d: any) => ({
+        id: d._id.toString(),
+        invoiceNumber: d.invoiceNumber,
+        customerName: d.customer?.name || "Direct Customer",
+        dueDate: d.dueDate,
+        balance: d.balance || 0,
+        currency: d.currency || "TND",
+      })),
+      expensesDraft: expensesCount.draft || 0,
+      expensesSubmitted: expensesCount.submitted || 0,
+      expensesApproved: expensesCount.approved || 0,
+      expensesPaid: expensesCount.paid || 0,
+      totalExpensesAmount: Object.values(expensesAmount).reduce((a, b) => a + b, 0),
+      totalExpensesPaidAmount: totalExpensesPaid,
+      netCashFlow,
+      monthlySummary,
       currency: "TND",
     };
   }
@@ -116,6 +224,31 @@ export class FinanceService {
     }));
   }
 
+  async getCustomer(customerId: string) {
+    this.ensurePermission("finance.read");
+    if (!ObjectId.isValid(customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer ID");
+    const db = await getDb();
+    const d = await db.collection("finance_customers").findOne({
+      _id: new ObjectId(customerId),
+      companyId: this.companyId,
+    });
+    if (!d) throw new AppError("NOT_FOUND", "Customer not found");
+
+    return {
+      id: d._id.toString(),
+      companyId: d.companyId.toString(),
+      name: d.name,
+      email: d.email,
+      phone: d.phone,
+      taxId: d.taxId,
+      address: d.address,
+      notes: d.notes,
+      status: d.status,
+      createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
+      updatedAt: d.updatedAt?.toISOString?.() || new Date().toISOString(),
+    };
+  }
+
   async createCustomer(input: { name: string; email?: string; phone?: string; taxId?: string; address?: string; notes?: string; status?: "active" | "inactive" }, userId: string) {
     this.ensurePermission("finance.customer.manage");
     const db = await getDb();
@@ -140,6 +273,79 @@ export class FinanceService {
     return result.insertedId.toString();
   }
 
+  async updateCustomer(
+    customerId: string,
+    input: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      taxId?: string;
+      address?: string;
+      notes?: string;
+      status?: "active" | "inactive";
+    },
+    userId: string
+  ) {
+    this.ensurePermission("finance.customer.manage");
+    if (!ObjectId.isValid(customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer ID");
+    const db = await getDb();
+    const now = new Date();
+
+    const updateFields: Record<string, any> = {
+      updatedAt: now,
+      updatedBy: userId,
+    };
+    if (input.name !== undefined) updateFields.name = input.name.trim();
+    if (input.email !== undefined) updateFields.email = input.email?.trim() || undefined;
+    if (input.phone !== undefined) updateFields.phone = input.phone?.trim() || undefined;
+    if (input.taxId !== undefined) updateFields.taxId = input.taxId?.trim() || undefined;
+    if (input.address !== undefined) updateFields.address = input.address?.trim() || undefined;
+    if (input.notes !== undefined) updateFields.notes = input.notes?.trim() || undefined;
+    if (input.status !== undefined) updateFields.status = input.status;
+
+    const res = await db.collection("finance_customers").updateOne(
+      { _id: new ObjectId(customerId), companyId: this.companyId },
+      { $set: updateFields }
+    );
+
+    if (res.matchedCount === 0) throw new AppError("NOT_FOUND", "Customer not found");
+    return { success: true };
+  }
+
+  async deleteCustomer(customerId: string, userId: string) {
+    this.ensurePermission("finance.customer.manage");
+    if (!ObjectId.isValid(customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer ID");
+    const db = await getDb();
+
+    // Check if customer has any invoices
+    const invoiceCount = await db.collection("finance_invoices").countDocuments({
+      companyId: this.companyId,
+      customerId: new ObjectId(customerId),
+    });
+
+    if (invoiceCount > 0) {
+      // Customer has historical invoices: soft-deactivate to protect financial integrity
+      const now = new Date();
+      await db.collection("finance_customers").updateOne(
+        { _id: new ObjectId(customerId), companyId: this.companyId },
+        { $set: { status: "inactive", updatedAt: now, updatedBy: userId } }
+      );
+      return {
+        success: true,
+        deactivated: true,
+        message: `Customer is linked to ${invoiceCount} invoice(s) and was deactivated to preserve financial records.`,
+      };
+    }
+
+    const res = await db.collection("finance_customers").deleteOne({
+      _id: new ObjectId(customerId),
+      companyId: this.companyId,
+    });
+
+    if (res.deletedCount === 0) throw new AppError("NOT_FOUND", "Customer not found");
+    return { success: true, deactivated: false };
+  }
+
   async listInvoices() {
     this.ensurePermission("finance.read");
     const db = await getDb();
@@ -150,10 +356,31 @@ export class FinanceService {
       .limit(100)
       .toArray();
 
+    // Collect customer IDs for lookup
+    const customerIds = docs
+      .map((d: any) => d.customerId)
+      .filter((id: any) => id && ObjectId.isValid(id));
+
+    const customerMap = new Map<string, { id: string; name: string; email?: string }>();
+    if (customerIds.length > 0) {
+      const customers = await db
+        .collection("finance_customers")
+        .find({ _id: { $in: customerIds }, companyId: this.companyId })
+        .toArray();
+      for (const c of customers) {
+        customerMap.set(c._id.toString(), {
+          id: c._id.toString(),
+          name: c.name,
+          email: c.email,
+        });
+      }
+    }
+
     return docs.map((d: any) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
       customerId: d.customerId?.toString(),
+      customer: d.customerId ? customerMap.get(d.customerId.toString()) : undefined,
       invoiceNumber: d.invoiceNumber,
       status: d.status,
       currency: d.currency,
@@ -168,6 +395,25 @@ export class FinanceService {
     }));
   }
 
+  async listInvoiceableProducts() {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const docs = await db
+      .collection("inventory_products")
+      .find({ companyId: this.companyId, isActive: true })
+      .sort({ name: 1 })
+      .limit(200)
+      .toArray();
+
+    return docs.map((d: any) => ({
+      id: d._id.toString(),
+      name: d.name,
+      sku: d.sku,
+      unitPrice: d.salePriceMilli ? d.salePriceMilli / 1000 : 0,
+      description: d.description || d.name,
+    }));
+  }
+
   async createInvoiceDraft(input: {
     customerId: string;
     currency?: string;
@@ -175,7 +421,7 @@ export class FinanceService {
     dueDate?: string;
     notes?: string;
     terms?: string;
-    lines: Array<{ description: string; quantity: number; unitPrice: number; taxRate?: number }>;
+    lines: Array<{ productId?: string; description: string; quantity: number; unitPrice: number; taxRate?: number }>;
   }, userId: string) {
     this.ensurePermission("finance.invoice.manage");
     if (!ObjectId.isValid(input.customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer");
@@ -203,8 +449,9 @@ export class FinanceService {
       total: totals.total,
       amountPaid: 0,
       balance: totals.total,
-      lines: input.lines.map((l, idx) => ({
+      lines: input.lines.map((l) => ({
         _id: new ObjectId(),
+        productId: l.productId && ObjectId.isValid(l.productId) ? new ObjectId(l.productId) : undefined,
         description: l.description.trim(),
         quantity: l.quantity,
         unitPrice: l.unitPrice,
@@ -251,23 +498,256 @@ export class FinanceService {
     return { success: true };
   }
 
-  async listExpenses() {
+  async getInvoice(invoiceId: string) {
+    this.ensurePermission("finance.read");
+    if (!ObjectId.isValid(invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice ID");
+    const db = await getDb();
+    const inv = await db.collection("finance_invoices").findOne({
+      _id: new ObjectId(invoiceId),
+      companyId: this.companyId,
+    });
+    if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
+
+    // Fetch Customer
+    let customer: any = null;
+    if (inv.customerId && ObjectId.isValid(inv.customerId)) {
+      const c = await db.collection("finance_customers").findOne({
+        _id: new ObjectId(inv.customerId),
+        companyId: this.companyId,
+      });
+      if (c) {
+        customer = {
+          id: c._id.toString(),
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          taxId: c.taxId,
+          address: c.address,
+        };
+      }
+    }
+
+    // Fetch Company details
+    const company = await db.collection("companies").findOne({ _id: this.companyId });
+
+    // Fetch Payments allocated to this invoice
+    const allocations = await db
+      .collection("finance_payment_allocations")
+      .find({ invoiceId: new ObjectId(invoiceId), companyId: this.companyId })
+      .toArray();
+
+    return {
+      id: inv._id.toString(),
+      companyId: inv.companyId.toString(),
+      customerId: inv.customerId?.toString(),
+      customer,
+      company: company
+        ? {
+            name: company.name,
+            address: company.address,
+            taxId: company.taxId || company.matriculeFiscale,
+            email: company.email,
+            phone: company.phone,
+          }
+        : null,
+      invoiceNumber: inv.invoiceNumber,
+      status: inv.status,
+      currency: inv.currency,
+      issueDate: inv.issueDate,
+      dueDate: inv.dueDate,
+      notes: inv.notes,
+      terms: inv.terms,
+      subtotal: inv.subtotal || 0,
+      taxTotal: inv.taxTotal || 0,
+      total: inv.total || 0,
+      amountPaid: inv.amountPaid || 0,
+      balance: inv.balance || 0,
+      lines: (inv.lines || []).map((l: any) => ({
+        id: l._id?.toString() || String(Math.random()),
+        productId: l.productId?.toString(),
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        taxRate: l.taxRate || 0,
+        lineTotal: l.lineTotal,
+      })),
+      postedAt: inv.postedAt?.toISOString?.(),
+      voidedAt: inv.voidedAt?.toISOString?.(),
+      voidReason: inv.voidReason,
+      createdAt: inv.createdAt?.toISOString?.(),
+      allocations: allocations.map((a: any) => ({
+        id: a._id.toString(),
+        paymentId: a.paymentId.toString(),
+        amount: a.amount,
+        allocatedAt: a.allocatedAt?.toISOString?.() || new Date().toISOString(),
+      })),
+    };
+  }
+
+  async exportInvoicesCsv() {
+    this.ensurePermission("finance.read");
+    const invoices = await this.listInvoices();
+    const headers = [
+      "Invoice Number",
+      "Customer",
+      "Status",
+      "Issue Date",
+      "Due Date",
+      "Currency",
+      "Subtotal",
+      "Tax",
+      "Total",
+      "Amount Paid",
+      "Balance",
+    ];
+
+    const rows = invoices.map((inv: any) => [
+      `"${inv.invoiceNumber}"`,
+      `"${(inv.customer?.name || "Direct Customer").replace(/"/g, '""')}"`,
+      `"${inv.status}"`,
+      `"${inv.issueDate || ""}"`,
+      `"${inv.dueDate || ""}"`,
+      `"${inv.currency}"`,
+      inv.subtotal.toFixed(2),
+      inv.taxTotal.toFixed(2),
+      inv.total.toFixed(2),
+      inv.amountPaid.toFixed(2),
+      inv.balance.toFixed(2),
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    return csvContent;
+  }
+
+  async listExpenseCategories() {
     this.ensurePermission("finance.read");
     const db = await getDb();
-    const docs = await db.collection("finance_expenses").find({ companyId: this.companyId }).sort({ expenseDate: -1 }).limit(100).toArray();
+    let categories = await db
+      .collection("finance_expense_categories")
+      .find({ companyId: this.companyId })
+      .sort({ name: 1 })
+      .toArray();
+
+    // If no categories yet, seed standard defaults
+    if (categories.length === 0) {
+      const defaults = [
+        "Office & Supplies",
+        "Software & Cloud",
+        "Travel & Transport",
+        "Hardware & Equipment",
+        "Marketing & Ads",
+        "Utilities & Rent",
+        "Meals & Entertainment",
+        "Legal & Accounting",
+        "Other",
+      ];
+      const now = new Date();
+      const docs = defaults.map((name) => ({
+        companyId: this.companyId,
+        name,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      await db.collection("finance_expense_categories").insertMany(docs);
+      categories = await db
+        .collection("finance_expense_categories")
+        .find({ companyId: this.companyId })
+        .sort({ name: 1 })
+        .toArray();
+    }
+
+    return categories.map((c: any) => ({
+      id: c._id.toString(),
+      companyId: c.companyId.toString(),
+      name: c.name,
+      active: c.active !== false,
+      createdAt: c.createdAt?.toISOString?.() || new Date().toISOString(),
+    }));
+  }
+
+  async createExpenseCategory(name: string) {
+    this.ensurePermission("finance.expense.manage");
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length < 2) throw new AppError("VALIDATION_ERROR", "Category name is required");
+    const db = await getDb();
+    const now = new Date();
+    const res = await db.collection("finance_expense_categories").insertOne({
+      companyId: this.companyId,
+      name: trimmed,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return res.insertedId.toString();
+  }
+
+  async listExpenses(statusFilter?: string) {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const query: Record<string, any> = { companyId: this.companyId };
+    if (statusFilter && statusFilter !== "all") {
+      query.status = statusFilter;
+    }
+    const docs = await db
+      .collection("finance_expenses")
+      .find(query)
+      .sort({ expenseDate: -1 })
+      .limit(200)
+      .toArray();
+
+    // Collect category IDs
+    const categoryIds = docs
+      .map((d: any) => d.categoryId)
+      .filter((id: any) => id && ObjectId.isValid(id));
+
+    const categoryMap = new Map<string, string>();
+    if (categoryIds.length > 0) {
+      const cats = await db
+        .collection("finance_expense_categories")
+        .find({ _id: { $in: categoryIds }, companyId: this.companyId })
+        .toArray();
+      for (const c of cats) {
+        categoryMap.set(c._id.toString(), c.name);
+      }
+    }
+
     return docs.map((d: any) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
+      categoryId: d.categoryId?.toString(),
+      categoryName: d.categoryId ? categoryMap.get(d.categoryId.toString()) : undefined,
       expenseDate: d.expenseDate,
       vendor: d.vendor,
       description: d.description,
-      amount: d.amount,
-      tax: d.tax,
-      total: d.total,
-      currency: d.currency,
+      amount: d.amount || 0,
+      tax: d.tax || 0,
+      total: d.total || 0,
+      currency: d.currency || "TND",
       status: d.status,
+      receiptDocumentId: d.receiptDocumentId?.toString(),
+      notes: d.notes,
+      rejectionReason: d.rejectionReason,
       createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
     }));
+  }
+
+  async exportExpensesCsv() {
+    this.ensurePermission("finance.read");
+    const expenses = await this.listExpenses();
+    const headers = ["Date", "Vendor", "Category", "Description", "Status", "Currency", "Amount", "Tax", "Total"];
+    const rows = expenses.map((e: any) => [
+      `"${e.expenseDate || ""}"`,
+      `"${(e.vendor || "N/A").replace(/"/g, '""')}"`,
+      `"${(e.categoryName || "Uncategorized").replace(/"/g, '""')}"`,
+      `"${(e.description || "").replace(/"/g, '""')}"`,
+      `"${e.status}"`,
+      `"${e.currency}"`,
+      (e.amount || 0).toFixed(2),
+      (e.tax || 0).toFixed(2),
+      (e.total || 0).toFixed(2),
+    ]);
+    return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   }
 
   async createExpense(input: any, userId: string) {
@@ -459,6 +939,121 @@ export class FinanceService {
       );
     }
 
+    return { success: true };
+  }
+
+  async listUnpaidInvoices() {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const docs = await db
+      .collection("finance_invoices")
+      .find({
+        companyId: this.companyId,
+        status: { $in: ["posted", "partially_paid"] },
+        balance: { $gt: 0 },
+      })
+      .sort({ dueDate: 1, createdAt: 1 })
+      .toArray();
+
+    const customerIds = docs.map((d: any) => d.customerId).filter((id: any) => id && ObjectId.isValid(id));
+    const customerMap = new Map<string, string>();
+    if (customerIds.length > 0) {
+      const customers = await db.collection("finance_customers").find({ _id: { $in: customerIds } }).toArray();
+      for (const c of customers) customerMap.set(c._id.toString(), c.name);
+    }
+
+    return docs.map((d: any) => ({
+      id: d._id.toString(),
+      invoiceNumber: d.invoiceNumber,
+      customerId: d.customerId?.toString(),
+      customerName: d.customerId ? customerMap.get(d.customerId.toString()) : "Direct Customer",
+      total: d.total || 0,
+      amountPaid: d.amountPaid || 0,
+      balance: d.balance || 0,
+      currency: d.currency || "TND",
+      dueDate: d.dueDate,
+    }));
+  }
+
+  async exportPaymentsCsv() {
+    this.ensurePermission("finance.read");
+    const payments = await this.listPayments();
+    const headers = ["Payment Date", "Method", "Reference", "Currency", "Amount", "Unallocated Amount"];
+    const rows = payments.map((p: any) => [
+      `"${p.paymentDate || ""}"`,
+      `"${p.method || ""}"`,
+      `"${(p.reference || "").replace(/"/g, '""')}"`,
+      `"${p.currency}"`,
+      (p.amount || 0).toFixed(2),
+      (p.unallocatedAmount || 0).toFixed(2),
+    ]);
+    return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  }
+
+  async listReceiptExtractions() {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const docs = await db.collection("finance_receipt_extractions").aggregate([
+      { $match: { companyId: this.companyId } },
+      {
+        $lookup: {
+          from: "finance_receipt_documents",
+          localField: "receiptDocumentId",
+          foreignField: "_id",
+          as: "doc",
+        },
+      },
+      { $unwind: { path: "$doc", preserveNullAndEmptyArrays: true } },
+      { $sort: { createdAt: -1 } },
+      { $limit: 50 },
+    ]).toArray();
+
+    return docs.map((d: any) => ({
+      id: d._id.toString(),
+      receiptDocumentId: d.receiptDocumentId?.toString() || "",
+      originalName: d.doc?.originalName || "Receipt File",
+      mimeType: d.doc?.mimeType || "application/octet-stream",
+      size: d.doc?.size || 0,
+      proposed: d.proposed || {},
+      rawText: d.rawText || "",
+      reviewed: !!d.reviewed,
+      createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
+    }));
+  }
+
+  async deleteReceiptExtraction(id: string) {
+    this.ensurePermission("finance.receipt.ocr");
+    if (!ObjectId.isValid(id)) throw new AppError("VALIDATION_ERROR", "Invalid extraction ID");
+    const db = await getDb();
+    const ext = await db.collection("finance_receipt_extractions").findOne({
+      _id: new ObjectId(id),
+      companyId: this.companyId,
+    });
+    if (!ext) throw new AppError("NOT_FOUND", "Extraction not found");
+
+    if (ext.receiptDocumentId) {
+      await db.collection("finance_receipt_documents").deleteOne({
+        _id: ext.receiptDocumentId,
+        companyId: this.companyId,
+      });
+    }
+
+    await db.collection("finance_receipt_extractions").deleteOne({
+      _id: new ObjectId(id),
+      companyId: this.companyId,
+    });
+
+    return { success: true };
+  }
+
+  async markReceiptReviewed(id: string) {
+    this.ensurePermission("finance.receipt.ocr");
+    if (!ObjectId.isValid(id)) throw new AppError("VALIDATION_ERROR", "Invalid extraction ID");
+    const db = await getDb();
+    await db.collection("finance_receipt_extractions").updateOne(
+      { _id: new ObjectId(id), companyId: this.companyId },
+      { $set: { reviewed: true, updatedAt: new Date() } }
+    );
     return { success: true };
   }
 }

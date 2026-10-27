@@ -33,6 +33,7 @@ export type Customer = {
 export type InvoiceLine = {
   id: string;
   invoiceId: string;
+  productId?: string;
   description: string;
   quantity: number;
   unitPrice: number;

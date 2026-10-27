@@ -2,21 +2,39 @@ import { z } from "zod";
 
 export const currencySchema = z.enum(["TND", "USD", "EUR", "GBP"]);
 export const paymentMethodSchema = z.enum(["cash", "bank_transfer", "card", "cheque", "other"]);
-export const customerStatusSchema = z.enum(["active", "inactive"]);
+export const customerStatusSchema = z.preprocess(
+  (val) => {
+    if (val === true || val === "true" || val === "active" || val === "on") return "active";
+    if (val === false || val === "false" || val === "inactive" || val === "off") return "inactive";
+    return val;
+  },
+  z.enum(["active", "inactive"])
+);
+
+const optionalText = z.preprocess(
+  (val) => (val === null || val === undefined ? "" : typeof val === "string" ? val.trim() : val),
+  z.string().optional().default("")
+);
+
+const optionalEmail = z.preprocess(
+  (val) => (val === null || val === undefined ? "" : typeof val === "string" ? val.trim() : val),
+  z.string().email("Please enter a valid email address").or(z.literal("")).optional().default("")
+);
 
 export const customerCreateSchema = z.object({
-  name: z.string().trim().min(2, "Name is required"),
-  email: z.string().trim().email().optional().or(z.literal("")),
-  phone: z.string().trim().optional().or(z.literal("")),
-  taxId: z.string().trim().optional().or(z.literal("")),
-  address: z.string().trim().optional().or(z.literal("")),
-  notes: z.string().trim().optional().or(z.literal("")),
+  name: z.string().trim().min(2, "Customer name must be at least 2 characters"),
+  email: optionalEmail,
+  phone: optionalText,
+  taxId: optionalText,
+  address: optionalText,
+  notes: optionalText,
   status: customerStatusSchema.default("active"),
 });
 
 export const customerUpdateSchema = customerCreateSchema.partial();
 
 export const invoiceLineInputSchema = z.object({
+  productId: z.string().optional().or(z.literal("")),
   description: z.string().trim().min(1, "Description is required"),
   quantity: z.coerce.number().int().positive("Quantity must be positive"),
   unitPrice: z.coerce.number().min(0, "Unit price must be >= 0"),

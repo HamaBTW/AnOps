@@ -12,8 +12,10 @@ export default async function FinanceReceiptsPage() {
   try {
     const service = await getFinanceService();
     receipts = await service.listReceiptExtractions();
-  } catch (e) {
-    console.error("[FinanceReceiptsPage] Error loading receipts:", e);
+  } catch (e: any) {
+    if (e?.digest !== "DYNAMIC_SERVER_USAGE") {
+      console.error("[FinanceReceiptsPage] Error loading receipts:", e);
+    }
     receipts = [];
   }
 

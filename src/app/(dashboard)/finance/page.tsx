@@ -51,8 +51,10 @@ export default async function FinancePage() {
   try {
     const service = await getFinanceService();
     kpi = await service.getDashboard();
-  } catch (err) {
-    console.error("[FinancePage] Dashboard error:", err);
+  } catch (err: any) {
+    if (err?.digest !== "DYNAMIC_SERVER_USAGE") {
+      console.error("[FinancePage] Dashboard error:", err);
+    }
   }
 
   const fmt = (n: number) =>

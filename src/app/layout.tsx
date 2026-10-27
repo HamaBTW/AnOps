@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import { PwaRegister } from "@/shared/components/pwa-register";
+import { OfflineIndicator } from "@/shared/components/offline-indicator";
 import { HydrationMarker } from "@/shared/components/hydration-marker";
 import { siteUrl } from "@/shared/config/url";
 
@@ -175,6 +176,7 @@ export default function RootLayout({
         )}
         <HydrationMarker />
         <PwaRegister />
+        <OfflineIndicator />
         {children}
       </body>
     </html>

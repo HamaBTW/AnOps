@@ -78,6 +78,30 @@ export function ProductForm({
     // Re-send the form as its input shape; the server parses it again with the same schema.
     const payload = { ...values, categoryId: values.categoryId ?? "" };
     startTransition(async () => {
+      if (!navigator.onLine) {
+        // True offline mode: save locally to IndexedDB and queue sync mutation
+        try {
+          const { queueOfflineMutation, saveOfflineRecord } = await import("@/shared/lib/offline-store");
+          const offlineId = `offline_${Date.now()}`;
+          const localRecord = { ...payload, id: offlineId, isOffline: true, createdAt: new Date().toISOString() };
+          
+          await saveOfflineRecord("inventory_products", offlineId, localRecord);
+          await queueOfflineMutation(
+            mode === "edit" && product ? "inventory.product.update" : "inventory.product.create",
+            mode === "edit" && product ? { id: product.id, data: payload } : payload
+          );
+
+          setMessage({
+            kind: "success",
+            text: "Saved locally in Offline Mode! Changes are safely stored in your browser and will automatically sync when connection returns.",
+          });
+          return;
+        } catch (e: any) {
+          setMessage({ kind: "error", text: "Failed to store offline: " + (e?.message || "Unknown error") });
+          return;
+        }
+      }
+
       const result =
         mode === "edit" && product
           ? await updateProductAction(product.id, { ...payload, expectedVersion: product.version })

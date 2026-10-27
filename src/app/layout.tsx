@@ -3,6 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 import { PwaRegister } from "@/shared/components/pwa-register";
 import { OfflineIndicator } from "@/shared/components/offline-indicator";
+import { OfflineSyncManager } from "@/shared/components/offline-sync-manager";
 import { HydrationMarker } from "@/shared/components/hydration-marker";
 import { siteUrl } from "@/shared/config/url";
 
@@ -177,6 +178,7 @@ export default function RootLayout({
         <HydrationMarker />
         <PwaRegister />
         <OfflineIndicator />
+        <OfflineSyncManager />
         {children}
       </body>
     </html>

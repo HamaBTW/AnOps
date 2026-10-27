@@ -7,7 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { workOrderInputSchema } from "@/features/manufacturing/schemas/manufacturing.schema";
 import { createWorkOrderAction } from "@/features/manufacturing/actions/manufacturing.action";
-import { Button, selectClass } from "@/shared/components/ui/button";
+import { Check, Factory, LoaderCircle } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Field, FormActions, FormSection, Select } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 
@@ -49,32 +51,36 @@ export function WorkOrderForm({
       <p className="text-sm text-[var(--color-text-secondary)]">
         Creating a work order does not consume stock. Components are used when the order is completed.
       </p>
-      <fieldset disabled={pending || noBoms} className="grid gap-5 sm:grid-cols-2">
+      <fieldset disabled={pending || noBoms} className="min-w-0">
         <legend className="sr-only">Work order</legend>
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="bomId" className="text-sm font-semibold">Bill of materials (active revision)</label>
-          <select id="bomId" className={selectClass} aria-invalid={Boolean(errors.bomId)} {...register("bomId")}>
-            <option value="">Choose…</option>
-            {boms.map((b) => (
-              <option key={b.id} value={b.id}>{b.label}</option>
-            ))}
-          </select>
-          {errors.bomId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.bomId.message}</p>}
-        </div>
-        <TextField label="Quantity to produce" inputMode="decimal" error={errors.quantity?.message} {...register("quantity")} />
-        <div className="space-y-1.5">
-          <label htmlFor="warehouseId" className="text-sm font-semibold">Warehouse for components and output</label>
-          <select id="warehouseId" className={selectClass} aria-invalid={Boolean(errors.warehouseId)} {...register("warehouseId")}>
-            <option value="">Choose…</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.label}</option>
-            ))}
-          </select>
-          {errors.warehouseId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.warehouseId.message}</p>}
-        </div>
-        <TextField label="Planned start (optional)" type="date" error={errors.plannedStart?.message} {...register("plannedStart")} />
-        <div className="flex justify-end sm:col-span-2">
-          <Button type="submit" variant="primary">{pending ? "Creating…" : "Create work order"}</Button>
+        <FormSection title="Production run" description="What to produce, how much and where." icon={Factory}>
+          <Field label="Bill of materials (active revision)" htmlFor="bomId" required error={errors.bomId?.message} className="sm:col-span-2">
+            <Select id="bomId" aria-invalid={Boolean(errors.bomId)} {...register("bomId")}>
+              <option value="">Select a bill of materials…</option>
+              {boms.map((b) => (
+                <option key={b.id} value={b.id}>{b.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <TextField label="Quantity to produce" required placeholder="e.g. 100" inputMode="decimal" error={errors.quantity?.message} {...register("quantity")} />
+          <Field label="Warehouse for components and output" htmlFor="warehouseId" required error={errors.warehouseId?.message}>
+            <Select id="warehouseId" aria-invalid={Boolean(errors.warehouseId)} {...register("warehouseId")}>
+              <option value="">Select a warehouse…</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <TextField label="Planned start" type="date" hint="Optional." error={errors.plannedStart?.message} {...register("plannedStart")} />
+        </FormSection>
+        <div className="mt-6">
+          <FormActions>
+            <Button onClick={() => router.back()} disabled={pending}>Cancel</Button>
+            <Button type="submit" variant="primary">
+              {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Check aria-hidden className="size-4" />}
+              {pending ? "Creating…" : "Create work order"}
+            </Button>
+          </FormActions>
         </div>
       </fieldset>
       {noBoms && <p className="text-sm text-[var(--color-text-secondary)]">No active bills of materials. Activate a BOM revision first.</p>}

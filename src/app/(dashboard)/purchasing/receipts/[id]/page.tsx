@@ -9,6 +9,7 @@ import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { ReceiptActions } from "@/features/purchasing/components/receipt-actions";
 import { RECEIPT_STATUS } from "@/features/purchasing/labels";
 import { formatDateTime, formatDecimalString } from "@/shared/lib/format";
+import { BackLink } from "@/shared/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Goods receipt | AnOps ERP" };
 
@@ -29,7 +30,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       <PageHeader
         title={receipt.receiptNumber}
         description={`Against ${receipt.orderNumber} · ${receipt.supplierName} · ${receipt.warehouseCode}`}
-        actions={<Link href={`/purchasing/orders/${receipt.purchaseOrderId}`} className="inline-flex min-h-[44px] items-center text-sm underline underline-offset-2">Back to order</Link>}
+        actions={<BackLink href={`/purchasing/orders/${receipt.purchaseOrderId}`}>Back to order</BackLink>}
       />
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge label={status.label} tone={status.tone} />

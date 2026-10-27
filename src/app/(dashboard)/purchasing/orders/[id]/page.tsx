@@ -13,6 +13,7 @@ import { OrderActions } from "@/features/purchasing/components/order-actions";
 import { ReceiptForm } from "@/features/purchasing/components/receipt-form";
 import { PO_STATUS, RECEIPT_STATUS } from "@/features/purchasing/labels";
 import { formatDate, formatDecimalString, formatMoney } from "@/shared/lib/format";
+import { BackLink } from "@/shared/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Purchase order | AnOps ERP" };
 
@@ -44,7 +45,7 @@ export default async function PurchaseOrderDetailPage({ params }: { params: Prom
         actions={
           <>
             {order.permissions.canEdit && <ButtonLink href={`/purchasing/orders/${order.id}/edit`}>Edit draft</ButtonLink>}
-            <Link href="/purchasing/orders" className="inline-flex min-h-[44px] items-center text-sm underline underline-offset-2">Back to orders</Link>
+            <BackLink href="/purchasing/orders">Back to orders</BackLink>
           </>
         }
       />

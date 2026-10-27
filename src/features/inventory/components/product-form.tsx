@@ -8,7 +8,9 @@ import { z } from "zod";
 import { productInputSchema } from "@/features/inventory/schemas/inventory.schema";
 import { createProductAction, updateProductAction } from "@/features/inventory/actions/inventory.action";
 import { UNIT_LABELS, UNITS_OF_MEASURE } from "@/shared/domain/units";
-import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
+import { Boxes, Check, DollarSign, LoaderCircle, Tags } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Field, FormActions, FormSection, Select, Textarea } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import type { ProductDto } from "@/features/inventory/types";
@@ -111,70 +113,57 @@ export function ProductForm({
         </p>
       )}
 
-      <fieldset disabled={disabled} className="grid gap-5 sm:grid-cols-2">
+      <fieldset disabled={disabled} className="min-w-0 space-y-6">
         <legend className="sr-only">Product details</legend>
-        <TextField label="SKU" hint="Letters, digits, dots, dashes and underscores. Unique per company." error={errors.sku?.message} {...register("sku")} />
-        <TextField label="Name" error={errors.name?.message} {...register("name")} />
-        <div className="space-y-1.5">
-          <label htmlFor="categoryId" className="text-sm font-semibold text-[var(--color-text-primary)]">Category</label>
-          <select id="categoryId" className={selectClass} {...register("categoryId")}>
-            <option value="">No category</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          {errors.categoryId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.categoryId.message}</p>}
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="unitOfMeasure" className="text-sm font-semibold text-[var(--color-text-primary)]">Unit of measure</label>
-          <select id="unitOfMeasure" className={selectClass} {...register("unitOfMeasure")}>
-            {UNITS_OF_MEASURE.map((unit) => (
-              <option key={unit} value={unit}>
-                {UNIT_LABELS[unit]}
-              </option>
-            ))}
-          </select>
-          {errors.unitOfMeasure?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.unitOfMeasure.message}</p>}
-        </div>
-        <TextField label="Standard cost" hint="Used for stock value. Up to 3 decimals." inputMode="decimal" error={errors.cost?.message} {...register("cost")} />
-        <TextField label="Sale price" hint="Informational until sales are connected." inputMode="decimal" error={errors.salePrice?.message} {...register("salePrice")} />
-        <TextField label="Reorder point" hint="Stock at or below this level is flagged as low." inputMode="decimal" error={errors.reorderPoint?.message} {...register("reorderPoint")} />
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="description" className="text-sm font-semibold text-[var(--color-text-primary)]">Description</label>
-          <textarea id="description" rows={3} className={textareaClass} {...register("description")} />
-          {errors.description?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.description.message}</p>}
-        </div>
-        <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
+        <FormSection title="Identification" description="How this product is named and found." icon={Boxes}>
+          <TextField label="SKU" required placeholder="e.g. RM-STEEL-001" hint="Letters, digits, dots, dashes and underscores. Unique per company." error={errors.sku?.message} {...register("sku")} />
+          <TextField label="Name" required placeholder="e.g. Steel sheet 2 mm" error={errors.name?.message} {...register("name")} />
+          <Field label="Category" htmlFor="categoryId" error={errors.categoryId?.message}>
+            <Select id="categoryId" {...register("categoryId")}>
+              <option value="">No category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Unit of measure" htmlFor="unitOfMeasure" required error={errors.unitOfMeasure?.message}>
+            <Select id="unitOfMeasure" {...register("unitOfMeasure")}>
+              {UNITS_OF_MEASURE.map((unit) => (
+                <option key={unit} value={unit}>{UNIT_LABELS[unit]}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Description" htmlFor="description" className="sm:col-span-2" hint="Optional. Specifications, grade or handling notes." error={errors.description?.message}>
+            <Textarea id="description" rows={3} placeholder="e.g. Cold-rolled, 1250 × 2500 mm" {...register("description")} />
+          </Field>
+        </FormSection>
+
+        <FormSection title="Pricing and stock" description="Values used for stock valuation and low-stock alerts." icon={DollarSign}>
+          <TextField label="Standard cost" placeholder="0.000" hint="Used for stock value. Up to 3 decimals." inputMode="decimal" error={errors.cost?.message} {...register("cost")} />
+          <TextField label="Sale price" placeholder="0.000" hint="Informational until sales are connected." inputMode="decimal" error={errors.salePrice?.message} {...register("salePrice")} />
+          <TextField label="Reorder point" placeholder="e.g. 20" hint="Stock at or below this level is flagged as low." inputMode="decimal" error={errors.reorderPoint?.message} {...register("reorderPoint")} />
+        </FormSection>
+
+        <FormSection title="Tracking" description="Whether this product holds stock and can be used." icon={Tags}>
           <label className="inline-flex min-h-[44px] items-center gap-3 text-sm text-[var(--color-text-primary)]">
-            <input
-              type="checkbox"
-              className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
-              {...register("isStorable")}
-            />
+            <input type="checkbox" className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]" {...register("isStorable")} />
             Stored item (tracked in stock)
           </label>
           <label className="inline-flex min-h-[44px] items-center gap-3 text-sm text-[var(--color-text-primary)]">
-            <input
-              type="checkbox"
-              className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]"
-              {...register("isActive")}
-            />
+            <input type="checkbox" className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-[2px] focus-visible:ring-offset-[var(--color-bg-surface)]" {...register("isActive")} />
             Active (available for orders and stock moves)
           </label>
-        </div>
+        </FormSection>
       </fieldset>
 
       {canManage && (
-        <div className="flex flex-col-reverse gap-3 border-t border-[var(--color-border-subtle)] pt-5 sm:flex-row sm:justify-end">
-          <Button variant="secondary" onClick={() => router.back()} disabled={pending}>
-            Cancel
-          </Button>
+        <FormActions>
+          <Button variant="secondary" onClick={() => router.back()} disabled={pending}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Check aria-hidden className="size-4" />}
             {pending ? "Saving…" : mode === "create" ? "Create product" : "Save changes"}
           </Button>
-        </div>
+        </FormActions>
       )}
     </form>
   );

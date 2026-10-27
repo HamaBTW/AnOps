@@ -11,6 +11,10 @@ import { RECEIPT_STATUS } from "@/features/purchasing/labels";
 import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
 import { exportUrl } from "@/shared/lib/download";
 import { formatDate } from "@/shared/lib/format";
+import { Filter } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Select } from "@/shared/components/ui/form-kit";
+import { FilterBar, FilterField } from "@/shared/components/data-display/filter-bar";
 
 export const metadata: Metadata = { title: "Goods receipts | AnOps ERP" };
 
@@ -34,18 +38,17 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
         description="Drafts are reviewed and posted. Posting is the only step that increases stock."
         actions={<ExportExcelButton href={exportUrl("goods-receipts", { status: query.status === "all" ? undefined : query.status })} />}
       />
-      <form method="get" className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="status" className="text-sm font-semibold">Status</label>
-          <select id="status" name="status" defaultValue={query.status} className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm">
-            <option value="all">All</option>
+      <FilterBar aria-label="Filter goods receipts">
+        <FilterField label="Status" htmlFor="status">
+          <Select id="status" name="status" defaultValue={query.status}>
+            <option value="all">All statuses</option>
             <option value="draft">Draft</option>
             <option value="posted">Posted</option>
             <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-        <button type="submit" className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm font-semibold">Apply</button>
-      </form>
+          </Select>
+        </FilterField>
+        <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
+      </FilterBar>
 
       {result.items.length === 0 ? (
         <EmptyState title="No receipts" description="Receipts are created from an approved purchase order when goods arrive." actionHref="/purchasing/orders" actionLabel="Go to orders" />

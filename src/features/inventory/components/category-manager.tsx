@@ -7,7 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { categoryInputSchema } from "@/features/inventory/schemas/inventory.schema";
 import { createCategoryAction, setCategoryActiveAction, updateCategoryAction } from "@/features/inventory/actions/inventory.action";
-import { Button, textareaClass } from "@/shared/components/ui/button";
+import { Check, LoaderCircle, Pencil, Archive, ArchiveRestore } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Field, FormActions, Textarea } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
@@ -47,18 +49,29 @@ function CategoryForm({
           }
         })
       )}
-      className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-start"
+      className="grid gap-5 sm:grid-cols-2"
     >
-      <TextField label="Name" error={errors.name?.message} {...register("name")} />
-      <div className="space-y-1.5">
-        <label htmlFor="category-description" className="text-sm font-semibold text-[var(--color-text-primary)]">Description</label>
-        <textarea id="category-description" rows={1} className={textareaClass} {...register("description")} />
+      <TextField label="Name" required placeholder="e.g. Raw materials" maxLength={80} error={errors.name?.message} {...register("name")} />
+      <Field label="Description" htmlFor="category-description" hint="Optional. Shown to help your team choose the right category." error={errors.description?.message}>
+        <Textarea
+          id="category-description"
+          rows={3}
+          maxLength={300}
+          placeholder="e.g. Components and ingredients used in production"
+          aria-invalid={Boolean(errors.description)}
+          {...register("description")}
+        />
+      </Field>
+      {formError && <div className="sm:col-span-2"><FormMessage kind="error">{formError}</FormMessage></div>}
+      <div className="sm:col-span-2">
+        <FormActions>
+          {onCancel && <Button onClick={onCancel} disabled={pending}>Cancel</Button>}
+          <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Check aria-hidden className="size-4" />}
+            {pending ? "Saving…" : submitLabel}
+          </Button>
+        </FormActions>
       </div>
-      <div className="flex gap-2 sm:pt-7">
-        <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : submitLabel}</Button>
-        {onCancel && <Button onClick={onCancel} disabled={pending}>Cancel</Button>}
-      </div>
-      {formError && <div className="sm:col-span-3"><FormMessage kind="error">{formError}</FormMessage></div>}
     </form>
   );
 }
@@ -74,7 +87,8 @@ export function CategoryManager({ categories, canManage }: { categories: Categor
     <div className="space-y-6">
       {canManage && (
         <section aria-labelledby="new-category" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
-          <h2 id="new-category" className="mb-4 text-base font-semibold">New category</h2>
+          <h2 id="new-category" className="mb-1 text-base font-semibold">New category</h2>
+          <p className="mb-5 text-sm text-[var(--color-text-secondary)]">Categories group products for reporting and filtering. They are optional.</p>
           <CategoryForm
             defaultValues={{ name: "", description: "" }}
             submitLabel="Add category"
@@ -125,7 +139,7 @@ export function CategoryManager({ categories, canManage }: { categories: Categor
                   </div>
                   {canManage && (
                     <div className="flex flex-wrap gap-2">
-                      <Button onClick={() => setEditingId(category.id)}>Edit</Button>
+                      <Button onClick={() => setEditingId(category.id)}><Pencil aria-hidden className="size-4" />Edit</Button>
                       <Button
                         onClick={async () => {
                           const result = await setCategoryActiveAction(category.id, !category.isActive);
@@ -133,6 +147,7 @@ export function CategoryManager({ categories, canManage }: { categories: Categor
                           refresh();
                         }}
                       >
+                        {category.isActive ? <Archive aria-hidden className="size-4" /> : <ArchiveRestore aria-hidden className="size-4" />}
                         {category.isActive ? "Archive" : "Restore"}
                       </Button>
                     </div>

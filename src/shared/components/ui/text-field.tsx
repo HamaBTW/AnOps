@@ -26,6 +26,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
       <div className="space-y-1.5">
         <label htmlFor={inputId} className="text-sm font-semibold text-[var(--color-text-primary)]">
           {label}
+          {props.required && <span aria-hidden="true" className="ml-0.5 text-[var(--color-status-error)]">*</span>}
         </label>
         <div className="relative">
           <input
@@ -35,7 +36,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
             aria-describedby={describedBy}
             type={isPassword && showPassword ? "text" : type}
             className={cn(
-              "w-full h-12 px-3 rounded-[var(--radius-control)] border bg-[var(--color-bg-surface)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] min-h-[44px]",
+              "w-full h-11 px-3 rounded-[var(--radius-control)] border bg-[var(--color-bg-surface)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] min-h-[44px]",
               "focus:outline-none focus:ring-[3px] focus:ring-offset-[2px] focus:ring-offset-[var(--color-bg-surface)]",
               error
                 ? "border-[#c0392b] focus:ring-[#c0392b]/30"

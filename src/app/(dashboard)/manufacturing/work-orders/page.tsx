@@ -7,7 +7,10 @@ import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
-import { ButtonLink } from "@/shared/components/ui/button";
+import { Button, ButtonLink } from "@/shared/components/ui/button";
+import { Filter, Plus } from "lucide-react";
+import { Select } from "@/shared/components/ui/form-kit";
+import { FilterBar, FilterField } from "@/shared/components/data-display/filter-bar";
 import { WORK_ORDER_STATUS } from "@/features/manufacturing/labels";
 import { formatDate, formatDecimalString } from "@/shared/lib/format";
 
@@ -26,20 +29,19 @@ export default async function WorkOrdersPage({ searchParams }: { searchParams: P
       <PageHeader
         title="Work orders"
         description="Production runs. Components are consumed and finished goods are added when an order is completed."
-        actions={canCreate ? <ButtonLink href="/manufacturing/work-orders/new" variant="primary">New work order</ButtonLink> : undefined}
+        actions={canCreate ? <ButtonLink href="/manufacturing/work-orders/new" variant="primary"><Plus aria-hidden className="size-4" />New work order</ButtonLink> : undefined}
       />
-      <form method="get" className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="status" className="text-sm font-semibold">Status</label>
-          <select id="status" name="status" defaultValue={query.status} className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm">
-            <option value="all">All</option>
+      <FilterBar aria-label="Filter work orders">
+        <FilterField label="Status" htmlFor="status">
+          <Select id="status" name="status" defaultValue={query.status}>
+            <option value="all">All statuses</option>
             {Object.entries(WORK_ORDER_STATUS).map(([value, meta]) => (
               <option key={value} value={value}>{meta.label}</option>
             ))}
-          </select>
-        </div>
-        <button type="submit" className="min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm font-semibold">Apply</button>
-      </form>
+          </Select>
+        </FilterField>
+        <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
+      </FilterBar>
 
       {result.items.length === 0 ? (
         <EmptyState

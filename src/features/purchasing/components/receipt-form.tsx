@@ -7,7 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { receiptEntrySchema } from "@/features/purchasing/schemas/purchasing.schema";
 import { createReceiptAction } from "@/features/purchasing/actions/purchasing.action";
-import { Button, selectClass } from "@/shared/components/ui/button";
+import { Button } from "@/shared/components/ui/button";
+import { Field, Select } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 import { isCountableUnit, type UnitOfMeasure } from "@/shared/domain/units";
@@ -85,16 +86,14 @@ export function ReceiptForm({
       )}
       <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">
         <legend className="sr-only">Receipt</legend>
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="warehouseId" className="text-sm font-semibold">Receive into warehouse</label>
-          <select id="warehouseId" className={selectClass} aria-invalid={Boolean(errors.warehouseId)} {...register("warehouseId")}>
-            <option value="">Choose…</option>
+        <Field label="Receive into warehouse" htmlFor="warehouseId" required error={errors.warehouseId?.message} className="sm:col-span-2">
+          <Select id="warehouseId" aria-invalid={Boolean(errors.warehouseId)} {...register("warehouseId")}>
+            <option value="">Select a warehouse…</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.label}</option>
             ))}
-          </select>
-          {errors.warehouseId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.warehouseId.message}</p>}
-        </div>
+          </Select>
+        </Field>
         {lines.map((line, index) => {
           const countable = isCountableUnit(line.unitOfMeasure as UnitOfMeasure);
           const quantityField = register(`lines.${index}.quantity`);

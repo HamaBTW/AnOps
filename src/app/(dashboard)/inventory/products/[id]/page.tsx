@@ -12,6 +12,7 @@ import { ProductActions } from "@/features/inventory/components/product-actions"
 import { STOCK_STATUS_LABELS, STOCK_STATUS_TONES, MOVEMENT_LABELS } from "@/features/inventory/labels";
 import { formatDateTime, formatDecimalString } from "@/shared/lib/format";
 import { UNIT_LABELS, type UnitOfMeasure } from "@/shared/domain/units";
+import { BackLink } from "@/shared/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Product | AnOps ERP" };
 
@@ -40,9 +41,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         title={product.name}
         description={`SKU ${product.sku} · ${UNIT_LABELS[product.unitOfMeasure as UnitOfMeasure]}`}
         actions={
-          <Link href="/inventory/products" className="text-sm underline underline-offset-2">
-            Back to products
-          </Link>
+          <BackLink href="/inventory/products">Back to products</BackLink>
         }
       />
 

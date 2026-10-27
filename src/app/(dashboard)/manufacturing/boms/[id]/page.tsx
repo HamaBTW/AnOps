@@ -12,6 +12,7 @@ import { BomForm } from "@/features/manufacturing/components/bom-form";
 import { BOM_STATUS } from "@/features/manufacturing/labels";
 import { formatDecimalString } from "@/shared/lib/format";
 import { UNIT_LABELS, type UnitOfMeasure } from "@/shared/domain/units";
+import { BackLink } from "@/shared/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Bill of materials | AnOps ERP" };
 
@@ -34,7 +35,7 @@ export default async function BomDetailPage({ params }: { params: Promise<{ id: 
       <PageHeader
         title={`${bom.finishedSku} · revision ${bom.revision}`}
         description={bom.finishedName}
-        actions={<Link href="/manufacturing/boms" className="inline-flex min-h-[44px] items-center text-sm underline underline-offset-2">Back to BOMs</Link>}
+        actions={<BackLink href="/manufacturing/boms">Back to BOMs</BackLink>}
       />
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge label={status.label} tone={status.tone} />

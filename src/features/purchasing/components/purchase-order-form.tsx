@@ -7,7 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { purchaseOrderInputSchema, MAX_PURCHASE_ORDER_LINES } from "@/features/purchasing/schemas/purchasing.schema";
 import { createPurchaseOrderAction, updatePurchaseOrderAction } from "@/features/purchasing/actions/purchasing.action";
-import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
+import { Check, LoaderCircle, PackagePlus, Plus, StickyNote, Trash2, Truck } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Field, FormActions, FormSection, Select, Textarea } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 
@@ -62,70 +64,81 @@ export function PurchaseOrderForm({
   };
 
   return (
-    <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {message && <FormMessage kind="error">{message}</FormMessage>}
 
-      <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">
-        <legend className="sr-only">Order header</legend>
-        <div className="space-y-1.5">
-          <label htmlFor="supplierId" className="text-sm font-semibold">Supplier</label>
-          <select id="supplierId" className={selectClass} aria-invalid={Boolean(errors.supplierId)} {...register("supplierId")}>
-            <option value="">Choose a supplier…</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
+      <fieldset disabled={pending} className="min-w-0 space-y-6">
+        <legend className="sr-only">Purchase order</legend>
+        <FormSection title="Order details" description="Who you are buying from and when you expect delivery." icon={Truck}>
+          <Field label="Supplier" htmlFor="supplierId" required error={errors.supplierId?.message}>
+            <Select id="supplierId" aria-invalid={Boolean(errors.supplierId)} {...register("supplierId")}>
+              <option value="">Select a supplier…</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </Select>
+          </Field>
+          <TextField label="Expected delivery" type="date" hint="Optional. The date the supplier committed to." error={errors.expectedDate?.message} {...register("expectedDate")} />
+        </FormSection>
+
+        <FormSection
+          title={`Order lines (${fields.length})`}
+          description="Products, quantities and prices. Totals are calculated by the server when you save."
+          icon={PackagePlus}
+          columns={1}
+          actions={
+            <Button
+              onClick={() => append({ productId: "", quantity: "", unitCost: "0.000", taxRate: "0" })}
+              disabled={pending || fields.length >= MAX_PURCHASE_ORDER_LINES}
+            >
+              <Plus aria-hidden className="size-4" />
+              Add line
+            </Button>
+          }
+        >
+          {errors.lines?.root?.message && <p role="alert" className="text-sm text-[var(--color-status-error)]">{errors.lines.root.message}</p>}
+          <ul className="space-y-4">
+            {fields.map((field, index) => (
+              <li key={field.id} className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">Line {index + 1}</span>
+                  <Button variant="ghost" onClick={() => remove(index)} disabled={pending || fields.length === 1} aria-label={`Remove line ${index + 1}`} className="min-h-[36px] px-2 text-[var(--color-status-error)]">
+                    <Trash2 aria-hidden className="size-4" />
+                    Remove
+                  </Button>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr]">
+                  <Field label="Product" htmlFor={`lines-${index}-productId`} required error={errors.lines?.[index]?.productId?.message} className="sm:col-span-3 lg:col-span-1">
+                    <Select id={`lines-${index}-productId`} aria-invalid={Boolean(errors.lines?.[index]?.productId)} {...register(`lines.${index}.productId`)}>
+                      <option value="">Select a product…</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.label}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <TextField label="Quantity" required placeholder="e.g. 25" inputMode="decimal" error={errors.lines?.[index]?.quantity?.message} {...register(`lines.${index}.quantity`)} />
+                  <TextField label={`Unit cost (${currencyCode})`} placeholder="0.000" inputMode="decimal" error={errors.lines?.[index]?.unitCost?.message} {...register(`lines.${index}.unitCost`)} />
+                  <TextField label="Tax rate (%)" placeholder="e.g. 19" inputMode="decimal" error={errors.lines?.[index]?.taxRate?.message} {...register(`lines.${index}.taxRate`)} />
+                </div>
+              </li>
             ))}
-          </select>
-          {errors.supplierId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.supplierId.message}</p>}
-        </div>
-        <TextField label="Expected delivery" type="date" error={errors.expectedDate?.message} {...register("expectedDate")} />
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="notes" className="text-sm font-semibold">Notes</label>
-          <textarea id="notes" rows={2} className={textareaClass} {...register("notes")} />
-          {errors.notes?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.notes.message}</p>}
-        </div>
+          </ul>
+        </FormSection>
+
+        <FormSection title="Notes" description="Optional. Visible on the order for your team." icon={StickyNote} columns={1}>
+          <Field label="Internal notes" htmlFor="notes" error={errors.notes?.message}>
+            <Textarea id="notes" rows={3} maxLength={1000} placeholder="e.g. Deliver to dock 2, call the supplier before dispatch" {...register("notes")} />
+          </Field>
+        </FormSection>
       </fieldset>
 
-      <section aria-labelledby="lines-heading" className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="lines-heading" className="text-base font-semibold">Lines ({fields.length})</h2>
-          <Button
-            onClick={() => append({ productId: "", quantity: "", unitCost: "0.000", taxRate: "0" })}
-            disabled={pending || fields.length >= MAX_PURCHASE_ORDER_LINES}
-          >
-            Add line
-          </Button>
-        </div>
-        {errors.lines?.root?.message && <p role="alert" className="text-sm text-[#c0392b]">{errors.lines.root.message}</p>}
-
-        <ul className="space-y-4">
-          {fields.map((field, index) => (
-            <li key={field.id} className="grid gap-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] sm:items-end">
-              <div className="space-y-1.5">
-                <label htmlFor={`lines-${index}-productId`} className="text-sm font-semibold">Product</label>
-                <select id={`lines-${index}-productId`} className={selectClass} aria-invalid={Boolean(errors.lines?.[index]?.productId)} {...register(`lines.${index}.productId`)}>
-                  <option value="">Choose…</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-                {errors.lines?.[index]?.productId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.lines[index].productId?.message}</p>}
-              </div>
-              <TextField label="Quantity" inputMode="decimal" error={errors.lines?.[index]?.quantity?.message} {...register(`lines.${index}.quantity`)} />
-              <TextField label={`Unit cost (${currencyCode})`} inputMode="decimal" error={errors.lines?.[index]?.unitCost?.message} {...register(`lines.${index}.unitCost`)} />
-              <TextField label="Tax %" inputMode="decimal" error={errors.lines?.[index]?.taxRate?.message} {...register(`lines.${index}.taxRate`)} />
-              <Button variant="ghost" onClick={() => remove(index)} disabled={pending || fields.length === 1} aria-label={`Remove line ${index + 1}`}>
-                Remove
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <p className="text-sm text-[var(--color-text-secondary)]">Totals are calculated by the server when you save, using the values above.</p>
-      </section>
-
-      <div className="flex flex-col-reverse gap-3 border-t border-[var(--color-border-subtle)] pt-5 sm:flex-row sm:justify-end">
+      <FormActions>
         <Button onClick={() => router.back()} disabled={pending}>Cancel</Button>
-        <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : isEdit ? "Save draft" : "Create draft order"}</Button>
-      </div>
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Check aria-hidden className="size-4" />}
+          {pending ? "Saving…" : isEdit ? "Save draft" : "Create draft order"}
+        </Button>
+      </FormActions>
     </form>
   );
 }

@@ -7,7 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { bomInputSchema, MAX_BOM_COMPONENTS } from "@/features/manufacturing/schemas/manufacturing.schema";
 import { createBomAction, updateBomAction } from "@/features/manufacturing/actions/manufacturing.action";
-import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
+import { Check, Layers, LoaderCircle, PackageOpen, Plus, StickyNote, Trash2, Factory } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Field, FormActions, FormSection, Select, Textarea } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 
@@ -54,56 +56,77 @@ export function BomForm({
   };
 
   return (
-    <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {message && <FormMessage kind="error">{message}</FormMessage>}
-      <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">
+      <fieldset disabled={pending} className="min-w-0 space-y-6">
         <legend className="sr-only">Bill of materials</legend>
-        <div className="space-y-1.5">
-          <label htmlFor="finishedProductId" className="text-sm font-semibold">Finished product</label>
-          <select id="finishedProductId" className={selectClass} aria-invalid={Boolean(errors.finishedProductId)} {...register("finishedProductId")}>
-            <option value="">Choose…</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
-          {errors.finishedProductId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.finishedProductId.message}</p>}
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="notes" className="text-sm font-semibold">Notes</label>
-          <textarea id="notes" rows={2} className={textareaClass} {...register("notes")} />
-        </div>
+        <FormSection title="Finished product" description="The product this bill of materials produces." icon={Factory} columns={1}>
+          <Field label="Finished product" htmlFor="finishedProductId" required error={errors.finishedProductId?.message}>
+            <Select id="finishedProductId" aria-invalid={Boolean(errors.finishedProductId)} {...register("finishedProductId")}>
+              <option value="">Select the product to manufacture…</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </Select>
+          </Field>
+        </FormSection>
+
+        <FormSection
+          title={`Components per unit (${fields.length})`}
+          description="What is consumed to produce one unit of the finished product."
+          icon={Layers}
+          columns={1}
+          actions={
+            <Button onClick={() => append({ productId: "", quantityPerUnit: "" })} disabled={pending || fields.length >= MAX_BOM_COMPONENTS}>
+              <Plus aria-hidden className="size-4" />
+              Add component
+            </Button>
+          }
+        >
+          {errors.components?.root?.message && <p role="alert" className="text-sm text-[var(--color-status-error)]">{errors.components.root.message}</p>}
+          {fields.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-control)] px-4 py-8 text-center">
+              <PackageOpen aria-hidden className="size-6 text-[var(--color-text-secondary)]" />
+              <p className="text-sm text-[var(--color-text-secondary)]">No components yet. Add at least one component to define this bill of materials.</p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {fields.map((field, index) => (
+                <li key={field.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-start">
+                  <Field label={`Component ${index + 1}`} htmlFor={`components-${index}-productId`} required error={errors.components?.[index]?.productId?.message} className="col-span-2 sm:col-span-1">
+                    <Select id={`components-${index}-productId`} aria-invalid={Boolean(errors.components?.[index]?.productId)} {...register(`components.${index}.productId`)}>
+                      <option value="">Select a component…</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.label}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <TextField label="Quantity per unit" required placeholder="e.g. 2.5" inputMode="decimal" error={errors.components?.[index]?.quantityPerUnit?.message} {...register(`components.${index}.quantityPerUnit`)} />
+                  <div className="self-start pt-[26px]">
+                    <Button variant="ghost" onClick={() => remove(index)} disabled={pending || fields.length === 1} aria-label={`Remove component ${index + 1}`} className="w-11 px-0 text-[var(--color-status-error)]">
+                      <Trash2 aria-hidden className="size-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </FormSection>
+
+        <FormSection title="Additional notes" description="Optional. Assembly remarks or revision context." icon={StickyNote} columns={1}>
+          <Field label="Notes" htmlFor="notes" error={errors.notes?.message}>
+            <Textarea id="notes" rows={3} placeholder="e.g. Use supplier-approved gaskets only" {...register("notes")} />
+          </Field>
+        </FormSection>
       </fieldset>
 
-      <section aria-labelledby="components-heading" className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="components-heading" className="text-base font-semibold">Components per unit ({fields.length})</h2>
-          <Button onClick={() => append({ productId: "", quantityPerUnit: "" })} disabled={pending || fields.length >= MAX_BOM_COMPONENTS}>Add component</Button>
-        </div>
-        {errors.components?.root?.message && <p role="alert" className="text-sm text-[#c0392b]">{errors.components.root.message}</p>}
-        <ul className="space-y-4">
-          {fields.map((field, index) => (
-            <li key={field.id} className="grid gap-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:grid-cols-[2fr_1fr_auto] sm:items-end">
-              <div className="space-y-1.5">
-                <label htmlFor={`components-${index}-productId`} className="text-sm font-semibold">Component</label>
-                <select id={`components-${index}-productId`} className={selectClass} aria-invalid={Boolean(errors.components?.[index]?.productId)} {...register(`components.${index}.productId`)}>
-                  <option value="">Choose…</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-                {errors.components?.[index]?.productId?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.components[index].productId?.message}</p>}
-              </div>
-              <TextField label="Quantity per unit" inputMode="decimal" error={errors.components?.[index]?.quantityPerUnit?.message} {...register(`components.${index}.quantityPerUnit`)} />
-              <Button variant="ghost" onClick={() => remove(index)} disabled={pending || fields.length === 1} aria-label={`Remove component ${index + 1}`}>Remove</Button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <div className="flex flex-col-reverse gap-3 border-t border-[var(--color-border-subtle)] pt-5 sm:flex-row sm:justify-end">
+      <FormActions>
         <Button onClick={() => router.back()} disabled={pending}>Cancel</Button>
-        <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : bomId ? "Save draft" : "Create draft BOM"}</Button>
-      </div>
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Check aria-hidden className="size-4" />}
+          {pending ? "Saving…" : bomId ? "Save draft" : "Create draft BOM"}
+        </Button>
+      </FormActions>
     </form>
   );
 }

@@ -8,6 +8,9 @@ import { formatDateTime, formatDecimalString, formatMoney } from "@/shared/lib/f
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { MOVEMENT_LABELS } from "@/features/inventory/labels";
 import { formatMoneyAmount } from "@/shared/lib/fixed-point";
+import { StatCard, type StatTone } from "@/shared/components/data-display/stat-card";
+import { AlertTriangle, Boxes, ClipboardList, Factory, FolderTree, PackageCheck, PackageX, Warehouse, Wallet } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Inventory | AnOps ERP",
@@ -17,16 +20,16 @@ export default async function InventoryOverviewPage() {
   const ctx = await getPageWorkspace();
   const overview = await getInventoryOverview(ctx);
 
-  const kpis = [
-    { label: "Active products", value: String(overview.activeProducts), href: "/inventory/products" },
-    { label: "Low stock", value: String(overview.lowStockProducts), href: "/inventory/stock" },
-    { label: "Out of stock", value: String(overview.outOfStockProducts), href: "/inventory/stock" },
-    { label: "Stock value", value: formatMoney(formatMoneyAmount(overview.stockValueMilli, 3), overview.currencyCode), href: "/inventory/stock" },
-    { label: "Warehouses", value: String(overview.activeWarehouses), href: "/inventory/warehouses" },
-    { label: "Categories", value: String(overview.categories), href: "/inventory/categories" },
-    { label: "Open purchase orders", value: String(overview.pendingPurchaseOrders), href: "/purchasing/orders" },
-    { label: "Receipts to post", value: String(overview.goodsReceiptsAwaitingPosting), href: "/purchasing/receipts" },
-    { label: "Open work orders", value: String(overview.openWorkOrders), href: "/manufacturing/work-orders" },
+  const kpis: { label: string; value: string; href: string; icon: LucideIcon; tone?: StatTone; hint?: string }[] = [
+    { label: "Active products", value: String(overview.activeProducts), href: "/inventory/products", icon: Boxes },
+    { label: "Low stock", value: String(overview.lowStockProducts), href: "/inventory/stock", icon: AlertTriangle, tone: overview.lowStockProducts > 0 ? "warning" : "default", hint: "At or below reorder point" },
+    { label: "Out of stock", value: String(overview.outOfStockProducts), href: "/inventory/stock", icon: PackageX, tone: overview.outOfStockProducts > 0 ? "error" : "default" },
+    { label: "Stock value", value: formatMoney(formatMoneyAmount(overview.stockValueMilli, 3), overview.currencyCode), href: "/inventory/stock", icon: Wallet },
+    { label: "Warehouses", value: String(overview.activeWarehouses), href: "/inventory/warehouses", icon: Warehouse },
+    { label: "Categories", value: String(overview.categories), href: "/inventory/categories", icon: FolderTree },
+    { label: "Open purchase orders", value: String(overview.pendingPurchaseOrders), href: "/purchasing/orders", icon: ClipboardList },
+    { label: "Receipts to post", value: String(overview.goodsReceiptsAwaitingPosting), href: "/purchasing/receipts", icon: PackageCheck },
+    { label: "Open work orders", value: String(overview.openWorkOrders), href: "/manufacturing/work-orders", icon: Factory },
   ];
 
   return (
@@ -47,16 +50,9 @@ export default async function InventoryOverviewPage() {
 
       <section aria-labelledby="kpi-heading" className="space-y-3">
         <h2 id="kpi-heading" className="sr-only">Key figures</h2>
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-5">
           {kpis.map((kpi) => (
-            <a
-              key={kpi.label}
-              href={kpi.href}
-              className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 transition-colors hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]"
-            >
-              <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">{kpi.label}</span>
-              <span className="mt-2 block break-words text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{kpi.value}</span>
-            </a>
+            <StatCard key={kpi.label} {...kpi} />
           ))}
         </div>
       </section>

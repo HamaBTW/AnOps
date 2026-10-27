@@ -8,10 +8,13 @@ import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { PO_STATUS } from "@/features/purchasing/labels";
-import { ButtonLink, Button, selectClass } from "@/shared/components/ui/button";
+import { ButtonLink, Button } from "@/shared/components/ui/button";
 import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
 import { exportUrl } from "@/shared/lib/download";
 import { formatDate, formatMoney } from "@/shared/lib/format";
+import { Filter, Plus } from "lucide-react";
+import { Select } from "@/shared/components/ui/form-kit";
+import { FilterBar, FilterField, filterInputClass } from "@/shared/components/data-display/filter-bar";
 
 export const metadata: Metadata = { title: "Purchase orders | AnOps ERP" };
 
@@ -35,26 +38,24 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
         actions={
           <>
             <ExportExcelButton href={exportUrl("purchase-orders", { q: query.q, status: query.status })} />
-            {canCreate && <ButtonLink href="/purchasing/orders/new" variant="primary">New order</ButtonLink>}
+            {canCreate && <ButtonLink href="/purchasing/orders/new" variant="primary"><Plus aria-hidden className="size-4" />New order</ButtonLink>}
           </>
         }
       />
-      <form method="get" role="search" className="grid gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
-        <div className="space-y-1.5">
-          <label htmlFor="q" className="text-sm font-semibold">Order number</label>
-          <input id="q" name="q" defaultValue={query.q} maxLength={80} placeholder="PO-000001" className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm" />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="status" className="text-sm font-semibold">Status</label>
-          <select id="status" name="status" defaultValue={query.status} className={selectClass}>
-            <option value="all">All</option>
+      <FilterBar role="search" aria-label="Filter purchase orders">
+        <FilterField label="Order number" htmlFor="q" className="sm:w-64">
+          <input id="q" name="q" defaultValue={query.q} maxLength={80} placeholder="e.g. PO-000001" className={filterInputClass} />
+        </FilterField>
+        <FilterField label="Status" htmlFor="status">
+          <Select id="status" name="status" defaultValue={query.status}>
+            <option value="all">All statuses</option>
             {Object.entries(PO_STATUS).map(([value, meta]) => (
               <option key={value} value={value}>{meta.label}</option>
             ))}
-          </select>
-        </div>
-        <Button type="submit">Apply</Button>
-      </form>
+          </Select>
+        </FilterField>
+        <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
+      </FilterBar>
 
       {result.items.length === 0 ? (
         query.q || query.status !== "all" ? (

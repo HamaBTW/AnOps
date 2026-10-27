@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
 import { convertReplenishmentAction, reconcileReplenishmentAction } from "@/features/purchasing/actions/purchasing.action";
 import type { ReplenishmentProposalDto } from "@/server/purchasing/replenishment.service";
-import { Button, selectClass } from "@/shared/components/ui/button";
+import { CheckCircle2, FilePlus2, Sparkles, TriangleAlert, Calculator } from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { Select } from "@/shared/components/ui/form-kit";
+import { FormMessage } from "@/shared/components/ui/form-message";
 
 type Message = { kind: "error" | "success"; text: string; href?: string };
 
@@ -79,15 +82,19 @@ export function ReplenishmentProposalPanel({
   return (
     <section aria-labelledby="proposal-heading" className="space-y-5">
       <div className="space-y-2">
-        <h2 id="proposal-heading" className="text-lg font-semibold">
+        <h2 id="proposal-heading" className="flex flex-wrap items-center gap-2 text-lg font-semibold">
           Proposal for {proposal.warehouseCode}
+          <span className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--color-status-warning-bg)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-status-warning)]">
+            <Sparkles aria-hidden className="size-3" />
+            Recommendation, not applied
+          </span>
         </h2>
         <p className="text-sm text-[var(--color-text-secondary)]">
           Generated {new Date(proposal.generatedAt).toLocaleString("en-GB", { timeZone: "UTC" })} UTC · covers {proposal.horizonDays} days ·
           {" "}history: last {proposal.lookbackDays} days
         </p>
         <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 text-sm space-y-2">
-          <p className="font-semibold">How the suggested quantity is calculated</p>
+          <p className="flex items-center gap-2 font-semibold"><Calculator aria-hidden className="size-4" />How the suggested quantity is calculated</p>
           <p className="text-[var(--color-text-secondary)]">
             Daily use is the average of issues, transfers out and production consumption over the last {proposal.lookbackDays} days.
             Suggested = daily use × {proposal.horizonDays} days + reorder point − on hand, rounded up to whole units for countable items.
@@ -106,7 +113,7 @@ export function ReplenishmentProposalPanel({
       </div>
 
       {proposal.lines.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-secondary)]">No product needs replenishment for this horizon.</p>
+        <p className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-6 text-center text-sm text-[var(--color-text-secondary)]">No product needs replenishment for this horizon. Try a longer period to see more suggestions.</p>
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
           <table className="w-full min-w-[620px] text-left text-sm">
@@ -148,7 +155,7 @@ export function ReplenishmentProposalPanel({
                         </ul>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide">AI explanation</p>
+                        <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide"><Sparkles aria-hidden className="size-3" />AI explanation (generated, verified against stored facts)</p>
                         <p>{line.rationale ?? "Not available for this product. The calculation above is complete."}</p>
                       </div>
                     </td>
@@ -182,13 +189,14 @@ export function ReplenishmentProposalPanel({
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-1.5">
                 <label htmlFor="supplierId" className="text-sm font-semibold">Supplier</label>
-                <select id="supplierId" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={selectClass} disabled={pending}>
+                <Select id="supplierId" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} disabled={pending}>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
-                </select>
+                </Select>
               </div>
               <Button variant="primary" onClick={() => setConfirming(true)} disabled={pending || !supplierId}>
+                <FilePlus2 aria-hidden className="size-4" />
                 Create draft order…
               </Button>
             </div>
@@ -223,10 +231,10 @@ export function ReplenishmentProposalPanel({
       )}
 
       {message && (
-        <p role={message.kind === "error" ? "alert" : "status"} className={message.kind === "error" ? "text-sm text-[var(--color-status-error)]" : "text-sm"}>
+        <FormMessage kind={message.kind}>
           {message.text}{" "}
-          {message.href && <Link className="underline" href={message.href}>Open the order</Link>}
-        </p>
+          {message.href && <Link className="font-semibold underline" href={message.href}>Open the order</Link>}
+        </FormMessage>
       )}
     </section>
   );

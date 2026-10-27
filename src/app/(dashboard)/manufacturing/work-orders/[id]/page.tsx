@@ -10,6 +10,7 @@ import { WorkOrderActions } from "@/features/manufacturing/components/work-order
 import { WORK_ORDER_STATUS } from "@/features/manufacturing/labels";
 import { STOCK_STATUS_LABELS, STOCK_STATUS_TONES } from "@/features/inventory/labels";
 import { formatDateTime, formatDecimalString } from "@/shared/lib/format";
+import { BackLink } from "@/shared/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Work order | AnOps ERP" };
 
@@ -31,7 +32,7 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
       <PageHeader
         title={wo.orderNumber}
         description={`${wo.finishedSku} · ${wo.finishedName} · BOM revision ${wo.bomRevision}`}
-        actions={<Link href="/manufacturing/work-orders" className="inline-flex min-h-[44px] items-center text-sm underline underline-offset-2">Back to work orders</Link>}
+        actions={<BackLink href="/manufacturing/work-orders">Back to work orders</BackLink>}
       />
 
       <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">

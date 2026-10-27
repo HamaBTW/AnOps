@@ -14,7 +14,8 @@ import {
   receiveStockAction,
   transferStockAction,
 } from "@/features/inventory/actions/inventory.action";
-import { Button, selectClass } from "@/shared/components/ui/button";
+import { Button } from "@/shared/components/ui/button";
+import { Field, Select } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
 
@@ -109,17 +110,15 @@ export function StockOperationForm({
     });
   };
 
-  const selectField = (id: keyof Values, label: string, options: { value: string; label: string }[], error?: string) => (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="text-sm font-semibold text-[var(--color-text-primary)]">{label}</label>
-      <select id={id} className={selectClass} aria-invalid={Boolean(error)} {...register(id)}>
-        <option value="">Select…</option>
+  const selectField = (id: keyof Values, label: string, options: { value: string; label: string }[], error?: string, placeholder = "Select…") => (
+    <Field label={label} htmlFor={id} required error={error}>
+      <Select id={id} aria-invalid={Boolean(error)} {...register(id)}>
+        <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
-      </select>
-      {error && <p role="alert" className="text-xs text-[#c0392b]">{error}</p>}
-    </div>
+      </Select>
+    </Field>
   );
 
   const productOptions = products.map((p) => ({ value: p.id, label: `${p.sku} · ${p.name}` }));
@@ -149,23 +148,25 @@ export function StockOperationForm({
         ))}
       </div>
 
-      <form noValidate onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-2" aria-live="polite">
-        {selectField("productId", "Product", productOptions, errors.productId?.message)}
+      <form noValidate onSubmit={handleSubmit(onSubmit)} className="grid gap-5 sm:grid-cols-2" aria-live="polite">
+        {selectField("productId", "Product", productOptions, errors.productId?.message, "Select a product…")}
         {operation === "transfer" ? (
           <>
-            {selectField("fromWarehouseId", "From warehouse", warehouseOptions, errors.fromWarehouseId?.message)}
-            {selectField("toWarehouseId", "To warehouse", warehouseOptions, errors.toWarehouseId?.message)}
+            {selectField("fromWarehouseId", "From warehouse", warehouseOptions, errors.fromWarehouseId?.message, "Select source warehouse…")}
+            {selectField("toWarehouseId", "To warehouse", warehouseOptions, errors.toWarehouseId?.message, "Select destination warehouse…")}
           </>
         ) : (
-          selectField("warehouseId", "Warehouse", warehouseOptions, errors.warehouseId?.message)
+          selectField("warehouseId", "Warehouse", warehouseOptions, errors.warehouseId?.message, "Select a warehouse…")
         )}
         {operation === "adjust" ? (
-          <TextField label="Change (use a minus for removals)" inputMode="decimal" hint="For example 5 or -2.5" error={errors.delta?.message} {...register("delta")} />
+          <TextField label="Change" required inputMode="decimal" placeholder="e.g. 5 or -2.5" hint="Use a minus sign for removals." error={errors.delta?.message} {...register("delta")} />
         ) : (
-          <TextField label="Quantity" inputMode="decimal" error={errors.quantity?.message} {...register("quantity")} />
+          <TextField label="Quantity" required inputMode="decimal" placeholder="e.g. 10" error={errors.quantity?.message} {...register("quantity")} />
         )}
         <TextField
-          label={operation === "adjust" ? "Reason (required)" : operation === "issue" ? "Reason (required)" : "Note (optional)"}
+          label={operation === "adjust" || operation === "issue" ? "Reason" : "Note"}
+          required={operation === "adjust" || operation === "issue"}
+          placeholder={operation === "adjust" ? "e.g. Cycle count correction" : operation === "issue" ? "e.g. Damaged in storage" : "Optional reference or comment"}
           error={errors.reason?.message}
           {...register("reason")}
         />

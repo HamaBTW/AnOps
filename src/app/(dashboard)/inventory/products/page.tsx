@@ -7,12 +7,15 @@ import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
-import { ButtonLink, Button, selectClass } from "@/shared/components/ui/button";
+import { ButtonLink, Button } from "@/shared/components/ui/button";
 import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
 import { exportUrl } from "@/shared/lib/download";
 import { formatDecimalString } from "@/shared/lib/format";
 import { STOCK_STATUS_LABELS, STOCK_STATUS_TONES } from "@/features/inventory/labels";
 import { UNIT_LABELS, type UnitOfMeasure } from "@/shared/domain/units";
+import { Filter, Plus } from "lucide-react";
+import { Select } from "@/shared/components/ui/form-kit";
+import { FilterBar, FilterField, filterInputClass } from "@/shared/components/data-display/filter-bar";
 
 export const metadata: Metadata = { title: "Products | AnOps ERP" };
 
@@ -36,33 +39,24 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         actions={
           <>
             <ExportExcelButton href={exportUrl("products", { q: query.q, status: query.status })} />
-            {canManage && <ButtonLink href="/inventory/products/new" variant="primary">New product</ButtonLink>}
+            {canManage && <ButtonLink href="/inventory/products/new" variant="primary"><Plus aria-hidden className="size-4" />New product</ButtonLink>}
           </>
         }
       />
 
-      <form method="get" role="search" className="grid gap-3 sm:grid-cols-[1fr_200px_auto] sm:items-end">
-        <div className="space-y-1.5">
-          <label htmlFor="q" className="text-sm font-semibold text-[var(--color-text-primary)]">Search by name or SKU</label>
-          <input
-            id="q"
-            name="q"
-            defaultValue={query.q}
-            placeholder="Starts with…"
-            maxLength={80}
-            className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)]"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="status" className="text-sm font-semibold text-[var(--color-text-primary)]">Status</label>
-          <select id="status" name="status" defaultValue={query.status} className={selectClass}>
+      <FilterBar role="search" aria-label="Filter products">
+        <FilterField label="Search by name or SKU" htmlFor="q" className="sm:w-72">
+          <input id="q" name="q" defaultValue={query.q} placeholder="e.g. RM-STEEL or Steel sheet" maxLength={80} className={filterInputClass} />
+        </FilterField>
+        <FilterField label="Status" htmlFor="status">
+          <Select id="status" name="status" defaultValue={query.status}>
             <option value="active">Active</option>
             <option value="archived">Archived</option>
             <option value="all">All</option>
-          </select>
-        </div>
-        <Button type="submit">Apply</Button>
-      </form>
+          </Select>
+        </FilterField>
+        <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
+      </FilterBar>
 
       {result.items.length === 0 ? (
         query.q || query.status !== "active" ? (

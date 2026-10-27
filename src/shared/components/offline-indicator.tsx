@@ -42,13 +42,13 @@ export function OfflineIndicator() {
   if (isOnline && !showRestored) return null;
 
   return (
-    <aside
+    <div
       role="alert"
       aria-live="assertive"
-      className={`sticky top-0 z-[100] w-full px-4 py-2.5 shadow-md flex items-center justify-between transition-all duration-300 ${
+      className={`fixed top-0 inset-x-0 z-[99999] w-full px-4 py-2.5 shadow-md flex items-center justify-between transition-all duration-300 pointer-events-auto ${
         !isOnline
-          ? "bg-amber-600 text-white font-medium text-sm border-b border-amber-700"
-          : "bg-emerald-600 text-white font-medium text-sm border-b border-emerald-700"
+          ? "bg-[#b45309] text-white font-medium text-sm border-b border-amber-700"
+          : "bg-[#059669] text-white font-medium text-sm border-b border-emerald-700"
       }`}
     >
       <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
@@ -61,17 +61,17 @@ export function OfflineIndicator() {
           <span className="text-xs sm:text-sm tracking-wide">
             {!isOnline ? (
               <>
-                <strong className="font-semibold uppercase tracking-wider text-[11px] bg-amber-800/60 px-2 py-0.5 rounded mr-2">
-                  Offline Mode
+                <strong className="font-semibold uppercase tracking-wider text-[11px] bg-amber-950/60 text-amber-100 px-2 py-0.5 rounded mr-2">
+                  OFFLINE
                 </strong>
-                You are currently offline. Working with locally cached data &amp; queueing actions.
+                You are currently offline. Pages are serving from local cache and changes will be queued.
               </>
             ) : (
               <>
-                <strong className="font-semibold uppercase tracking-wider text-[11px] bg-emerald-800/60 px-2 py-0.5 rounded mr-2">
-                  Connected
+                <strong className="font-semibold uppercase tracking-wider text-[11px] bg-emerald-950/60 text-emerald-100 px-2 py-0.5 rounded mr-2">
+                  ONLINE
                 </strong>
-                Internet connection restored. Synchronizing updates...
+                Connection restored. Syncing data...
               </>
             )}
           </span>
@@ -81,13 +81,13 @@ export function OfflineIndicator() {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="flex items-center gap-1.5 text-xs bg-amber-800/80 hover:bg-amber-900 text-amber-100 px-3 py-1 rounded transition-colors"
+            className="flex items-center gap-1.5 text-xs bg-amber-900/80 hover:bg-amber-950 text-white font-semibold px-3 py-1 rounded transition-colors"
           >
-            <RefreshCw className="w-3 h-3" />
-            <span className="hidden sm:inline">Retry</span>
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
           </button>
         )}
       </div>
-    </aside>
+    </div>
   );
 }

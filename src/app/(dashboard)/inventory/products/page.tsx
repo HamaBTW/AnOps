@@ -5,9 +5,9 @@ import { listProducts } from "@/server/inventory/catalog.service";
 import { productListQuerySchema } from "@/features/inventory/schemas/inventory.schema";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
-import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { ButtonLink, Button } from "@/shared/components/ui/button";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
 import { exportUrl } from "@/shared/lib/download";
 import { formatDecimalString } from "@/shared/lib/format";
@@ -16,6 +16,7 @@ import { UNIT_LABELS, type UnitOfMeasure } from "@/shared/domain/units";
 import { Filter, Plus } from "lucide-react";
 import { Select } from "@/shared/components/ui/form-kit";
 import { FilterBar, FilterField, filterInputClass } from "@/shared/components/data-display/filter-bar";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Products | AnOps ERP" };
 
@@ -28,14 +29,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     page: typeof raw.page === "string" ? raw.page : undefined,
   });
   const query = parsedQuery.success ? parsedQuery.data : productListQuerySchema.parse({});
-  const result = await listProducts(ctx, query);
+  const loaded = await safeLoad(() => listProducts(ctx, query));
+  const result = loaded.ok ? loaded.data : null;
+  if (result) redirectIfPageOutOfRange(result, "/inventory/products", { q: query.q || undefined, status: query.status });
   const canManage = ctx.permissions.has("inventory.product.manage");
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description={`${result.total} product${result.total === 1 ? "" : "s"} · ${query.status === "all" ? "all statuses" : query.status}`}
+        description={result ? `${result.total} product${result.total === 1 ? "" : "s"} · ${query.status === "all" ? "all statuses" : query.status}` : undefined}
         actions={
           <>
             <ExportExcelButton href={exportUrl("products", { q: query.q, status: query.status })} />
@@ -58,18 +61,18 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
       </FilterBar>
 
-      {result.items.length === 0 ? (
+      {!result ? (
+        <EmptyState variant="error" title="Products could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/inventory/products" actionLabel="Try again" />
+      ) : result.items.length === 0 ? (
         query.q || query.status !== "active" ? (
-          <p className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 text-sm text-[var(--color-text-secondary)]">
-            No products match these filters.{" "}
-            <Link href="/inventory/products" className="underline">Clear filters</Link>
-          </p>
+          <EmptyState variant="filtered" title="No matching products" description="Nothing matches the current search or filters. Check the spelling or try a different status." actionHref="/inventory/products" actionLabel="Clear filters" />
         ) : (
           <EmptyState
             title="No products yet"
             description="Products are the items you buy, store, sell, or manufacture. Create your first one to start tracking stock."
             actionHref={canManage ? "/inventory/products/new" : undefined}
             actionLabel={canManage ? "Create a product" : undefined}
+            actionIcon={Plus}
           />
         )
       ) : (
@@ -113,12 +116,14 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <Pagination
+      {result && <Pagination
         basePath="/inventory/products"
         page={result.page}
         totalPages={result.totalPages}
+        total={result.total}
+        pageSize={result.pageSize}
         params={{ q: query.q || undefined, status: query.status }}
-      />
+      />}
     </div>
   );
 }

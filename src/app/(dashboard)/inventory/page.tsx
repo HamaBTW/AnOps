@@ -21,15 +21,15 @@ export default async function InventoryOverviewPage() {
   const overview = await getInventoryOverview(ctx);
 
   const kpis: { label: string; value: string; href: string; icon: LucideIcon; tone?: StatTone; hint?: string }[] = [
-    { label: "Active products", value: String(overview.activeProducts), href: "/inventory/products", icon: Boxes },
-    { label: "Low stock", value: String(overview.lowStockProducts), href: "/inventory/stock", icon: AlertTriangle, tone: overview.lowStockProducts > 0 ? "warning" : "default", hint: "At or below reorder point" },
-    { label: "Out of stock", value: String(overview.outOfStockProducts), href: "/inventory/stock", icon: PackageX, tone: overview.outOfStockProducts > 0 ? "error" : "default" },
-    { label: "Stock value", value: formatMoney(formatMoneyAmount(overview.stockValueMilli, 3), overview.currencyCode), href: "/inventory/stock", icon: Wallet },
-    { label: "Warehouses", value: String(overview.activeWarehouses), href: "/inventory/warehouses", icon: Warehouse },
-    { label: "Categories", value: String(overview.categories), href: "/inventory/categories", icon: FolderTree },
-    { label: "Open purchase orders", value: String(overview.pendingPurchaseOrders), href: "/purchasing/orders", icon: ClipboardList },
-    { label: "Receipts to post", value: String(overview.goodsReceiptsAwaitingPosting), href: "/purchasing/receipts", icon: PackageCheck },
-    { label: "Open work orders", value: String(overview.openWorkOrders), href: "/manufacturing/work-orders", icon: Factory },
+    { label: "Active products", value: String(overview.activeProducts), href: "/inventory/products", icon: Boxes, tone: "blue" },
+    { label: "Low stock", value: String(overview.lowStockProducts), href: "/inventory/stock", icon: AlertTriangle, tone: "warning", hint: "At or below reorder point" },
+    { label: "Out of stock", value: String(overview.outOfStockProducts), href: "/inventory/stock", icon: PackageX, tone: "error" },
+    { label: "Stock value", value: formatMoney(formatMoneyAmount(overview.stockValueMilli, 3), overview.currencyCode), href: "/inventory/stock", icon: Wallet, tone: "success" },
+    { label: "Warehouses", value: String(overview.activeWarehouses), href: "/inventory/warehouses", icon: Warehouse, tone: "teal" },
+    { label: "Categories", value: String(overview.categories), href: "/inventory/categories", icon: FolderTree, tone: "violet" },
+    { label: "Open purchase orders", value: String(overview.pendingPurchaseOrders), href: "/purchasing/orders", icon: ClipboardList, tone: "blue" },
+    { label: "Receipts to post", value: String(overview.goodsReceiptsAwaitingPosting), href: "/purchasing/receipts", icon: PackageCheck, tone: "teal" },
+    { label: "Open work orders", value: String(overview.openWorkOrders), href: "/manufacturing/work-orders", icon: Factory, tone: "violet" },
   ];
 
   return (
@@ -63,9 +63,7 @@ export default async function InventoryOverviewPage() {
           <ButtonLink href="/inventory/stock">View all</ButtonLink>
         </div>
         {overview.recentMovements.length === 0 ? (
-          <p className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 text-sm text-[var(--color-text-secondary)]">
-            No stock movements yet. Movements appear when stock is received, issued, transferred, adjusted, or produced.
-          </p>
+          <EmptyState title="No stock movements yet" description="Movements appear when stock is received, issued, transferred, adjusted, or produced." />
         ) : (
           <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
             <table className="w-full min-w-[560px] text-left text-sm">

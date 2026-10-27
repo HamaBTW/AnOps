@@ -7,6 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supplierInputSchema } from "@/features/purchasing/schemas/purchasing.schema";
 import { createSupplierAction, updateSupplierAction } from "@/features/purchasing/actions/purchasing.action";
+import { Truck } from "lucide-react";
+import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
@@ -66,7 +68,7 @@ function SupplierForm({
   );
 }
 
-export function SupplierManager({ suppliers, canManage }: { suppliers: SupplierDto[]; canManage: boolean }) {
+export function SupplierManager({ suppliers, canManage, filtered = false }: { suppliers: SupplierDto[]; canManage: boolean; filtered?: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<"none" | "create" | string>("none");
 
@@ -92,9 +94,15 @@ export function SupplierManager({ suppliers, canManage }: { suppliers: SupplierD
       )}
 
       {suppliers.length === 0 ? (
-        <p className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-control)] p-6 text-sm text-[var(--color-text-secondary)]">
-          No suppliers yet. Add a supplier before creating purchase orders.
-        </p>
+        filtered ? (
+          <EmptyState variant="filtered" title="No matching suppliers" description="Nothing matches this search. Check the spelling or search for a shorter name." actionHref="/purchasing/suppliers" actionLabel="Clear search" />
+        ) : (
+          <EmptyState
+            icon={Truck}
+            title="No suppliers yet"
+            description="Add a supplier before creating purchase orders."
+          />
+        )
       ) : (
         <ul className="divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
           {suppliers.map((supplier) => (

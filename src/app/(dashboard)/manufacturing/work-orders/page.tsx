@@ -5,7 +5,7 @@ import { listWorkOrders } from "@/server/manufacturing/work-order.service";
 import { workOrderListQuerySchema } from "@/features/manufacturing/schemas/manufacturing.schema";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
-import { Pagination } from "@/shared/components/data-display/pagination";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { Button, ButtonLink } from "@/shared/components/ui/button";
 import { Filter, Plus } from "lucide-react";
@@ -13,6 +13,7 @@ import { Select } from "@/shared/components/ui/form-kit";
 import { FilterBar, FilterField } from "@/shared/components/data-display/filter-bar";
 import { WORK_ORDER_STATUS } from "@/features/manufacturing/labels";
 import { formatDate, formatDecimalString } from "@/shared/lib/format";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Work orders | AnOps ERP" };
 
@@ -21,7 +22,9 @@ export default async function WorkOrdersPage({ searchParams }: { searchParams: P
   const raw = await searchParams;
   const parsed = workOrderListQuerySchema.safeParse({ status: raw.status, page: raw.page });
   const query = parsed.success ? parsed.data : workOrderListQuerySchema.parse({});
-  const result = await listWorkOrders(ctx, query);
+  const loaded = await safeLoad(() => listWorkOrders(ctx, query));
+  const result = loaded.ok ? loaded.data : null;
+  if (result) redirectIfPageOutOfRange(result, "/manufacturing/work-orders", { status: query.status === "all" ? undefined : query.status });
   const canCreate = ctx.permissions.has("manufacturing.work_order.manage");
 
   return (
@@ -43,13 +46,20 @@ export default async function WorkOrdersPage({ searchParams }: { searchParams: P
         <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
       </FilterBar>
 
-      {result.items.length === 0 ? (
+{!result ? (
+        <EmptyState variant="error" title="Work orders could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/manufacturing/work-orders" actionLabel="Try again" />
+      ) : result.items.length === 0 ? (
+query.status !== "all" ? (
+          <EmptyState variant="filtered" title="No matching work orders" description="No work orders have this status. Choose another status to see more." actionHref="/manufacturing/work-orders" actionLabel="Clear filters" />
+        ) : (
         <EmptyState
           title="No work orders"
           description="Create a work order from an active bill of materials to plan a production run."
           actionHref={canCreate ? "/manufacturing/work-orders/new" : undefined}
           actionLabel={canCreate ? "Create a work order" : undefined}
+          actionIcon={Plus}
         />
+        )
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -79,7 +89,7 @@ export default async function WorkOrdersPage({ searchParams }: { searchParams: P
           </table>
         </div>
       )}
-      <Pagination basePath="/manufacturing/work-orders" page={result.page} totalPages={result.totalPages} params={{ status: query.status }} />
+      {result && <Pagination basePath="/manufacturing/work-orders" page={result.page} totalPages={result.totalPages} total={result.total} pageSize={result.pageSize} params={{ status: query.status }} />}
     </div>
   );
 }

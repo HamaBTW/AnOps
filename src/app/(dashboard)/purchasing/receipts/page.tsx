@@ -5,7 +5,7 @@ import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { listReceipts } from "@/server/purchasing/receipt.service";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
-import { Pagination } from "@/shared/components/data-display/pagination";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { RECEIPT_STATUS } from "@/features/purchasing/labels";
 import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
@@ -15,6 +15,7 @@ import { Filter } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Select } from "@/shared/components/ui/form-kit";
 import { FilterBar, FilterField } from "@/shared/components/data-display/filter-bar";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Goods receipts | AnOps ERP" };
 
@@ -29,7 +30,9 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
   const ctx = await getPageWorkspace();
   const raw = await searchParams;
   const query = querySchema.parse({ status: raw.status, page: raw.page });
-  const result = await listReceipts(ctx, { status: query.status === "all" ? undefined : query.status, page: query.page });
+  const loaded = await safeLoad(() => listReceipts(ctx, { status: query.status === "all" ? undefined : query.status, page: query.page }));
+  const result = loaded.ok ? loaded.data : null;
+  if (result) redirectIfPageOutOfRange(result, "/purchasing/receipts", { status: query.status === "all" ? undefined : query.status });
 
   return (
     <div className="space-y-6">
@@ -50,8 +53,14 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
         <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
       </FilterBar>
 
-      {result.items.length === 0 ? (
-        <EmptyState title="No receipts" description="Receipts are created from an approved purchase order when goods arrive." actionHref="/purchasing/orders" actionLabel="Go to orders" />
+{!result ? (
+        <EmptyState variant="error" title="Goods receipts could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/purchasing/receipts" actionLabel="Try again" />
+      ) : result.items.length === 0 ? (
+        query.status !== "all" ? (
+          <EmptyState variant="filtered" title="No matching receipts" description="No goods receipts have this status. Choose another status to see more." actionHref="/purchasing/receipts" actionLabel="Clear filters" />
+        ) : (
+          <EmptyState title="No goods receipts yet" description="Receipts are created from an approved purchase order when goods arrive." actionHref="/purchasing/orders" actionLabel="Go to purchase orders" />
+        )
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -81,7 +90,7 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
           </table>
         </div>
       )}
-      <Pagination basePath="/purchasing/receipts" page={result.page} totalPages={result.totalPages} params={{ status: query.status }} />
+      {result && <Pagination basePath="/purchasing/receipts" page={result.page} totalPages={result.totalPages} total={result.total} pageSize={result.pageSize} params={{ status: query.status }} />}
     </div>
   );
 }

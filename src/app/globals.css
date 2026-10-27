@@ -94,6 +94,13 @@ h1, h2, h3, h4, h5, h6 {
   --color-status-error-bg: #fff1ee;
   --color-status-neutral-bg: #e1e5dc;
   --color-status-neutral: #59645f;
+  /* Tinted icon chips: fixed light tint + deep foreground, readable on both light and dark surfaces. */
+  --color-accent-blue: #1d4e89;
+  --color-accent-blue-bg: #e3edf9;
+  --color-accent-teal: #14625f;
+  --color-accent-teal-bg: #dff1ee;
+  --color-accent-violet: #5b3f94;
+  --color-accent-violet-bg: #ece7f8;
 }
 
 :root {

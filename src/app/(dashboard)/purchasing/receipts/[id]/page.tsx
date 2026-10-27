@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { getReceipt } from "@/server/purchasing/receipt.service";

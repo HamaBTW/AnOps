@@ -7,7 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { categoryInputSchema } from "@/features/inventory/schemas/inventory.schema";
 import { createCategoryAction, setCategoryActiveAction, updateCategoryAction } from "@/features/inventory/actions/inventory.action";
-import { Check, LoaderCircle, Pencil, Archive, ArchiveRestore } from "lucide-react";
+import { Check, ChevronDown, FolderTree, LoaderCircle, Pencil, Plus, Archive, ArchiveRestore } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
+import { EmptyState } from "@/shared/components/data-display/empty-state";
+import { ClientPagination } from "@/shared/components/data-display/client-pagination";
 import { Button } from "@/shared/components/ui/button";
 import { Field, FormActions, Textarea } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
@@ -49,7 +52,7 @@ function CategoryForm({
           }
         })
       )}
-      className="grid gap-5 sm:grid-cols-2"
+      className="grid gap-5"
     >
       <TextField label="Name" required placeholder="e.g. Raw materials" maxLength={80} error={errors.name?.message} {...register("name")} />
       <Field label="Description" htmlFor="category-description" hint="Optional. Shown to help your team choose the right category." error={errors.description?.message}>
@@ -62,8 +65,8 @@ function CategoryForm({
           {...register("description")}
         />
       </Field>
-      {formError && <div className="sm:col-span-2"><FormMessage kind="error">{formError}</FormMessage></div>}
-      <div className="sm:col-span-2">
+      {formError && <div><FormMessage kind="error">{formError}</FormMessage></div>}
+      <div>
         <FormActions>
           {onCancel && <Button onClick={onCancel} disabled={pending}>Cancel</Button>}
           <Button type="submit" variant="primary" disabled={pending}>
@@ -76,42 +79,78 @@ function CategoryForm({
   );
 }
 
+const PAGE_SIZE = 10;
+
 export function CategoryManager({ categories, canManage }: { categories: CategoryDto[]; canManage: boolean }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(categories.length === 0);
+  const [page, setPage] = useState(1);
+  const pageItems = categories.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const refresh = () => router.refresh();
 
   return (
     <div className="space-y-6">
       {canManage && (
-        <section aria-labelledby="new-category" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
-          <h2 id="new-category" className="mb-1 text-base font-semibold">New category</h2>
-          <p className="mb-5 text-sm text-[var(--color-text-secondary)]">Categories group products for reporting and filtering. They are optional.</p>
-          <CategoryForm
-            defaultValues={{ name: "", description: "" }}
-            submitLabel="Add category"
-            onSubmit={async (values) => {
-              const result = await createCategoryAction(values);
-              if (!result.ok) return result.error.message;
-              setNotice("Category added.");
-              refresh();
-              return null;
-            }}
-          />
+        <section aria-labelledby="new-category" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
+          <h2 id="new-category" className="text-base font-semibold">
+            <button
+              type="button"
+              aria-expanded={formOpen}
+              aria-controls="new-category-panel"
+              onClick={() => setFormOpen((open) => !open)}
+              className="group flex min-h-[64px] w-full items-center gap-3 rounded-[var(--radius-card)] px-4 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] active:bg-[var(--color-bg-subtle)] sm:px-6"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)]">
+                <Plus aria-hidden className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block">New category</span>
+                <span className="block text-sm font-normal text-[var(--color-text-secondary)]">Group products for reporting and filtering. Optional.</span>
+              </span>
+              <ChevronDown aria-hidden className={cn("size-5 shrink-0 text-[var(--color-text-secondary)] transition-transform duration-200 ease-out", formOpen && "rotate-180")} />
+            </button>
+          </h2>
+          <div
+            id="new-category-panel"
+            role="region"
+            aria-labelledby="new-category"
+            className={cn("grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none", formOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}
+          >
+            <div className="overflow-hidden" inert={!formOpen}>
+              <div className="border-t border-[var(--color-border-subtle)] p-4 sm:p-6">
+                <CategoryForm
+                  defaultValues={{ name: "", description: "" }}
+                  submitLabel="Add category"
+                  onCancel={() => setFormOpen(false)}
+                  onSubmit={async (values) => {
+                    const result = await createCategoryAction(values);
+                    if (!result.ok) return result.error.message;
+                    setNotice("Category added.");
+                    setFormOpen(false);
+                    refresh();
+                    return null;
+                  }}
+                />
+              </div>
+            </div>
+          </div>
         </section>
       )}
 
       {notice && <FormMessage kind="success">{notice}</FormMessage>}
 
       {categories.length === 0 ? (
-        <p className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-control)] p-6 text-sm text-[var(--color-text-secondary)]">
-          No categories yet. Categories group products for reporting and filtering. They are optional.
-        </p>
+        <EmptyState
+          icon={FolderTree}
+          title="No categories yet"
+          description="Categories group products for reporting and filtering. They are optional."
+        />
       ) : (
         <ul className="divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
-          {categories.map((category) => (
+          {pageItems.map((category) => (
             <li key={category.id} className="p-4">
               {editingId === category.id ? (
                 <CategoryForm
@@ -158,6 +197,7 @@ export function CategoryManager({ categories, canManage }: { categories: Categor
           ))}
         </ul>
       )}
+      <ClientPagination page={page} pageSize={PAGE_SIZE} total={categories.length} onPageChange={setPage} />
     </div>
   );
 }

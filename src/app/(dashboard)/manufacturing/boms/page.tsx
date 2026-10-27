@@ -5,11 +5,13 @@ import { listBoms } from "@/server/manufacturing/bom.service";
 import { bomListQuerySchema } from "@/features/manufacturing/schemas/manufacturing.schema";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
-import { Pagination } from "@/shared/components/data-display/pagination";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { ButtonLink } from "@/shared/components/ui/button";
+import { Plus } from "lucide-react";
 import { BOM_STATUS } from "@/features/manufacturing/labels";
 import { formatDateTime } from "@/shared/lib/format";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Bills of materials | AnOps ERP" };
 
@@ -18,7 +20,9 @@ export default async function BomsPage({ searchParams }: { searchParams: Promise
   const raw = await searchParams;
   const parsed = bomListQuerySchema.safeParse({ status: raw.status, page: raw.page });
   const query = parsed.success ? parsed.data : bomListQuerySchema.parse({});
-  const result = await listBoms(ctx, query);
+  const loaded = await safeLoad(() => listBoms(ctx, query));
+  const result = loaded.ok ? loaded.data : null;
+  if (result) redirectIfPageOutOfRange(result, "/manufacturing/boms", { status: query.status === "all" ? undefined : query.status });
   const canManage = ctx.permissions.has("manufacturing.bom.manage");
 
   return (
@@ -26,15 +30,22 @@ export default async function BomsPage({ searchParams }: { searchParams: Promise
       <PageHeader
         title="Bills of materials"
         description="Recipes that list the components needed for one unit of a finished product. Each edit creates a new revision."
-        actions={canManage ? <ButtonLink href="/manufacturing/boms/new" variant="primary">New BOM</ButtonLink> : undefined}
+        actions={canManage ? <ButtonLink href="/manufacturing/boms/new" variant="primary"><Plus aria-hidden className="size-4" />New BOM</ButtonLink> : undefined}
       />
-      {result.items.length === 0 ? (
+{!result ? (
+        <EmptyState variant="error" title="Bills of materials could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/manufacturing/boms" actionLabel="Try again" />
+      ) : result.items.length === 0 ? (
+query.status !== "all" ? (
+          <EmptyState variant="filtered" title="No matching bills of materials" description="No bills of materials have this status. Choose another status to see more." actionHref="/manufacturing/boms" actionLabel="Clear filters" />
+        ) : (
         <EmptyState
           title="No bills of materials"
           description="Define the components for a finished product, then activate the revision before creating work orders."
           actionHref={canManage ? "/manufacturing/boms/new" : undefined}
           actionLabel={canManage ? "Create a BOM" : undefined}
+          actionIcon={Plus}
         />
+        )
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
           <table className="w-full min-w-[620px] text-left text-sm">
@@ -65,7 +76,7 @@ export default async function BomsPage({ searchParams }: { searchParams: Promise
           </table>
         </div>
       )}
-      <Pagination basePath="/manufacturing/boms" page={result.page} totalPages={result.totalPages} params={{ status: query.status }} />
+      {result && <Pagination basePath="/manufacturing/boms" page={result.page} totalPages={result.totalPages} total={result.total} pageSize={result.pageSize} params={{ status: query.status }} />}
     </div>
   );
 }

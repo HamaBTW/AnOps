@@ -8,7 +8,7 @@ import { supplierOptions } from "@/server/purchasing/supplier.service";
 import { isAppError } from "@/shared/lib/errors";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
-import { Pagination } from "@/shared/components/data-display/pagination";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import type { BadgeTone } from "@/shared/components/data-display/status-badge";
 import { buttonClass } from "@/shared/components/ui/button";
@@ -16,6 +16,7 @@ import { ReplenishmentGenerateForm } from "@/features/purchasing/components/repl
 import { ReplenishmentProposalPanel } from "@/features/purchasing/components/replenishment-proposal-panel";
 import { formatDateTime } from "@/shared/lib/format";
 import { ClipboardCheck, Sparkles, Warehouse as WarehouseIcon, FileCheck2 } from "lucide-react";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Replenishment | AnOps ERP" };
 
@@ -34,11 +35,13 @@ export default async function ReplenishmentPage({ searchParams }: { searchParams
   const page = pageParam.parse(typeof raw.page === "string" ? raw.page : 1);
   const selectedId = typeof raw.proposal === "string" && objectIdPattern.test(raw.proposal) ? raw.proposal.toLowerCase() : undefined;
 
-  const [list, warehouses, suppliers] = await Promise.all([
-    listReplenishmentProposals(ctx, { page }),
+  const [listLoad, warehouses, suppliers] = await Promise.all([
+    safeLoad(() => listReplenishmentProposals(ctx, { page })),
     warehouseOptions(ctx),
     supplierOptions(ctx),
   ]);
+  const list = listLoad.ok ? listLoad.data : null;
+  if (list) redirectIfPageOutOfRange(list, "/purchasing/replenishment", { proposal: selectedId });
   const detail = selectedId
     ? await getReplenishmentProposal(ctx, selectedId).catch((error: unknown) => {
         if (isAppError(error) && error.code === "NOT_FOUND") return null;
@@ -95,7 +98,9 @@ export default async function ReplenishmentPage({ searchParams }: { searchParams
 
       <section aria-labelledby="list-heading" className="space-y-3">
         <h2 id="list-heading" className="text-lg font-semibold">Recent proposals</h2>
-        {list.items.length === 0 ? (
+        {!list ? (
+          <EmptyState variant="error" title="Proposals could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/purchasing/replenishment" actionLabel="Try again" />
+        ) : list.items.length === 0 ? (
           <EmptyState title="No proposals yet" description="Choose a warehouse above and generate a proposal to see suggested purchases. Results will be listed here for review." />
         ) : (
           <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
@@ -130,7 +135,7 @@ export default async function ReplenishmentPage({ searchParams }: { searchParams
             </table>
           </div>
         )}
-        <Pagination basePath="/purchasing/replenishment" page={list.page} totalPages={list.totalPages} params={{ proposal: selectedId }} />
+        {list && <Pagination basePath="/purchasing/replenishment" page={list.page} totalPages={list.totalPages} total={list.total} pageSize={list.pageSize} params={{ proposal: selectedId }} />}
       </section>
 
       {detail && <ReplenishmentProposalPanel proposal={detail} suppliers={suppliers} canConvert={canConvert} />}

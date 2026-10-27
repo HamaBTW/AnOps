@@ -3,7 +3,7 @@ import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { listProductOptions, warehouseOptions } from "@/server/inventory/catalog.service";
 import { listStockBalances, listStockMovements } from "@/server/inventory/stock.service";
 import { PageHeader } from "@/shared/components/data-display/page-header";
-import { Pagination } from "@/shared/components/data-display/pagination";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { StockOperationForm, type StockOperation } from "@/features/inventory/components/stock-operation-form";
@@ -13,6 +13,7 @@ import { exportUrl } from "@/shared/lib/download";
 import { formatDateTime, formatDecimalString } from "@/shared/lib/format";
 import { z } from "zod";
 import { ArrowLeftRight, History, Warehouse as WarehouseIcon } from "lucide-react";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Stock | AnOps ERP" };
 
@@ -24,12 +25,16 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
   const balancePage = pageParam.parse(typeof raw.balancePage === "string" ? raw.balancePage : 1);
   const movementPage = pageParam.parse(typeof raw.movementPage === "string" ? raw.movementPage : 1);
 
-  const [balances, movements, products, warehouses] = await Promise.all([
-    listStockBalances(ctx, { page: balancePage }),
-    listStockMovements(ctx, { page: movementPage }),
+  const [balancesLoad, movementsLoad, products, warehouses] = await Promise.all([
+    safeLoad(() => listStockBalances(ctx, { page: balancePage })),
+    safeLoad(() => listStockMovements(ctx, { page: movementPage })),
     listProductOptions(ctx),
     warehouseOptions(ctx),
   ]);
+  const balances = balancesLoad.ok ? balancesLoad.data : null;
+  const movements = movementsLoad.ok ? movementsLoad.data : null;
+  if (balances) redirectIfPageOutOfRange(balances, "/inventory/stock", { movementPage: String(movementPage) }, "balancePage");
+  if (movements) redirectIfPageOutOfRange(movements, "/inventory/stock", { balancePage: String(balancePage) }, "movementPage");
 
   const operations: StockOperation[] = [];
   if (ctx.permissions.has("inventory.stock.move")) operations.push("receive", "issue", "transfer");
@@ -47,7 +52,9 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           </div>
           <ExportExcelButton href={exportUrl("stock-on-hand", {})} ariaLabel="Export stock on hand to Excel" />
         </div>
-        {balances.items.length === 0 ? (
+        {!balances ? (
+          <EmptyState variant="error" title="Stock balances could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/inventory/stock" actionLabel="Try again" />
+        ) : balances.items.length === 0 ? (
           <EmptyState
             title="No stock recorded"
             description="Stock appears here after you receive goods, post a purchase receipt, or complete a work order. Use “Record a stock change” below to add an opening balance."
@@ -84,7 +91,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
             </table>
           </div>
         )}
-        <Pagination basePath="/inventory/stock" page={balances.page} totalPages={balances.totalPages} params={{ movementPage: String(movementPage) }} />
+        {balances && <Pagination basePath="/inventory/stock" pageParam="balancePage" page={balances.page} totalPages={balances.totalPages} total={balances.total} pageSize={balances.pageSize} params={{ movementPage: String(movementPage) }} />}
       </section>
 
       {operations.length > 0 && (
@@ -105,7 +112,9 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
           </div>
           <ExportExcelButton href={exportUrl("stock-movements", {})} ariaLabel="Export recent stock movements to Excel" />
         </div>
-        {movements.items.length === 0 ? (
+        {!movements ? (
+          <EmptyState variant="error" title="Movement history could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/inventory/stock" actionLabel="Try again" />
+        ) : movements.items.length === 0 ? (
           <EmptyState title="No movements yet" description="Movements appear here as soon as stock is received, issued, transferred or adjusted." />
         ) : (
           <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
@@ -136,7 +145,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
             </table>
           </div>
         )}
-        <Pagination basePath="/inventory/stock" page={movements.page} totalPages={movements.totalPages} params={{ balancePage: String(balancePage) }} />
+        {movements && <Pagination basePath="/inventory/stock" pageParam="movementPage" page={movements.page} totalPages={movements.totalPages} total={movements.total} pageSize={movements.pageSize} params={{ balancePage: String(balancePage) }} />}
       </section>
       {warehouses.length === 0 && (
         <p className="text-sm text-[var(--color-text-secondary)]">

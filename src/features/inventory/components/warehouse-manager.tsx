@@ -7,6 +7,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { warehouseInputSchema } from "@/features/inventory/schemas/inventory.schema";
 import { createWarehouseAction, updateWarehouseAction } from "@/features/inventory/actions/inventory.action";
+import { Plus, Warehouse } from "lucide-react";
+import { EmptyState } from "@/shared/components/data-display/empty-state";
+import { ClientPagination } from "@/shared/components/data-display/client-pagination";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { TextField } from "@/shared/components/ui/text-field";
@@ -45,12 +48,12 @@ function WarehouseForm({
           if (error) setFormError(error);
         })
       )}
-      className="grid gap-4 sm:grid-cols-2"
+      className="grid gap-5 sm:grid-cols-2"
     >
-      <TextField label="Name" error={errors.name?.message} {...register("name")} />
-      <TextField label="Code" hint="2 to 12 letters, digits or dashes. Unique per company." error={errors.code?.message} {...register("code")} />
+      <TextField label="Name" required placeholder="e.g. Main distribution centre" error={errors.name?.message} {...register("name")} />
+      <TextField label="Code" required placeholder="e.g. MAIN-01" hint="2 to 12 letters, digits or dashes. Unique per company." error={errors.code?.message} {...register("code")} />
       <div className="sm:col-span-2">
-        <TextField label="Address" error={errors.address?.message} {...register("address")} />
+        <TextField label="Address" placeholder="e.g. 12 Industrial Zone, Tunis 1002" hint="Optional. Where this warehouse is located." error={errors.address?.message} {...register("address")} />
       </div>
       <label className="inline-flex min-h-[44px] items-center gap-3 text-sm sm:col-span-2">
         <input
@@ -69,15 +72,19 @@ function WarehouseForm({
   );
 }
 
+const PAGE_SIZE = 10;
+
 export function WarehouseManager({ warehouses, canManage }: { warehouses: WarehouseDto[]; canManage: boolean }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageItems = warehouses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="space-y-6">
       {canManage && !creating && (
-        <Button variant="primary" onClick={() => setCreating(true)}>New warehouse</Button>
+        <Button variant="primary" onClick={() => setCreating(true)}><Plus aria-hidden className="size-4" />New warehouse</Button>
       )}
       {canManage && creating && (
         <section aria-labelledby="new-warehouse" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
@@ -98,12 +105,14 @@ export function WarehouseManager({ warehouses, canManage }: { warehouses: Wareho
       )}
 
       {warehouses.length === 0 ? (
-        <p className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-control)] p-6 text-sm text-[var(--color-text-secondary)]">
-          No warehouses yet. Stock is held in warehouses, so create one before receiving goods.
-        </p>
+        <EmptyState
+          icon={Warehouse}
+          title="No warehouses yet"
+          description="Stock is held in warehouses, so create one before receiving goods."
+        />
       ) : (
         <ul className="divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
-          {warehouses.map((warehouse) => (
+          {pageItems.map((warehouse) => (
             <li key={warehouse.id} className="p-4">
               {editingId === warehouse.id ? (
                 <WarehouseForm
@@ -136,6 +145,7 @@ export function WarehouseManager({ warehouses, canManage }: { warehouses: Wareho
           ))}
         </ul>
       )}
+      <ClientPagination page={page} pageSize={PAGE_SIZE} total={warehouses.length} onPageChange={setPage} />
     </div>
   );
 }

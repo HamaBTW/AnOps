@@ -5,7 +5,7 @@ import { listPurchaseOrders } from "@/server/purchasing/purchase-order.service";
 import { purchaseOrderListQuerySchema } from "@/features/purchasing/schemas/purchasing.schema";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
-import { Pagination } from "@/shared/components/data-display/pagination";
+import { Pagination, redirectIfPageOutOfRange } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { PO_STATUS } from "@/features/purchasing/labels";
 import { ButtonLink, Button } from "@/shared/components/ui/button";
@@ -15,6 +15,7 @@ import { formatDate, formatMoney } from "@/shared/lib/format";
 import { Filter, Plus } from "lucide-react";
 import { Select } from "@/shared/components/ui/form-kit";
 import { FilterBar, FilterField, filterInputClass } from "@/shared/components/data-display/filter-bar";
+import { safeLoad } from "@/shared/lib/safe-load";
 
 export const metadata: Metadata = { title: "Purchase orders | AnOps ERP" };
 
@@ -27,7 +28,9 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
     page: typeof raw.page === "string" ? raw.page : undefined,
   });
   const query = parsed.success ? parsed.data : purchaseOrderListQuerySchema.parse({});
-  const result = await listPurchaseOrders(ctx, query);
+  const loaded = await safeLoad(() => listPurchaseOrders(ctx, query));
+  const result = loaded.ok ? loaded.data : null;
+  if (result) redirectIfPageOutOfRange(result, "/purchasing/orders", { q: query.q || undefined, status: query.status });
   const canCreate = ctx.permissions.has("purchasing.order.manage");
 
   return (
@@ -57,15 +60,18 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
         <Button type="submit" variant="primary" className="w-full sm:w-auto"><Filter aria-hidden className="size-4" />Apply filters</Button>
       </FilterBar>
 
-      {result.items.length === 0 ? (
+{!result ? (
+        <EmptyState variant="error" title="Purchase orders could not be loaded" description="Something went wrong while loading this list. Your data is safe. Try again in a moment." actionHref="/purchasing/orders" actionLabel="Try again" />
+      ) : result.items.length === 0 ? (
         query.q || query.status !== "all" ? (
-          <p className="text-sm text-[var(--color-text-secondary)]">No orders match these filters. <Link href="/purchasing/orders" className="underline">Clear filters</Link></p>
+          <EmptyState variant="filtered" title="No matching orders" description="Nothing matches the current search or status. Check the order number or choose a different status." actionHref="/purchasing/orders" actionLabel="Clear filters" />
         ) : (
           <EmptyState
             title="No purchase orders yet"
             description="Create a draft for a supplier, approve it, then record receipts as goods arrive."
             actionHref={canCreate ? "/purchasing/orders/new" : undefined}
             actionLabel={canCreate ? "Create an order" : undefined}
+            actionIcon={Plus}
           />
         )
       ) : (
@@ -99,7 +105,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
           </table>
         </div>
       )}
-      <Pagination basePath="/purchasing/orders" page={result.page} totalPages={result.totalPages} params={{ q: query.q || undefined, status: query.status }} />
+      {result && <Pagination basePath="/purchasing/orders" page={result.page} totalPages={result.totalPages} total={result.total} pageSize={result.pageSize} params={{ q: query.q || undefined, status: query.status }} />}
     </div>
   );
 }

@@ -17,7 +17,14 @@ import { assertPermission, PERMISSIONS } from "@/server/security/permissions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { idKey } from "@/server/inventory/mappers";
 import { createPurchaseOrder, getPurchaseOrder } from "@/server/purchasing/purchase-order.service";
-import { generateRationales, type RationaleInputLine } from "@/server/purchasing/replenishment-rationale";
+import { generateRationales, type RationaleFacts } from "@/server/purchasing/replenishment-rationale";
+import {
+  calculationStatements,
+  formatFact,
+  projectedUseMicro,
+  requirementMicro,
+  type ReplenishmentFacts,
+} from "@/shared/domain/replenishment-calculation";
 import { purchaseOrderInputSchema, type PurchaseOrderInput } from "@/features/purchasing/schemas/purchasing.schema";
 import { AppError } from "@/shared/lib/errors";
 import { isCountableUnit } from "@/shared/domain/units";
@@ -75,6 +82,7 @@ export type ReplenishmentProposalDto = ReplenishmentSummaryDto & {
     forecastDailyUsage: string;
     suggested: string;
     rationale: string | null;
+    calculation: string[];
   }>;
 };
 
@@ -119,6 +127,7 @@ function toDetail(doc: ReplenishmentProposalDoc, canConvert: boolean): Replenish
         forecastDailyUsage: formatQuantity(line.forecastDailyUsageMicro, 3),
         suggested: formatQuantity(line.suggestedMicro, 3),
         rationale: line.rationale,
+        calculation: calculationStatements(toFacts(line, doc.lookbackDays, doc.horizonDays)),
       })),
   };
 }
@@ -253,7 +262,7 @@ export async function generateReplenishmentProposal(
     horizonDays: input.horizonDays,
   }).slice(0, MAX_CANDIDATE_PRODUCTS);
 
-  const rationale = await generateRationales(lines.map(toRationaleInput));
+  const rationale = await generateRationales(lines.map((line) => toRationaleInput(line, input.horizonDays)));
   for (const line of lines) {
     line.rationale = rationale.byProductId.get(idKey(line.productId)) ?? null;
   }
@@ -295,17 +304,38 @@ export async function generateReplenishmentProposal(
   return toDetail(doc, true);
 }
 
-/** Only the facts and the computed numbers leave the server. No supplier, customer or company data. */
-function toRationaleInput(line: ReplenishmentLineSub): RationaleInputLine {
+/** Stored line facts, in the shape the calculation module reads. */
+function toFacts(line: ReplenishmentLineSub, lookbackDays: number, horizonDays: number): ReplenishmentFacts {
+  return {
+    unitOfMeasure: line.unitOfMeasure,
+    lookbackDays,
+    horizonDays,
+    onHandMicro: line.onHandMicro,
+    reorderPointMicro: line.reorderPointMicro,
+    consumedMicro: line.consumedMicro,
+    forecastDailyUsageMicro: line.forecastDailyUsageMicro,
+    suggestedMicro: line.suggestedMicro,
+  };
+}
+
+/** Only the stored facts and the computed numbers leave the server. No supplier, customer or company data. */
+function toRationaleInput(line: ReplenishmentLineSub, horizonDays: number): RationaleFacts {
+  const facts = toFacts(line, REPLENISHMENT_LOOKBACK_DAYS, horizonDays);
   return {
     productId: idKey(line.productId),
     sku: line.sku,
     name: line.productName,
     unit: line.unitOfMeasure,
-    onHand: formatQuantity(line.onHandMicro, 3),
-    reorderPoint: formatQuantity(line.reorderPointMicro, 3),
-    dailyUsage: formatQuantity(line.forecastDailyUsageMicro, 3),
-    suggested: formatQuantity(line.suggestedMicro, 3),
+    countable: isCountableUnit(line.unitOfMeasure),
+    lookbackDays: REPLENISHMENT_LOOKBACK_DAYS,
+    horizonDays,
+    consumed: formatFact(line.consumedMicro),
+    dailyUsage: formatFact(line.forecastDailyUsageMicro),
+    projectedUse: formatFact(projectedUseMicro(facts)),
+    reorderPoint: formatFact(line.reorderPointMicro),
+    onHand: formatFact(line.onHandMicro),
+    requirement: formatFact(requirementMicro(facts)),
+    suggested: formatFact(line.suggestedMicro),
   };
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { convertReplenishmentAction, reconcileReplenishmentAction } from "@/features/purchasing/actions/purchasing.action";
 import type { ReplenishmentProposalDto } from "@/server/purchasing/replenishment.service";
 import { Button, selectClass } from "@/shared/components/ui/button";
@@ -10,9 +10,10 @@ import { Button, selectClass } from "@/shared/components/ui/button";
 type Message = { kind: "error" | "success"; text: string; href?: string };
 
 const RATIONALE_NOTES: Record<ReplenishmentProposalDto["rationaleStatus"], string> = {
-  generated: "Explanations were written by an AI model from the facts shown. The quantities were calculated without it.",
-  unavailable: "Explanations are unavailable right now. The quantities were calculated from stock facts and are not affected.",
-  invalid_output: "The explanation service returned a response that could not be checked, so no explanations are shown. The quantities are not affected.",
+  generated: "AI explanations were checked against the stored facts for every product. The quantities are calculated by the system, not by the AI.",
+  partial: "Some AI explanations were missing or rejected because they did not match the stored facts. Each product shows its calculation, and AI text appears only where it passed the checks.",
+  unavailable: "AI explanations are unavailable right now. The calculation shown for each product is complete without them.",
+  invalid_output: "The AI response could not be used, so no AI explanation is shown. The calculation for each product is complete.",
 };
 
 /**
@@ -108,7 +109,7 @@ export function ReplenishmentProposalPanel({
         <p className="text-sm text-[var(--color-text-secondary)]">No product needs replenishment for this horizon.</p>
       ) : (
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[620px] text-left text-sm">
             <caption className="sr-only">Suggested purchase quantities by product</caption>
             <thead className="text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
               <tr>
@@ -118,25 +119,41 @@ export function ReplenishmentProposalPanel({
                 <th scope="col" className="px-4 py-3 text-right font-semibold">Used (period)</th>
                 <th scope="col" className="px-4 py-3 text-right font-semibold">Daily use</th>
                 <th scope="col" className="px-4 py-3 text-right font-semibold">Suggested</th>
-                <th scope="col" className="px-4 py-3 font-semibold">Explanation</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border-subtle)]">
               {proposal.lines.map((line) => (
-                <tr key={line.productId}>
-                  <td className="px-4 py-3">
-                    <span className="font-medium">{line.sku}</span>
-                    <span className="block text-xs text-[var(--color-text-secondary)]">{line.productName}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{line.onHand} {line.unitOfMeasure}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{line.reorderPoint}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {Number(line.consumedLookback) > 0 ? line.consumedLookback : <span className="text-[var(--color-text-secondary)]">None recorded</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{line.forecastDailyUsage}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{line.suggested} {line.unitOfMeasure}</td>
-                  <td className="px-4 py-3 text-[var(--color-text-secondary)]">{line.rationale ?? "—"}</td>
-                </tr>
+                <Fragment key={line.productId}>
+                  <tr>
+                    <td className="px-4 pt-3 pb-1">
+                      <span className="font-medium">{line.sku}</span>
+                      <span className="block text-xs text-[var(--color-text-secondary)]">{line.productName}</span>
+                    </td>
+                    <td className="px-4 pt-3 pb-1 text-right tabular-nums">{line.onHand} {line.unitOfMeasure}</td>
+                    <td className="px-4 pt-3 pb-1 text-right tabular-nums">{line.reorderPoint}</td>
+                    <td className="px-4 pt-3 pb-1 text-right tabular-nums">
+                      {Number(line.consumedLookback) > 0 ? line.consumedLookback : <span className="text-[var(--color-text-secondary)]">None recorded</span>}
+                    </td>
+                    <td className="px-4 pt-3 pb-1 text-right tabular-nums">{line.forecastDailyUsage}</td>
+                    <td className="px-4 pt-3 pb-1 text-right font-semibold tabular-nums">{line.suggested} {line.unitOfMeasure}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={6} className="px-4 pt-0 pb-3 text-sm text-[var(--color-text-secondary)] space-y-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide">Calculation</p>
+                        <ul className="list-disc space-y-0.5 pl-5">
+                          {line.calculation.map((statement) => (
+                            <li key={statement}>{statement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide">AI explanation</p>
+                        <p>{line.rationale ?? "Not available for this product. The calculation above is complete."}</p>
+                      </div>
+                    </td>
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -198,7 +215,7 @@ export function ReplenishmentProposalPanel({
         </div>
       )}
 
-      {proposal.status === "converted" && proposal.convertedOrderId && (
+      {proposal.status === "converted" && proposal.convertedOrderId && !message && (
         <p className="text-sm">
           Converted to a draft order.{" "}
           <Link className="underline" href={`/purchasing/orders/${proposal.convertedOrderId}`}>View the order</Link>

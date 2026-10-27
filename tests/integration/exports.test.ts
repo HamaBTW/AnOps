@@ -39,7 +39,6 @@ let warehouseId: string;
 let supplierId: string;
 let productA: { id: string };
 let productF: { id: string };
-let orderPartialId: string;
 
 async function sheet(file: ExportFile, name: string): Promise<ExcelJS.Worksheet> {
   const workbook = new ExcelJS.Workbook();
@@ -112,7 +111,6 @@ beforeAll(async () => {
       ],
     })
   );
-  orderPartialId = order.id;
   await approvePurchaseOrder(h.ctx(), order.id, order.version);
   const receipt = await createReceipt(
     h.ctx(),

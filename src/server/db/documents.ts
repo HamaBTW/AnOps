@@ -321,7 +321,7 @@ export type ReplenishmentProposalDoc = TenantScope & {
   truncated: boolean;
   /** Count of lines with a positive suggestion. Stored so list queries can skip the lines array. */
   lineCount: number;
-  rationaleStatus: "generated" | "unavailable" | "invalid_output";
+  rationaleStatus: "generated" | "partial" | "unavailable" | "invalid_output";
   rationaleProvider: string | null;
   rationaleModel: string | null;
   lines: ReplenishmentLineSub[];

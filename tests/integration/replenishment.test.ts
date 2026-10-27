@@ -24,8 +24,6 @@ let h: TestHarness;
 let warehouseId: string;
 let supplierId: string;
 let productA: { id: string };
-let productC: { id: string };
-let productKg: { id: string };
 
 async function generate(ctx = h.ctx(), horizonDays = 14) {
   return generateReplenishmentProposal(ctx, { warehouseId, horizonDays });
@@ -47,14 +45,14 @@ beforeAll(async () => {
       isStorable: true, isActive: true, cost: "2.000", salePrice: "0.000", reorderPoint: "5",
     })
   );
-  productC = await createProduct(
+  await createProduct(
     h.ctx(),
     parsed(productInputSchema, {
       sku: "REP-C", name: "Widget C", description: "", categoryId: "", unitOfMeasure: "unit",
       isStorable: true, isActive: true, cost: "3.500", salePrice: "0.000", reorderPoint: "4",
     })
   );
-  productKg = await createProduct(
+  await createProduct(
     h.ctx(),
     parsed(productInputSchema, {
       sku: "REP-KG", name: "Bulk powder", description: "", categoryId: "", unitOfMeasure: "kg",
@@ -85,7 +83,7 @@ describe("replenishment proposals", () => {
       model: "openai/gpt-oss-120b",
       text: JSON.stringify({
         items: [
-          { productId: productA.id, rationale: "Consumption is steady and stock is below target." },
+          { productId: productA.id, rationale: "Recorded use is 30 units in the last 30 days, an average of 1 per day. Projected use over 14 days is 14, so the suggested quantity is 9." },
           { productId: "ffffffffffffffffffffffff", rationale: "Not a product that was sent." },
         ],
       }),
@@ -98,14 +96,14 @@ describe("replenishment proposals", () => {
       status: "proposed",
       horizonDays: 14,
       method: "trailing_consumption_v1",
-      rationaleStatus: "generated",
+      rationaleStatus: "partial",
       rationaleProvider: "Groq",
       canConvert: true,
       lineCount: 2,
     });
     const bySku = Object.fromEntries(proposal.lines.map((line) => [line.sku, line]));
     // A: 1/day x 14 + reorder 5 - on hand 10 = 9. C: reorder 4 - 0 = 4. Kg item has no need.
-    expect(bySku["REP-A"]).toMatchObject({ forecastDailyUsage: "1.000", suggested: "9.000", onHand: "10.000", rationale: "Consumption is steady and stock is below target." });
+    expect(bySku["REP-A"]).toMatchObject({ forecastDailyUsage: "1.000", suggested: "9.000", onHand: "10.000", rationale: "Recorded use is 30 units in the last 30 days, an average of 1 per day. Projected use over 14 days is 14, so the suggested quantity is 9." });
     expect(bySku["REP-C"]).toMatchObject({ suggested: "4.000", rationale: null });
     expect(bySku["REP-KG"]).toBeUndefined();
 

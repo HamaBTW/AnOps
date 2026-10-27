@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { QTY_SCALE } from "@/shared/lib/fixed-point";
+import { isCountableUnit, type UnitOfMeasure } from "@/shared/domain/units";
 import {
   moneySchema,
   objectIdSchema,
@@ -154,3 +156,64 @@ export const replenishmentConvertSchema = z
   .strict();
 
 export type ReplenishmentConvertInput = z.infer<typeof replenishmentConvertSchema>;
+
+export type ReceiptEntryLine = {
+  id: string;
+  sku: string;
+  unitOfMeasure: string;
+  /** Remaining quantity on the order line as a decimal string, for example "22.000". */
+  remaining: string;
+};
+
+const RECEIPT_QUANTITY_PATTERN = /^\d{1,6}(\.\d{1,6})?$/;
+
+/**
+ * Entry rules for the receipt form. A blank quantity means nothing was received on that line and is sent as 0.
+ * The server (createReceipt) repeats these rules and stays authoritative; this only gives feedback before submit.
+ */
+export function receiptEntrySchema(lines: ReceiptEntryLine[]) {
+  return z
+    .object({
+      purchaseOrderId: objectIdSchema,
+      warehouseId: z.string().trim().min(1, "Choose the warehouse that receives these goods").pipe(objectIdSchema),
+      lines: z.array(
+        z.object({
+          purchaseOrderLineId: objectIdSchema,
+          quantity: z.string().trim(),
+        })
+      ),
+    })
+    .superRefine((value, ctx) => {
+      let anyReceived = false;
+      value.lines.forEach((line, index) => {
+        const source = lines[index];
+        if (!source || line.quantity === "") return;
+        if (!RECEIPT_QUANTITY_PATTERN.test(line.quantity)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["lines", index, "quantity"],
+            message: "Enter a number such as 4 or 2.5, with up to 6 decimals",
+          });
+          return;
+        }
+        const quantityMicro = Math.round(Number(line.quantity) * QTY_SCALE);
+        if (quantityMicro === 0) return;
+        anyReceived = true;
+        if (isCountableUnit(source.unitOfMeasure as UnitOfMeasure) && quantityMicro % QTY_SCALE !== 0) {
+          ctx.addIssue({ code: "custom", path: ["lines", index, "quantity"], message: `${source.sku} is counted in whole units` });
+          return;
+        }
+        const remainingMicro = Math.round(Number(source.remaining) * QTY_SCALE);
+        if (quantityMicro > remainingMicro) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["lines", index, "quantity"],
+            message: `Only ${source.remaining} ${source.unitOfMeasure} remain on this order line`,
+          });
+        }
+      });
+      if (!anyReceived) {
+        ctx.addIssue({ code: "custom", path: ["lines"], message: "Enter a received quantity for at least one line" });
+      }
+    });
+}

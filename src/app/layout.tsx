@@ -17,10 +17,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/brand-kit/02-app-icons/anops-favicon-32x32.svg", sizes: "32x32", type: "image/svg+xml" },
-      { url: "/brand-kit/02-app-icons/anops-favicon-24x24.svg", sizes: "24x24", type: "image/svg+xml" },
+      { url: "/brand-kit/02-app-icons/anops-favicon-32x32.svg", sizes: "any", type: "image/svg+xml" },
+      { url: "/brand-kit/02-app-icons/anops-favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand-kit/02-app-icons/anops-favicon-24x24.png", sizes: "24x24", type: "image/png" },
     ],
-    apple: "/brand-kit/02-app-icons/anops-app-icon-ios-192x192.svg",
+    shortcut: "/favicon.ico",
+    apple: { url: "/brand-kit/02-app-icons/anops-app-icon-ios-192x192.png", sizes: "192x192", type: "image/png" },
   },
 };
 

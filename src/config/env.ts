@@ -7,6 +7,11 @@ const booleanString = z
 const envSchema = z.object({
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   AUTH_SECRET: z.string().min(1, "AUTH_SECRET is required"),
+  /**
+   * Public base URL used in every emailed link (verification, password reset, unsubscribe).
+   * Falls back to NEXTAUTH_URL so existing deployments keep working.
+   */
+  APP_URL: z.string().url().optional(),
   NEXTAUTH_URL: z.string().url().optional(),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 
@@ -33,15 +38,16 @@ const envSchema = z.object({
   SOCIAL_TOKEN_ENCRYPTION_KEY: z.string().min(1).optional(),
   MARKETING_WEBHOOK_SECRET: z.string().min(1).optional(),
   MARKETING_WORKER_SECRET: z.string().min(1).optional(),
+  MARKETING_SEND_ALLOWLIST: z.string().max(2000).optional(),
 
 });
-
 export type Env = z.infer<typeof envSchema>;
 
 function loadEnv(): Env {
   const parsed = envSchema.safeParse({
     MONGODB_URI: process.env.MONGODB_URI,
     AUTH_SECRET: process.env.AUTH_SECRET,
+    APP_URL: process.env.APP_URL,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NODE_ENV: process.env.NODE_ENV,
     EMAIL_SERVER_HOST: process.env.EMAIL_SERVER_HOST,
@@ -56,6 +62,7 @@ function loadEnv(): Env {
     SOCIAL_TOKEN_ENCRYPTION_KEY: process.env.SOCIAL_TOKEN_ENCRYPTION_KEY,
     MARKETING_WEBHOOK_SECRET: process.env.MARKETING_WEBHOOK_SECRET,
     MARKETING_WORKER_SECRET: process.env.MARKETING_WORKER_SECRET,
+    MARKETING_SEND_ALLOWLIST: process.env.MARKETING_SEND_ALLOWLIST,
   });
 
   if (!parsed.success) {
@@ -68,8 +75,42 @@ function loadEnv(): Env {
 
 export const env = loadEnv();
 
+/**
+ * Resolves the base URL used in emailed links. A dedicated APP_URL wins, so a deployment can
+ * expose a public address even when NextAuth is configured with an internal one. The value is
+ * normalized to have no trailing slash, because callers append paths.
+ */
+export function resolveAppUrl(input: { appUrl?: string; nextAuthUrl?: string } = { appUrl: env.APP_URL, nextAuthUrl: env.NEXTAUTH_URL }): string {
+  const chosen = input.appUrl?.trim() || input.nextAuthUrl?.trim() || "http://localhost:3000";
+  return chosen.replace(/\/+$/, "");
+}
+
 export function getAppUrl(): string {
-  return env.NEXTAUTH_URL ?? "http://localhost:3000";
+  return resolveAppUrl({ appUrl: env.APP_URL, nextAuthUrl: env.NEXTAUTH_URL });
+}
+
+/**
+ * True when a URL cannot be opened by an email recipient on the public internet: loopback,
+ * link-local, RFC1918 private addresses, `.local` names, or an unparseable value.
+ * Used to stop production campaigns from shipping a dead unsubscribe link.
+ */
+export function isLocalOnlyUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+    if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return true;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) {
+      const [a, b] = host.split(".").map(Number);
+      if (a === 0 || a === 10 || a === 127) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 169 && b === 254) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 export function isEmailConfigured(): boolean {

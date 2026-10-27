@@ -54,10 +54,18 @@ export default async function AudiencesPage({ searchParams }: { searchParams: Pr
             <li key={audience.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <Link href={`/marketing/audiences/${audience.id}`} className="break-words font-semibold underline-offset-2 hover:underline">{audience.name}</Link>
-                <p className="text-sm text-[var(--color-text-secondary)]">{audience.description || `${audience.rule.conditions.length} condition(s) · ${audience.rule.match === "all" ? "all must match" : "any may match"}`}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{audience.description || `${audience.rule ? `${audience.rule.conditions.length} condition(s) · ${audience.rule.match === "all" ? "all must match" : "any may match"}` : "No description"}`}</p>
+                {!audience.rule && (
+                  <p className="text-sm font-semibold text-[var(--color-status-warning)]">
+                    Rule unavailable. Open this audience and save a rule before approving campaigns.
+                  </p>
+                )}
                 <p className="text-xs text-[var(--color-text-secondary)]">Updated {formatDate(audience.updatedAt)}</p>
               </div>
-              <StatusBadge label={audience.isActive ? "Active" : "Inactive"} tone={audience.isActive ? "success" : "neutral"} />
+              <StatusBadge
+                label={!audience.rule ? "Needs rule" : audience.isActive ? "Active" : "Inactive"}
+                tone={!audience.rule ? "warning" : audience.isActive ? "success" : "neutral"}
+              />
             </li>
           ))}
         </ul>

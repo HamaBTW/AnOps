@@ -14,6 +14,7 @@ import type {
   SocialPlatform,
   SocialPostStatus,
 } from "@/features/marketing/types/constants";
+import type { EmailDesign } from "@/features/marketing/utils/email-design";
 
 export type {
   AiGenerationStatus,
@@ -169,6 +170,8 @@ export type TemplateDoc = TenantScope & {
   name: string;
   normalizedName: string;
   channel: MarketingChannel;
+  /** Curated HTML layout applied when the email is rendered. */
+  design: EmailDesign;
   subject: string;
   body: string;
   isActive: boolean;
@@ -198,6 +201,7 @@ export type CampaignDoc = TenantScope & {
   audienceId: ObjectId;
   templateId: ObjectId | null;
   templateVersion: number | null;
+  design: EmailDesign;
   subject: string;
   body: string;
   contentVersion: number;

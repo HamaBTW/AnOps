@@ -9,6 +9,7 @@ import { renderMessage } from "@/server/marketing/message";
 import { ProviderError, getConfiguredProviders, type MessageProviders, type MessageProvider } from "@/server/marketing/providers";
 import { claimNextJob, finishJob, type JobOutcome } from "@/server/marketing/jobs";
 import { retryDelayMs } from "@/features/marketing/utils/retry";
+import { normalizeEmailDesign } from "@/features/marketing/utils/email-design";
 import { recordAudit } from "@/server/audit/audit.service";
 import { AppError } from "@/shared/lib/errors";
 import { runSocialPublishJob } from "@/server/marketing/social/post.service";
@@ -17,7 +18,7 @@ import { runSocialPublishJob } from "@/server/marketing/social/post.service";
 export const DELIVERY_BATCH_SIZE = 20;
 export const MAX_DELIVERY_ATTEMPTS = 5;
 export const SEND_TIMEOUT_MS = 15_000;
-/** A delivery left in "sending" longer than this belongs to a crashed run and is reclaimed. */
+/** A delivery left in "sending" longer than this belonged to a crashed run. It may have been accepted. */
 export const STALE_SENDING_MS = 10 * 60_000;
 
 export type RunSummary = { claimed: number; succeeded: number; requeued: number; retried: number; dead: number };
@@ -145,9 +146,19 @@ async function dispatchCampaign(ctx: DispatchContext, job: JobDoc): Promise<JobO
     throw new ProviderError("PROVIDER_NOT_CONFIGURED", "No delivery provider is configured for this channel", true);
   }
 
+  // A crashed run may have handed the message to SMTP before it died. Re-sending would risk a duplicate,
+  // so stale "sending" rows become a terminal AMBIGUOUS_SEND for an operator to reconcile.
   await deliveries.updateMany(
     { ...scope, campaignId: campaign._id, status: "sending", lastAttemptAt: { $lt: new Date(now.getTime() - STALE_SENDING_MS) } },
-    { $set: { status: "pending", nextAttemptAt: now, lastErrorCode: "STALE_SEND_RECLAIMED", updatedAt: now } }
+    {
+      $set: {
+        status: "failed",
+        lastErrorCode: "AMBIGUOUS_SEND",
+        failedAt: now,
+        nextAttemptAt: null,
+        updatedAt: now,
+      },
+    }
   );
 
   const due = await deliveries
@@ -201,7 +212,16 @@ async function dispatchCampaign(ctx: DispatchContext, job: JobDoc): Promise<JobO
  * - Everything else (timeout, network error, 5xx, unreadable reply): the message may have been accepted.
  *   Fail as AMBIGUOUS_SEND. Retrying could duplicate a message the provider already sent.
  */
-const DEFINITE_REJECTIONS = new Set(["REQUEST_REJECTED", "AUTH_REJECTED", "NOT_ALLOWLISTED", "INVALID_DESTINATION"]);
+const DEFINITE_REJECTIONS = new Set([
+  "REQUEST_REJECTED",
+  "AUTH_REJECTED",
+  "NOT_ALLOWLISTED",
+  "INVALID_DESTINATION",
+  "CONTENT_INVALID",
+  "SMTP_REJECTED",
+  "SMTP_AUTH_REJECTED",
+  "SMTP_RECIPIENT_REJECTED",
+]);
 
 export function classifySendFailure(
   error: unknown,
@@ -269,7 +289,7 @@ async function sendDelivery(
     })}`;
     const rendered = renderMessage(
       campaign.channel,
-      { subject: campaign.subject, body: campaign.body },
+      { subject: campaign.subject, body: campaign.body, design: normalizeEmailDesign(campaign.design) },
       {
         first_name: contact.firstName,
         last_name: contact.lastName,

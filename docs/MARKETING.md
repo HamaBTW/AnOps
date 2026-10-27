@@ -12,12 +12,13 @@ listed as implemented here is not implemented.
 | Consent by channel and purpose, history, ordering rules | Implemented, tested |
 | Suppression and unsubscribe (signed, idempotent links) | Implemented, tested |
 | Audiences (typed rules, preview, exclusion breakdown) | Implemented, tested |
-| Templates (CRUD, duplicate, activate, variable allowlist, SMS length) | Implemented, tested |
+| Templates (CRUD, duplicate, activate, variable allowlist, SMS length, email designs) | Implemented, tested |
 | Campaigns (state machine, approval, recipient snapshot, scheduling) | Implemented, tested |
-| Dispatch worker (durable jobs, leases, retries, per-send consent recheck) | Implemented, tested against a fake provider |
+| Dispatch worker (durable jobs, leases, retries, per-send consent recheck) | Implemented, tested against fake SMTP and Brevo providers |
 | Delivery events and webhook receiver (signed, deduplicated) | Implemented, tested; not verified against any real provider |
 | SMS sending (Brevo API) | Implemented, unit and integration tested with a fake Brevo client. **Not verified against a live Brevo account.** Requires a registered SMS sender |
-| Email sending (Brevo API) | Implemented, tested with a fake client. Disabled until `BREVO_EMAIL_MARKETING_APPROVED=true`. Policy confirmation pending |
+| Email sending (Gmail/SMTP) | Implemented, unit and integration tested with a fake SMTP sender. Reuses `EMAIL_SERVER_*` / `EMAIL_FROM`. **Verified with one live Gmail delivery on 2026-10-26** to a controlled recipient; SMTP reports no delivery receipt |
+| Email sending (Brevo API) | Implemented, tested with a fake client. Fallback only when SMTP is not configured. Disabled until `BREVO_EMAIL_MARKETING_APPROVED=true` |
 | Facebook Page connection and publishing | Implemented against Meta's Graph API; **not verified against a live Meta app** |
 | Instagram publishing | Not implemented (needs separate Meta review) |
 | Social posts (draft, schedule, publish, cancel, ambiguous-result handling) | Implemented, tested with a fake publisher |
@@ -155,6 +156,19 @@ flow because the provider may have accepted the post.
 
 **AI draft:** `generated_draft → edited → approved_for_use`; editing an approved draft clears approval; `failed` is terminal.
 
+### Email designs
+
+Templates and campaigns store a `design`: `plain` (default), `classic`, `minimal`, `newsletter`, `promo`, `aurora`,
+`spotlight`, `neon`, `glass` or `confetti`. The body stays plain text with the same variable allowlist; the server
+wraps it in table-based HTML with inline CSS. Author HTML is never accepted or rendered. `plain` keeps the previous
+output. Designed layouts fold a trailing `Unsubscribe: …` line into a styled footer so the link appears once, while
+the text part is unchanged. Documents created before designs existed render as `plain`. SMS always uses `plain`, and
+the schema rejects any other value.
+
+`aurora`, `spotlight`, `neon`, `glass` and `confetti` add gradients, shadows and CSS motion. Motion is progressive
+enhancement: it plays in Apple Mail and iOS, while clients that strip `<style>` (Gmail, most Outlook versions) show
+the static inline colours. `prefers-reduced-motion` disables every animation.
+
 ## 7. Background processing
 
 Scheduled work is stored as a row in `marketing_jobs` with a `runAt` time. Nothing runs on a timer in the web process.
@@ -164,32 +178,80 @@ Scheduled work is stored as a row in `marketing_jobs` with a `runAt` time. Nothi
 - Campaign dispatch advances at most 20 deliveries per run and requeues itself until none are pending.
 - Per-delivery retry: exponential backoff with full jitter, up to 5 attempts. Permanent errors fail immediately.
 - Job retry: up to 6 attempts, then `dead`. A dead campaign job marks the campaign `failed`.
-- Provider rate limit: `minIntervalMs` (200 ms) between sends, sequential. Tune to your Brevo plan.
+- Provider rate limit: `minIntervalMs` between sends, sequential. Brevo adapters use 200 ms; the SMTP adapter uses
+  1,000 ms (60 messages/minute) because a Gmail account also carries authentication mail and has daily quotas.
 - Send timeout: 15 seconds per provider call.
-- **Duplicate-send safety:** a delivery is retried only when the provider did not process the request (HTTP 429, or a
-  failure before the provider was called). A timeout, network error, 5xx, or unreadable reply may mean the message was
-  accepted, so the delivery ends as `failed` with code `AMBIGUOUS_SEND` and is never retried automatically. Check
-  the provider's logs before resending. Definite rejections (400, 401/403, not allowlisted) also fail without retry.
+- **Duplicate-send safety:** a delivery is retried only when the provider did not process the request (SMTP 4xx,
+  HTTP 429, or a failure before the provider was called). A timeout, mid-stream disconnect, 5xx, or unreadable reply
+  may mean the message was accepted, so the delivery ends as `failed` with code `AMBIGUOUS_SEND` and is never retried
+  automatically. Check the provider's logs before resending. Definite rejections (SMTP 5xx, bad credentials, bad
+  recipient, not allowlisted, invalid content) also fail without retry. A row left in `sending` by a crashed run is
+  also failed as `AMBIGUOUS_SEND`, never resent.
+- **Accepted is not delivered.** A successful SMTP or API call moves the delivery to `sent`. `delivered`, `bounced`,
+  `complained`, `opened` and `clicked` are only recorded from explicit provider events. SMTP provides no automatic
+  delivery receipts, so an SMTP campaign normally stays at `sent` until a provider event says otherwise.
 
 **Operating requirement:** an external scheduler must call the worker endpoint every minute:
 
 ```bash
-curl -X POST "https://<your-host>/api/v1/marketing/worker" -H "Authorization: Bearer $MARKETING_WORKER_SECRET"
+curl -X POST "https://<your-host>/api/v1/marketing/worker" \
+  -H "Authorization: Bearer $MARKETING_WORKER_SECRET"
+```
+
+For local development, `npm run marketing:worker` performs one call against `http://localhost:3000`, and
+`npm run marketing:worker:watch` repeats it every 60 seconds. Set `MARKETING_WORKER_URL` to target another host.
+Scheduling a campaign in the UI only writes a `queued` job; until a worker call happens, every delivery stays `pending`.
+
+Examples (choose one; none is created by this repository):
+
+```cron
+# crontab -e  (every minute)
+* * * * * curl -fsS -X POST "https://your-host/api/v1/marketing/worker" -H "Authorization: Bearer $MARKETING_WORKER_SECRET" >/dev/null
+```
+
+```ini
+# /etc/systemd/system/anops-marketing-worker.timer
+[Unit]
+Description=Call the AnOps marketing worker every minute
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+```
+
+```yaml
+# Platform scheduler (for example a container cron sidecar), every minute
+schedule: "* * * * *"
+command: 'curl -fsS -X POST "$APP_URL/api/v1/marketing/worker" -H "Authorization: Bearer $MARKETING_WORKER_SECRET"'
 ```
 
 Without a scheduler, scheduled campaigns and posts never run. The Integrations page reports whether the secret is set;
-it cannot verify that a scheduler is calling.
+it **cannot** verify that a scheduler is calling. Scheduler activation is a deployment step, not a code state. In this
+repository no scheduler is configured or verified.
+
+Run one worker invocation at a time. Pacing (`minIntervalMs`) and the 20-delivery batch are enforced per worker; two
+overlapping workers would each send at that rate and together could exceed the Gmail account's quota.
 
 ## 8. Providers, webhooks and what "sent" means
 
 - `src/server/marketing/providers.ts` returns an adapter for a channel only when its settings are valid. Otherwise the
-  channel is unconfigured and scheduling is refused. **Nothing is reported as sent unless Brevo returns a message id.**
+  channel is unconfigured and scheduling is refused. **Nothing is reported as sent unless the provider returns or
+  accepts a message identifier.**
+- **SMTP email (preferred when configured):** reuses the authentication account (`EMAIL_SERVER_HOST`,
+  `EMAIL_SERVER_PORT`, `EMAIL_SERVER_SECURE`, `EMAIL_SERVER_USER`, `EMAIL_SERVER_PASSWORD`, `EMAIL_FROM`). The adapter
+  validates the recipient and content, honours `MARKETING_SEND_ALLOWLIST`, sets a deterministic `Message-ID` from the
+  delivery id, and paces at one message per second. SMTP acceptance moves the row to `sent`, never `delivered`.
+  Connection test: `transporter.verify()` (handshake + login, no message). The transport is shared with sign-in mail;
+  the marketing policy and templates are not.
 - Brevo SMS: `POST https://api.brevo.com/v3/transactionalSMS/send` with `type: "marketing"`. The response `messageId`
   is stored. Recipients are digits with the country code. The sender must be 11 letters/digits or 15 digits.
-- Brevo email: `POST https://api.brevo.com/v3/smtp/email`, response `messageId`. Offered only when
-  `BREVO_EMAIL_MARKETING_APPROVED=true`. Brevo's policy for marketing mail through this transactional endpoint must be
-  confirmed by the account owner first.
-- Gmail SMTP (`EMAIL_SERVER_*`) is used only for verification and password reset. It is never a campaign provider.
+- Brevo email: `POST https://api.brevo.com/v3/smtp/email`, response `messageId`. Used only when SMTP is not configured.
+  Offered only when `BREVO_EMAIL_MARKETING_APPROVED=true`. Brevo's policy for marketing mail through this transactional
+  endpoint must be confirmed by the account owner first.
 - **Brevo webhooks are not signed.** Brevo's documentation describes no signature, shared secret or IP allowlist for
   event callbacks. The receiver is therefore `POST /api/v1/marketing/webhooks/brevo/<BREVO_WEBHOOK_TOKEN>`, with the
   token compared in constant time. Treat the full URL as a secret. Rotate `BREVO_WEBHOOK_TOKEN` if it leaks. This is a
@@ -205,13 +267,32 @@ it cannot verify that a scheduler is calling.
 
 ## 9. Integrations setup
 
-### Brevo (SMS and marketing email)
+### SMTP email (Gmail or any SMTP account)
+1. Reuse the values already used for authentication mail. For Gmail: `EMAIL_SERVER_HOST=smtp.gmail.com`,
+   `EMAIL_SERVER_PORT=587`, `EMAIL_SERVER_SECURE=false`, `EMAIL_SERVER_USER=<address>`,
+   `EMAIL_SERVER_PASSWORD=<16-character App Password>`. Enable 2-Step Verification and create an App Password; a normal
+   account password will be rejected.
+2. Set `EMAIL_FROM` to a mailbox the account may send as (normally the same address as `EMAIL_SERVER_USER`).
+3. Set `APP_URL` to the public address of the deployment (for example `https://app.example.com`). Every campaign email
+   contains an unsubscribe link built from it. In production, scheduling an email campaign is refused while the resolved
+   URL is localhost, a private address or a `.local` name, because recipients could not open the link.
+4. Optional but recommended for the first live send: set `MARKETING_SEND_ALLOWLIST` to your own address. Every other
+   recipient is refused before SMTP is contacted.
+5. Open **Marketing → Integrations** and press **Test connection**. It calls `transporter.verify()`; no message is sent.
+   The page then shows **Tested** (success within 7 days), **Configured** (no test yet), **Unverified** (last test
+   failed or is stale), or **Setup needed** (missing settings).
+6. The SMTP account's daily quota is shared with sign-in mail. The adapter paces at one message per second and the
+   worker sends at most 20 deliveries per run. For large lists, use a dedicated transactional provider.
+7. Live verification requires one real message to a controlled address and one provider event if delivery/bounce
+   reporting is expected. SMTP itself does not report delivery, opens, clicks or bounces.
+
+### Brevo (SMS and optional email fallback)
 1. Create the API key in Brevo under SMTP & API. Set `BREVO_API_key`. Do not use Brevo's SMTP key or MCP key here.
 2. Verify the sender domain for email (SPF, DKIM, DMARC) in Brevo, then set `BREVO_SENDER_EMAIL` and `BREVO_SENDER_NAME`.
 3. For SMS, register the sender ID in every country you message (required for accounts created after 13 March 2026, per
    Brevo's help centre). Set `BREVO_SMS_SENDER`.
 4. Generate `BREVO_WEBHOOK_TOKEN` (for example `openssl rand -base64 48`). In Brevo, add the event callback URL
-   `<NEXTAUTH_URL>/api/v1/marketing/webhooks/brevo/<BREVO_WEBHOOK_TOKEN>`. For SMS, the adapter also sends this URL per
+   `<APP_URL>/api/v1/marketing/webhooks/brevo/<BREVO_WEBHOOK_TOKEN>`. For SMS, the adapter also sends this URL per
    message as `webUrl`.
 5. Start with `MARKETING_SEND_ALLOWLIST` set to your own test numbers and addresses. Remove it only after successful
    controlled sends.
@@ -250,6 +331,9 @@ exists yet for AI features; add one when plans are enforced.
 
 | Variable | Required for | Notes |
 | --- | --- | --- |
+| `APP_URL` | Emailed links (verification, reset, unsubscribe) | Public HTTPS base URL. Falls back to `NEXTAUTH_URL`; a local/private value blocks email scheduling in production |
+| `EMAIL_SERVER_HOST` / `EMAIL_SERVER_PORT` / `EMAIL_SERVER_SECURE` / `EMAIL_SERVER_USER` / `EMAIL_SERVER_PASSWORD` / `EMAIL_FROM` | SMTP email (auth and campaigns) | Existing variables. One account for both. `EMAIL_SERVER_USER` and password must be set together |
+| `MARKETING_SEND_ALLOWLIST` | Controlled live sends | Comma-separated addresses/numbers; applies to SMTP and Brevo |
 | `FACEBOOK_APP_ID` | Facebook Pages | Not secret, but keep in configuration |
 | `FACEBOOK_APP_SECRET` | Facebook Pages | Server only |
 | `SOCIAL_TOKEN_ENCRYPTION_KEY` | Facebook Pages | Format in §9 |
@@ -270,11 +354,38 @@ All rates use stated denominators and return "No data" when the denominator is z
   provider reports opens. **Click rate** = unique clicks ÷ delivered, shown only when clicks are reported.
 - **Unsubscribes** = unsubscribe confirmations attributed to the campaign.
 
-## 11. Testing
+## 11. Demo data
+
+`npm run marketing:seed-demo` fills one or both workspaces with realistic, fully clickable demo data. Pass company
+slugs to limit the run; the default is both demo workspaces:
+
+```bash
+npm run marketing:seed-demo                 # Farmy and Flybox
+npm run marketing:seed-demo -- farmy        # one workspace
+SEED_COMPANIES=flybox npm run marketing:seed-demo
+```
+
+What it creates per workspace: 5 tags, 20 contacts (every lifecycle stage and source, mixed email/SMS consent, one
+withdrawn consent, two inactive contacts, two manually suppressed destinations), 5 audiences, 5 templates
+(4 email + 1 SMS) and 6 campaigns. Campaigns stop at **draft**, **pending approval**, **approved** or **cancelled**.
+
+Safety properties:
+
+- Every record is prefixed with `[Demo]` and is created through the normal services, so rules and audits match the UI.
+- Rerunning is idempotent: records are matched by unique email and normalized name, and campaign states only move forward
+  to the seeded target.
+- The script never calls `scheduleCampaign`. An approved demo campaign has `pending` delivery rows but **no dispatch job**,
+  so the worker cannot send it. The script fails if it finds a job or any delivery past `pending` for a demo campaign.
+- Demo addresses use the reserved `example.test` domain, so even an accidental send is undeliverable.
+- The script refuses to run when `NODE_ENV=production` unless `ALLOW_DEMO_SEED=1` is set explicitly.
+
+## 12. Testing
 
 ```bash
 npx vitest run tests/unit/marketing-domain.test.ts          # pure rules, schemas, crypto, tokens, signatures
+npx vitest run tests/unit/smtp-provider.test.ts             # SMTP config, validation, error classes, registry, status
 npx vitest run tests/integration/marketing.test.ts          # contacts, tags, consent, audiences, campaigns, dispatch, webhooks, unsubscribe, tenancy
+npx vitest run tests/integration/marketing-smtp.test.ts     # SMTP adapter through dispatch: consent, retries, partial failure, tenancy
 npx vitest run tests/integration/marketing-social-ai.test.ts # Facebook OAuth flow, social posts, AI copy (Meta and AI mocked)
 npx vitest run tests/integration/marketing-routes.test.ts    # worker, webhook and callback route handlers
 ```
@@ -282,7 +393,7 @@ npx vitest run tests/integration/marketing-routes.test.ts    # worker, webhook a
 Integration tests need a MongoDB replica set on `127.0.0.1:27018` (see `tests/helpers/workspace.ts`). The
 social and AI tests mock the Meta configuration, Graph API and AI provider. No real message, post or model call is made.
 
-## 12. Known limitations
+## 13. Known limitations
 
 - Brevo has not been exercised against a live account from this repository. Every Brevo call is mocked in tests.
 - Brevo webhooks are unauthenticated apart from the URL token. Delivery reporting is only as trustworthy as that token.

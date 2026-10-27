@@ -18,6 +18,7 @@ import { createUnsubscribeToken, verifyUnsubscribeToken } from "@/server/marketi
 import { signWebhookPayload, verifyWebhookSignature, WEBHOOK_TOLERANCE_SECONDS } from "@/server/marketing/webhook-signature";
 import { buildUserPrompt, parseCopyOutput } from "@/server/marketing/ai/copy.service";
 import { renderMessage } from "@/server/marketing/message";
+import { EMAIL_DESIGNS, renderEmailHtml } from "@/features/marketing/utils/email-design";
 import { maskDestination } from "@/server/marketing/campaign.service";
 import { resolveScheduledAt } from "@/server/marketing/campaign.service";
 import { AppError } from "@/shared/lib/errors";
@@ -158,6 +159,66 @@ describe("message rendering", () => {
   it("escapes contact names in the HTML part", () => {
     const rendered = renderMessage("email", { subject: "Hi", body: "Hello {{first_name}}" }, { ...values, first_name: "<img src=x>" });
     expect(rendered.html).not.toContain("<img");
+  });
+
+  it("uses the selected design and keeps the unsubscribe link to one occurrence", () => {
+    const rendered = renderMessage(
+      "email",
+      { subject: "Hi", body: "Hello {{first_name}}\n\nUnsubscribe: {{unsubscribe_url}}", design: "newsletter" },
+      values
+    );
+    expect(rendered.html).toContain("background:#0f5132");
+    expect((rendered.html ?? "").split(values.unsubscribe_url).length - 1).toBe(1);
+  });
+});
+
+describe("email designs", () => {
+  const input = {
+    subject: "Your update",
+    body: "Hello <script>alert(1)</script>\n\nUnsubscribe: https://app.test/unsubscribe?token=t",
+    companyName: "Acme <Ltd>",
+    unsubscribeUrl: "https://app.test/unsubscribe?token=t",
+    unsubscribeInBody: true,
+  };
+
+  it.each(EMAIL_DESIGNS)("renders %s with escaped content and one unsubscribe link", (design) => {
+    const html = renderEmailHtml({ ...input, design });
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("Acme <Ltd>");
+    expect(html).toContain("https://app.test/unsubscribe?token=t");
+    expect(html.split("https://app.test/unsubscribe?token=t").length - 1).toBe(1);
+  });
+
+  it("keeps a footer when the body has no unsubscribe link", () => {
+    const html = renderEmailHtml({ ...input, design: "classic", body: "Hello", unsubscribeInBody: false });
+    expect(html).toContain("Unsubscribe");
+    expect(html.split("https://app.test/unsubscribe?token=t").length - 1).toBe(1);
+  });
+
+  it("defaults legacy content to the plain design", () => {
+    expect(templateInputSchema.safeParse({ name: "T", channel: "email", subject: "S", body: "Hi", isActive: true }).success).toBe(true);
+    const parsed = templateInputSchema.parse({ name: "T", channel: "email", subject: "S", body: "Hi", isActive: true });
+    expect(parsed.design).toBe("plain");
+  });
+
+  it("rejects a design on SMS content", () => {
+    const sms = { name: "T", channel: "sms", subject: "", body: "Hello", isActive: true };
+    expect(templateInputSchema.safeParse({ ...sms, design: "promo" }).success).toBe(false);
+    expect(templateInputSchema.safeParse({ ...sms, design: "plain" }).success).toBe(true);
+  });
+
+  it("adds motion styles with a reduced-motion fallback", () => {
+    const html = renderEmailHtml({ ...input, design: "neon" });
+    expect(html).toContain("anopsNeonPulse");
+    expect(html).toContain("prefers-reduced-motion");
+    expect(html).toContain("animation: none !important");
+  });
+
+  it("shrinks padding and headings on narrow screens", () => {
+    const html = renderEmailHtml({ ...input, design: "classic" });
+    expect(html).toContain("@media (max-width: 480px)");
+    expect(html).toContain(".anops-hero");
+    expect(html).toContain(".anops-body");
   });
 });
 

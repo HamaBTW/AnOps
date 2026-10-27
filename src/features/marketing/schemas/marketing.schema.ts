@@ -10,6 +10,7 @@ import {
   findUnknownTemplateVariables,
   TEMPLATE_VARIABLES,
 } from "@/features/marketing/utils/template";
+import { DEFAULT_EMAIL_DESIGN, EMAIL_DESIGNS, type EmailDesign } from "@/features/marketing/utils/email-design";
 import { SOCIAL_CONTENT_LIMITS } from "@/features/marketing/utils/social-state";
 import {
   AI_CHANNELS,
@@ -205,7 +206,7 @@ export const audienceListQuerySchema = z.object({
 // ---------------------------------------------------------------------------------------------
 
 function validateMessageContent(
-  value: { channel: (typeof MARKETING_CHANNELS)[number]; subject: string; body: string },
+  value: { channel: (typeof MARKETING_CHANNELS)[number]; subject: string; body: string; design: EmailDesign },
   ctx: z.RefinementCtx
 ): void {
   if (value.channel === "email") {
@@ -219,6 +220,9 @@ function validateMessageContent(
       ctx.addIssue({ code: "custom", path: ["body"], message: `Maximum ${EMAIL_BODY_MAX} characters` });
     }
   } else {
+    if (value.design !== DEFAULT_EMAIL_DESIGN) {
+      ctx.addIssue({ code: "custom", path: ["design"], message: "SMS messages always use the plain style" });
+    }
     if (value.subject.trim() !== "") {
       ctx.addIssue({ code: "custom", path: ["subject"], message: "SMS messages have no subject" });
     }
@@ -244,6 +248,7 @@ const templateShape = z
   .object({
     name: requiredText(120, "Template name"),
     channel: z.enum(MARKETING_CHANNELS),
+    design: z.enum(EMAIL_DESIGNS).default(DEFAULT_EMAIL_DESIGN),
     subject: z.string().trim().max(EMAIL_SUBJECT_MAX, `Maximum ${EMAIL_SUBJECT_MAX} characters`),
     body: z.string().trim().min(1, "Message body is required").max(EMAIL_BODY_MAX, `Maximum ${EMAIL_BODY_MAX} characters`),
     isActive: z.boolean(),
@@ -268,6 +273,7 @@ const campaignShape = z
   .object({
     name: requiredText(120, "Campaign name"),
     channel: z.enum(MARKETING_CHANNELS),
+    design: z.enum(EMAIL_DESIGNS).default(DEFAULT_EMAIL_DESIGN),
     audienceId: objectIdSchema,
     templateId: z
       .union([z.literal(""), z.null(), objectIdSchema])

@@ -18,6 +18,7 @@ import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import type { CampaignInput, CampaignListQuery } from "@/features/marketing/schemas/marketing.schema";
 import { isCampaignCancellable, isCampaignEditable } from "@/features/marketing/utils/campaign-state";
+import { DEFAULT_EMAIL_DESIGN, normalizeEmailDesign, type EmailDesign } from "@/features/marketing/utils/email-design";
 import {
   literalRegex,
   MARKETING_PAGE_SIZE,
@@ -30,9 +31,11 @@ import {
   toObjectId,
 } from "@/server/marketing/common";
 import { PERMISSIONS, type Permission } from "@/server/security/permissions";
+import { env, getAppUrl, isLocalOnlyUrl } from "@/config/env";
 import { enqueueJob, cancelQueuedJob } from "@/server/marketing/jobs";
 import { getConfiguredProviders } from "@/server/marketing/providers";
 import { buildRecipientSnapshot } from "@/server/marketing/campaign-snapshot";
+import { isValidStoredRule } from "@/server/marketing/audience.service";
 import { previewStoredRule, type AudiencePreviewDto } from "@/server/marketing/audience.service";
 import type { Paged } from "@/features/inventory/types";
 
@@ -66,6 +69,7 @@ export type CampaignDto = {
   templateId: string | null;
   templateName: string | null;
   templateVersion: number | null;
+  design: EmailDesign;
   subject: string;
   body: string;
   contentVersion: number;
@@ -165,6 +169,7 @@ function toCampaignDto(
     templateId: doc.templateId?.toHexString() ?? null,
     templateName: names.template,
     templateVersion: doc.templateVersion,
+    design: normalizeEmailDesign(doc.design),
     subject: doc.subject,
     body: doc.body,
     contentVersion: doc.contentVersion,
@@ -274,7 +279,7 @@ export async function getCampaign(ctx: WorkspaceContext, idRaw: string): Promise
   for (const row of grouped) deliverySummary[row._id] = row.count;
 
   const recipientEstimate =
-    doc.status === "draft" && audience
+    doc.status === "draft" && audience && isValidStoredRule(audience.selectionRule)
       ? await previewStoredRule(ctx.db, ctx.companyId, audience.selectionRule, doc.channel)
       : null;
 
@@ -304,6 +309,7 @@ export async function createCampaign(ctx: WorkspaceContext, input: CampaignInput
     audienceId,
     templateId,
     templateVersion: template?.version ?? null,
+    design: input.channel === "email" ? input.design : DEFAULT_EMAIL_DESIGN,
     subject: input.channel === "email" ? input.subject.trim() : "",
     body: input.body.trim(),
     contentVersion: 1,
@@ -355,6 +361,7 @@ export async function updateCampaign(ctx: WorkspaceContext, idRaw: string, input
         audienceId,
         templateId,
         templateVersion: template?.version ?? null,
+        design: input.channel === "email" ? input.design : DEFAULT_EMAIL_DESIGN,
         subject: input.channel === "email" ? input.subject.trim() : "",
         body: input.body.trim(),
         updatedAt: new Date(),
@@ -533,6 +540,14 @@ export async function scheduleCampaign(ctx: WorkspaceContext, idRaw: string, sch
       doc.channel === "email"
         ? "Email delivery is not configured. Connect an email provider before scheduling campaigns."
         : "SMS delivery is not configured. Connect an SMS provider before scheduling campaigns."
+    );
+  }
+  // Every campaign email carries an unsubscribe link. In production that link must be reachable
+  // from outside this machine; otherwise the recipient cannot opt out.
+  if (doc.channel === "email" && env.NODE_ENV === "production" && isLocalOnlyUrl(getAppUrl())) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Set APP_URL to the public address of this deployment (for example https://app.example.com) before scheduling email campaigns. Unsubscribe links would otherwise point at a local address."
     );
   }
   const now = new Date();

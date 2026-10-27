@@ -7,7 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supplierInputSchema } from "@/features/purchasing/schemas/purchasing.schema";
 import { createSupplierAction, updateSupplierAction } from "@/features/purchasing/actions/purchasing.action";
-import { Truck } from "lucide-react";
+import { Plus, Truck } from "lucide-react";
+import { ExpandableSection } from "@/shared/components/ui/expandable-section";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
@@ -45,12 +46,12 @@ function SupplierForm({
           if (error) setFormError(error);
         })
       )}
-      className="grid gap-4 sm:grid-cols-2"
+      className="grid gap-5 sm:grid-cols-2"
     >
-      <TextField label="Supplier name" error={errors.name?.message} {...register("name")} />
-      <TextField label="Email" type="email" autoComplete="off" error={errors.email?.message} {...register("email")} />
-      <TextField label="Phone" error={errors.phone?.message} {...register("phone")} />
-      <TextField label="Tax identifier" error={errors.taxIdentifier?.message} {...register("taxIdentifier")} />
+      <TextField label="Supplier name" required placeholder="e.g. Acme Metals Ltd" error={errors.name?.message} {...register("name")} />
+      <TextField label="Email" type="email" autoComplete="off" placeholder="e.g. orders@acme-metals.com" hint="Optional. Used to contact the supplier about orders." error={errors.email?.message} {...register("email")} />
+      <TextField label="Phone" type="tel" placeholder="e.g. +216 71 234 567" hint="Optional. Include the country code." error={errors.phone?.message} {...register("phone")} />
+      <TextField label="Tax identifier" placeholder="e.g. 1234567/A/M/000" hint="Optional. VAT or company registration number." error={errors.taxIdentifier?.message} {...register("taxIdentifier")} />
       <label className="inline-flex min-h-[44px] items-center gap-3 text-sm sm:col-span-2">
         <input
           type="checkbox"
@@ -71,14 +72,14 @@ function SupplierForm({
 export function SupplierManager({ suppliers, canManage, filtered = false }: { suppliers: SupplierDto[]; canManage: boolean; filtered?: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<"none" | "create" | string>("none");
+  const [formKey, setFormKey] = useState(0);
 
   return (
     <div className="space-y-6">
-      {canManage && mode === "none" && <Button variant="primary" onClick={() => setMode("create")}>New supplier</Button>}
-      {canManage && mode === "create" && (
-        <section aria-labelledby="new-supplier" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
-          <h2 id="new-supplier" className="mb-4 text-base font-semibold">New supplier</h2>
+      {canManage && (
+        <ExpandableSection title="New supplier" description="Add a vendor you buy from. Required before creating purchase orders." icon={Plus} open={mode === "create"} onOpenChange={(open) => setMode(open ? "create" : "none")}>
           <SupplierForm
+            key={formKey}
             defaultValues={{ name: "", email: "", phone: "", taxIdentifier: "", address: "", isActive: true }}
             submitLabel="Create supplier"
             onCancel={() => setMode("none")}
@@ -86,11 +87,12 @@ export function SupplierManager({ suppliers, canManage, filtered = false }: { su
               const result = await createSupplierAction(values);
               if (!result.ok) return result.error.message;
               setMode("none");
+              setFormKey((k) => k + 1);
               router.refresh();
               return null;
             }}
           />
-        </section>
+        </ExpandableSection>
       )}
 
       {suppliers.length === 0 ? (

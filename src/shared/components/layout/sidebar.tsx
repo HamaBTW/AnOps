@@ -37,6 +37,7 @@ const navigation = [
   { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
   { name: "Manufacturing", href: "/manufacturing", icon: IconSettings },
   { name: "Marketing", href: "/marketing", icon: Megaphone },
+  { name: "Blogs & Community", href: "/community", icon: IconDocument },
   { name: "Projects", href: "/projects", icon: IconBarChart },
   { name: "Documents", href: "/documents", icon: IconDocument },
   { name: "Notifications", href: "/notifications", icon: IconNotification },

@@ -80,11 +80,22 @@ export function OfflineIndicator() {
         {!isOnline && (
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={async () => {
+              try {
+                const res = await fetch("/manifest.json", { cache: "no-store" });
+                if (res.ok) {
+                  window.location.reload();
+                } else {
+                  alert("Still offline. Please check your connection.");
+                }
+              } catch {
+                alert("Still offline. Please check your connection.");
+              }
+            }}
             className="flex items-center gap-1.5 text-xs bg-amber-900/80 hover:bg-amber-950 text-white font-semibold px-3 py-1 rounded transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Retry</span>
+            <span>Retry Connection</span>
           </button>
         )}
       </div>

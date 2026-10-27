@@ -1,20 +1,9 @@
-const CACHE_NAME = "anops-cache-v4";
+const CACHE_NAME = "anops-cache-v5";
 const OFFLINE_URL = "/offline";
 
-const MODULE_ROUTES = [
+const STATIC_PRECACHE = [
   OFFLINE_URL,
   "/manifest.json",
-  "/dashboard",
-  "/company",
-  "/hr",
-  "/crm",
-  "/sales",
-  "/finance",
-  "/inventory",
-  "/purchasing",
-  "/manufacturing",
-  "/marketing",
-  "/community",
   "/brand-kit/02-app-icons/anops-favicon-32x32.svg",
   "/brand-kit/02-app-icons/anops-web-icon-artwork-192x192.png",
 ];
@@ -23,16 +12,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then(async (cache) => {
-        // Precache critical assets and attempt to precache module shells
-        for (const url of MODULE_ROUTES) {
-          try {
-            await cache.add(url);
-          } catch (e) {
-            // Ignore redirects or unauthenticated routes during install
-          }
-        }
-      })
+      .then((cache) => cache.addAll(STATIC_PRECACHE))
       .then(() => self.skipWaiting())
   );
 });
@@ -63,9 +43,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 1. Navigation and RSC requests:
+  // 1. Navigation and RSC flight requests (pages and components)
   const isNavigation = request.mode === "navigate";
-  const isRscHeader = request.headers.get("RSC") === "1" || request.headers.has("Next-Router-State-Tree");
+  const isRscHeader =
+    request.headers.get("RSC") === "1" ||
+    request.headers.has("Next-Router-State-Tree") ||
+    request.headers.has("Next-Url");
   const isRscQuery = url.searchParams.has("_rsc");
 
   if (isNavigation || isRscHeader || isRscQuery) {
@@ -75,9 +58,9 @@ self.addEventListener("fetch", (event) => {
           if (response && response.status === 200) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
-              // Cache exact request
+              // Store exact request (including RSC headers/params)
               cache.put(request, copy);
-              // Also index by pathname for clean client-side router navigation lookup
+              // Also store under clean path for router back/forward navigation
               if (url.origin === self.location.origin) {
                 cache.put(url.pathname, response.clone());
               }
@@ -87,27 +70,31 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(async () => {
           const cache = await caches.open(CACHE_NAME);
-          
-          // 1. Exact request match
+
+          // 1. Exact match
           const exactMatch = await cache.match(request);
           if (exactMatch) return exactMatch;
 
-          // 2. Pathname match without query parameters or headers
+          // 2. Clean pathname match
           const pathnameMatch = await cache.match(url.pathname);
           if (pathnameMatch) return pathnameMatch;
 
-          // 3. Normalized path match
+          // 3. Trim trailing slash match
           const cleanPath = url.pathname.replace(/\/$/, "");
           const cleanMatch = await cache.match(cleanPath);
           if (cleanMatch) return cleanMatch;
 
-          // 4. If nothing matched and it's a full navigation, show offline fallback
-          if (isNavigation) {
-            const offlinePage = await cache.match(OFFLINE_URL);
-            if (offlinePage) return offlinePage;
+          // 4. If this is a client back/forward RSC request, try any cached match for the pathname
+          if (isRscHeader || isRscQuery) {
+            const keys = await cache.keys();
+            const matchedKey = keys.find((req) => new URL(req.url).pathname === url.pathname);
+            if (matchedKey) {
+              const res = await cache.match(matchedKey);
+              if (res) return res;
+            }
           }
 
-          // If an RSC subrequest failed and we don't have it, return offline fallback page
+          // 5. Fallback to /offline page
           const offlinePage = await cache.match(OFFLINE_URL);
           return offlinePage || Response.error();
         })
@@ -115,7 +102,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2. Next.js Static Chunks, Scripts, and Styles (Stale-While-Revalidate)
+  // 2. Next.js Static Chunks, Scripts, and CSS (Stale-While-Revalidate)
   if (
     url.pathname.startsWith("/_next/") ||
     url.pathname.endsWith(".js") ||
@@ -139,7 +126,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 3. Media, fonts, images: Cache-first
+  // 3. Media, fonts, images (Cache-first)
   if (
     request.destination === "image" ||
     request.destination === "font" ||

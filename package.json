@@ -10,6 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "marketing:seed-demo": "vite-node -c vitest.config.mts scripts/seed-marketing-demo.ts",
+    "marketing:worker": "node scripts/marketing-worker.mjs --once",
+    "marketing:worker:watch": "node scripts/marketing-worker.mjs",
     "db:migrate-tenancy": "node scripts/migrate-multi-tenant.mjs"
   },
   "dependencies": {

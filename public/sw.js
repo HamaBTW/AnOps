@@ -1,4 +1,4 @@
-const CACHE = "anops-v1";
+const CACHE = "anops-v2";
 const OFFLINE_URL = "/offline";
 const PRECACHE = [OFFLINE_URL, "/manifest.json"];
 
@@ -28,7 +28,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.destination === "image" || request.destination === "style" || request.destination === "script" || request.destination === "font") {
+  // Only cache-first immutable media. Scripts and styles must always come from the network (or the
+  // browser's HTTP cache) so a new deployment never pairs fresh HTML with a stale JS bundle.
+  if (request.destination === "image" || request.destination === "font") {
     event.respondWith(
       caches.match(request).then(
         (cached) =>

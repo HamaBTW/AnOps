@@ -13,6 +13,7 @@ import { recordAudit } from "@/server/audit/audit.service";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import type { AudienceInput, AudienceRuleInput } from "@/features/marketing/schemas/marketing.schema";
+import { audienceRuleSchema } from "@/features/marketing/schemas/marketing.schema";
 import { normalizeName } from "@/features/marketing/utils/normalize";
 import {
   EVALUATION_BATCH_SIZE,
@@ -34,7 +35,8 @@ export type AudienceDto = {
   id: string;
   name: string;
   description: string;
-  rule: AudienceRuleInput;
+  /** Null when a legacy or damaged document has no usable rule. Such an audience cannot be approved. */
+  rule: AudienceRuleInput | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -85,6 +87,26 @@ export function fromStoredRule(rule: AudienceRuleDoc): AudienceRuleInput {
 }
 
 /**
+ * Converts a stored rule for display, returning null when the document is missing fields or no longer
+ * satisfies the current rule schema. A list page must never crash because one legacy row is malformed,
+ * and a malformed rule must never be treated as "match everything".
+ */
+export function safeFromStoredRule(rule: AudienceRuleDoc | null | undefined): AudienceRuleInput | null {
+  if (!rule || typeof rule !== "object" || !Array.isArray(rule.conditions)) return null;
+  if (rule.match !== "all" && rule.match !== "any") return null;
+  try {
+    const input = fromStoredRule(rule);
+    return audienceRuleSchema.safeParse(input).success ? input : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isValidStoredRule(rule: AudienceRuleDoc | null | undefined): boolean {
+  return safeFromStoredRule(rule) !== null;
+}
+
+/**
  * Compiles a stored rule into a contact filter. Only typed clauses are produced. Rule values never become
  * operators, so a crafted rule cannot inject a query. The filter is always scoped to the company.
  */
@@ -93,6 +115,12 @@ export async function compileAudienceFilter(
   companyId: ObjectId,
   rule: AudienceRuleDoc
 ): Promise<Filter<ContactDoc>> {
+  if (!isValidStoredRule(rule)) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "This audience has no valid selection rule. Open it, save a rule, then try again."
+    );
+  }
   const scope = { companyId };
   const clauses: Filter<ContactDoc>[] = [];
   for (const condition of rule.conditions) {
@@ -229,11 +257,11 @@ function toAudienceDto(doc: AudienceDoc): AudienceDto {
     id: doc._id.toHexString(),
     name: doc.name,
     description: doc.description,
-    rule: fromStoredRule(doc.selectionRule),
+    rule: safeFromStoredRule(doc.selectionRule),
     isActive: doc.isActive,
     createdAt: doc.createdAt.toISOString(),
-    updatedAt: doc.updatedAt.toISOString(),
-    version: doc.version,
+    updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
+    version: doc.version ?? 1,
   };
 }
 

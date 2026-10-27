@@ -120,6 +120,31 @@ const devRecoveryShim = `(function () {
 
 const themeInitScript = `(function(){try{var t=localStorage.getItem('anops:theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();`;
 
+/**
+ * A service worker registered by a production run on the same origin keeps serving cached JS and CSS
+ * in development, which pairs a fresh server render with a stale client bundle and breaks hydration.
+ * Development never needs offline caching, so remove any registration and its caches once, then reload.
+ */
+const devServiceWorkerCleanup = `(function () {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then(function (registrations) {
+    if (!registrations.length) return;
+    Promise.all(registrations.map(function (registration) { return registration.unregister(); })).then(function () {
+      if (window.caches) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (key) { caches.delete(key); });
+        });
+      }
+      try {
+        if (!sessionStorage.getItem("anops:sw-cleanup-reloaded")) {
+          sessionStorage.setItem("anops:sw-cleanup-reloaded", "1");
+          location.reload();
+        }
+      } catch (error) {}
+    });
+  });
+})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -139,9 +164,14 @@ export default function RootLayout({
           {themeInitScript}
         </Script>
         {process.env.NODE_ENV === "development" && (
-          <Script id="anops-dev-recovery" strategy="beforeInteractive">
-            {devRecoveryShim}
-          </Script>
+          <>
+            <Script id="anops-dev-recovery" strategy="beforeInteractive">
+              {devRecoveryShim}
+            </Script>
+            <Script id="anops-dev-sw-cleanup" strategy="beforeInteractive">
+              {devServiceWorkerCleanup}
+            </Script>
+          </>
         )}
         <HydrationMarker />
         <PwaRegister />

@@ -8,6 +8,7 @@ import { deleteTemplateAction, duplicateTemplateAction, setTemplateActiveAction 
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
+import { EMAIL_DESIGN_LABELS } from "@/features/marketing/utils/email-design";
 import type { TemplateDto } from "@/server/marketing/template.service";
 
 /** Row actions for templates. Each action re-checks permission on the server. */
@@ -34,12 +35,13 @@ export function TemplateList({ templates, canManage }: { templates: TemplateDto[
               <p className="mt-1 line-clamp-2 break-words text-sm text-[var(--color-text-secondary)]">{template.body}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <StatusBadge label={CHANNEL_LABELS[template.channel]} tone="info" />
+                {template.channel === "email" && <StatusBadge label={EMAIL_DESIGN_LABELS[template.design]} tone="neutral" />}
                 <StatusBadge label={template.isActive ? "Active" : "Inactive"} tone={template.isActive ? "success" : "neutral"} />
                 <StatusBadge label={`v${template.version}`} tone="neutral" />
               </div>
             </div>
             {canManage && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
                 <Button disabled={pending} onClick={() => run(() => duplicateTemplateAction(template.id), "Template duplicated as an inactive copy.")}>Duplicate</Button>
                 <Button
                   disabled={pending}

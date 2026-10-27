@@ -14,11 +14,14 @@ import { TextField } from "@/shared/components/ui/text-field";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
 import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
 import { renderTemplate, smsSegmentCount, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TEMPLATE_VARIABLES, type TemplateVariable } from "@/features/marketing/utils/template";
+import { DEFAULT_EMAIL_DESIGN, renderEmailHtml, type EmailDesign } from "@/features/marketing/utils/email-design";
+import { EmailDesignPicker } from "@/features/marketing/components/email-design-picker";
+import { EmailPreview } from "@/features/marketing/components/email-preview";
 import type { CampaignDto } from "@/server/marketing/campaign.service";
 
 type CampaignFormValues = z.input<typeof campaignInputSchema>;
 
-export type TemplateOption = { id: string; name: string; subject: string; body: string; version: number; channel: MarketingChannel };
+export type TemplateOption = { id: string; name: string; design: EmailDesign; subject: string; body: string; version: number; channel: MarketingChannel };
 export type AudienceOption = { id: string; name: string; isActive: boolean };
 
 const SAMPLE: Record<TemplateVariable, string> = {
@@ -59,20 +62,34 @@ export function CampaignForm({
       ? {
           name: campaign.name,
           channel: campaign.channel,
+          design: campaign.design,
           audienceId: campaign.audienceId,
           templateId: campaign.templateId ?? "",
           subject: campaign.subject,
           body: campaign.body,
         }
-      : { name: "", channel: "email", audienceId: audiences[0]?.id ?? "", templateId: "", subject: "", body: "" },
+      : { name: "", channel: "email", design: DEFAULT_EMAIL_DESIGN, audienceId: audiences[0]?.id ?? "", templateId: "", subject: "", body: "" },
   });
   const channel = watch("channel") as MarketingChannel;
+  const design = (watch("design") ?? DEFAULT_EMAIL_DESIGN) as EmailDesign;
   const subject = watch("subject") ?? "";
   const body = watch("body") ?? "";
   const usableTemplates = templates.filter((template) => template.channel === channel);
 
   const renderedBody = useMemo(() => renderTemplate(body, SAMPLE), [body]);
   const renderedSubject = useMemo(() => renderTemplate(subject, SAMPLE), [subject]);
+  const emailHtml = useMemo(
+    () =>
+      renderEmailHtml({
+        design,
+        subject: renderedSubject || "Your subject",
+        body: renderedBody || "Your message appears here.",
+        companyName: SAMPLE.company_name,
+        unsubscribeUrl: SAMPLE.unsubscribe_url,
+        unsubscribeInBody: body.includes("{{unsubscribe_url}}"),
+      }),
+    [design, renderedBody, renderedSubject, body]
+  );
   const smsText = `${renderedBody} ${SMS_OPT_OUT_FOOTER}`;
 
   const pickTemplate = (id: string) => {
@@ -83,13 +100,18 @@ export function CampaignForm({
       return;
     }
     setValue("templateId", chosen.id, { shouldDirty: true });
+    setValue("design", chosen.design, { shouldDirty: true, shouldValidate: true });
     setValue("subject", chosen.subject, { shouldDirty: true, shouldValidate: true });
     setValue("body", chosen.body, { shouldDirty: true, shouldValidate: true });
   };
 
   const submit = (values: CampaignFormValues) =>
     startTransition(async () => {
-      const payload = { ...values, subject: values.channel === "email" ? values.subject : "" };
+      const payload = {
+        ...values,
+        design: values.channel === "email" ? values.design ?? DEFAULT_EMAIL_DESIGN : DEFAULT_EMAIL_DESIGN,
+        subject: values.channel === "email" ? values.subject : "",
+      };
       const result = campaign
         ? await updateCampaignAction(campaign.id, { ...payload, expectedVersion: campaign.version })
         : await createCampaignAction(payload);
@@ -104,8 +126,32 @@ export function CampaignForm({
     });
 
   return (
-    <form noValidate onSubmit={handleSubmit(submit)} className="grid gap-6 xl:grid-cols-2">
-      <div className="space-y-5">
+    <form
+      noValidate
+      onSubmit={handleSubmit(submit)}
+      className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start"
+    >
+      <aside aria-label="Message preview" className="order-2 space-y-3 lg:order-1 lg:sticky lg:top-6">
+        <h2 className="text-base font-semibold">Preview</h2>
+        <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 text-sm">
+          {channel === "email" ? (
+            <>
+              <p className="break-words"><span className="font-semibold">Subject:</span> {renderedSubject || "—"}</p>
+              <EmailPreview html={emailHtml} title="Message preview" className="mt-3" />
+            </>
+          ) : (
+            <>
+              <p className="whitespace-pre-wrap break-words">{renderedBody ? smsText : "Your SMS appears here."}</p>
+              <p className="mt-3 text-xs text-[var(--color-text-secondary)]" aria-live="polite">
+                {smsText.length} / {SMS_BODY_MAX} characters · {smsSegmentCount(smsText)} segment(s)
+              </p>
+            </>
+          )}
+        </div>
+        <p className="text-xs text-[var(--color-text-secondary)]">Sample values are shown. Recipients are chosen when the campaign is approved.</p>
+      </aside>
+
+      <div className="order-1 space-y-5 lg:order-2">
         <TextField label="Campaign name" error={errors.name?.message} {...register("name")} />
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -140,40 +186,32 @@ export function CampaignForm({
         {channel === "email" && (
           <TextField label="Subject" maxLength={150} error={errors.subject?.message} {...register("subject")} />
         )}
+
+        {channel === "email" && (
+          <EmailDesignPicker
+            value={design}
+            onChange={(next) => setValue("design", next, { shouldDirty: true, shouldValidate: true })}
+          />
+        )}
+        {errors.design?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.design.message}</p>}
+
         <div className="space-y-1.5">
-          <label htmlFor="body" className="text-sm font-semibold">{channel === "email" ? "Message (plain text)" : "SMS message"}</label>
+          <label htmlFor="body" className="text-sm font-semibold">{channel === "email" ? "Message" : "SMS message"}</label>
           <textarea id="body" rows={channel === "email" ? 9 : 5} aria-invalid={Boolean(errors.body)} className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-3 text-sm focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]" {...register("body")} />
           {errors.body?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.body.message}</p>}
           <p className="text-xs text-[var(--color-text-secondary)]">
+            {channel === "email"
+              ? "Plain text; the design adds layout and the unsubscribe footer. "
+              : ""}
             Variables: {TEMPLATE_VARIABLES.map((name) => `{{${name}}}`).join(" ")}
           </p>
         </div>
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-border-subtle)] pt-4 sm:flex-row sm:justify-end">
           <Link href={campaign ? `/marketing/campaigns/${campaign.id}` : "/marketing/campaigns"} className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm">Back</Link>
           <Button type="submit" variant="primary" disabled={pending || audiences.length === 0}>{pending ? "Saving…" : campaign ? "Save draft" : "Create draft"}</Button>
         </div>
       </div>
-
-      <aside aria-label="Message preview" className="space-y-3 xl:sticky xl:top-6 xl:self-start">
-        <h2 className="text-base font-semibold">Preview</h2>
-        <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 text-sm">
-          {channel === "email" ? (
-            <>
-              <p className="break-words"><span className="font-semibold">Subject:</span> {renderedSubject || "—"}</p>
-              <div className="mt-3 whitespace-pre-wrap break-words">{renderedBody || "Your message appears here."}</div>
-            </>
-          ) : (
-            <>
-              <p className="whitespace-pre-wrap break-words">{renderedBody ? smsText : "Your SMS appears here."}</p>
-              <p className="mt-3 text-xs text-[var(--color-text-secondary)]" aria-live="polite">
-                {smsText.length} / {SMS_BODY_MAX} characters · {smsSegmentCount(smsText)} segment(s)
-              </p>
-            </>
-          )}
-        </div>
-        <p className="text-xs text-[var(--color-text-secondary)]">Sample values are shown. Recipients are chosen when the campaign is approved.</p>
-      </aside>
     </form>
   );
 }

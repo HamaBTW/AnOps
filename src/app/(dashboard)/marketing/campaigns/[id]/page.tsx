@@ -8,9 +8,13 @@ import { PageHeader } from "@/shared/components/data-display/page-header";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { CampaignForm } from "@/features/marketing/components/campaign-form";
+import { EmailPreview } from "@/features/marketing/components/email-preview";
 import { CampaignActions } from "@/features/marketing/components/campaign-actions";
 import { DeliveryFilter } from "@/features/marketing/components/delivery-filter";
 import { CAMPAIGN_STATUS_LABELS, CAMPAIGN_STATUS_TONE, CHANNEL_LABELS, DELIVERY_STATUS_LABELS, DELIVERY_STATUS_TONE, EXCLUSION_LABELS, ERROR_CODE_MESSAGES } from "@/features/marketing/labels";
+import { renderTemplate, type TemplateVariable } from "@/features/marketing/utils/template";
+import { renderEmailHtml } from "@/features/marketing/utils/email-design";
+import { companyName } from "@/server/marketing/common";
 import { type DeliveryStatus } from "@/features/marketing/types/constants";
 import { formatDateTime } from "@/shared/lib/format";
 import { orNotFound } from "@/server/marketing/page-guard";
@@ -19,6 +23,14 @@ import { deliveryStatusFilter } from "@/features/marketing/utils/query";
 import { buttonClass } from "@/shared/components/ui/button";
 
 export const metadata: Metadata = { title: "Campaign | AnOps ERP" };
+
+const SAMPLE_VALUES: Record<TemplateVariable, string> = {
+  first_name: "Amina",
+  last_name: "Ben Ali",
+  email: "amina@example.test",
+  company_name: "Your company",
+  unsubscribe_url: "#unsubscribe",
+};
 
 export default async function CampaignDetailPage({
   params,
@@ -41,6 +53,7 @@ export default async function CampaignDetailPage({
     ? await Promise.all([audienceOptions(ctx), templateOptions(ctx, campaign.channel)])
     : [[], []];
   const templateList = templates.map((template) => ({ ...template, channel: campaign.channel }));
+  const company = campaign.channel === "email" && !campaign.actions.canEdit ? await companyName(ctx.db, ctx.companyId) : "";
   const exclusions = campaign.snapshot?.exclusions ?? {};
   const job = campaign.job;
   const totalDeliveries = Object.values(campaign.deliverySummary).reduce((sum, count) => sum + count, 0);
@@ -76,8 +89,26 @@ export default async function CampaignDetailPage({
       {!campaign.actions.canEdit && (
         <section aria-labelledby="content" className="space-y-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
           <h2 id="content" className="text-base font-semibold">Content (locked)</h2>
-          {campaign.subject && <p className="break-words text-sm"><span className="font-semibold">Subject:</span> {campaign.subject}</p>}
-          <p className="whitespace-pre-wrap break-words text-sm">{campaign.body}</p>
+          {campaign.subject && (
+            <p className="break-words text-sm">
+              <span className="font-semibold">Subject:</span> {renderTemplate(campaign.subject, SAMPLE_VALUES)}
+            </p>
+          )}
+          {campaign.channel === "email" ? (
+            <EmailPreview
+              title="Campaign email preview"
+              html={renderEmailHtml({
+                design: campaign.design,
+                subject: renderTemplate(campaign.subject, SAMPLE_VALUES),
+                body: renderTemplate(campaign.body, SAMPLE_VALUES),
+                companyName: company || SAMPLE_VALUES.company_name,
+                unsubscribeUrl: SAMPLE_VALUES.unsubscribe_url,
+                unsubscribeInBody: campaign.body.includes("{{unsubscribe_url}}"),
+              })}
+            />
+          ) : (
+            <p className="whitespace-pre-wrap break-words text-sm">{renderTemplate(campaign.body, SAMPLE_VALUES)}</p>
+          )}
         </section>
       )}
 

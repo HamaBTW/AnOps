@@ -7,6 +7,7 @@ import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import type { TemplateInput } from "@/features/marketing/schemas/marketing.schema";
 import { normalizeName } from "@/features/marketing/utils/normalize";
+import { DEFAULT_EMAIL_DESIGN, normalizeEmailDesign, type EmailDesign } from "@/features/marketing/utils/email-design";
 import { literalRegex, MARKETING_PAGE_SIZE, pageMeta, requireMarketing, scopeOf, skipOf, toObjectId } from "@/server/marketing/common";
 import { PERMISSIONS } from "@/server/security/permissions";
 import type { Paged } from "@/features/inventory/types";
@@ -15,6 +16,7 @@ export type TemplateDto = {
   id: string;
   name: string;
   channel: MarketingChannel;
+  design: EmailDesign;
   subject: string;
   body: string;
   isActive: boolean;
@@ -28,6 +30,7 @@ function toTemplateDto(doc: TemplateDoc): TemplateDto {
     id: doc._id.toHexString(),
     name: doc.name,
     channel: doc.channel,
+    design: normalizeEmailDesign(doc.design),
     subject: doc.subject,
     body: doc.body,
     isActive: doc.isActive,
@@ -43,9 +46,10 @@ function isDuplicateKey(error: unknown): boolean {
   return (error as { code?: number }).code === 11000;
 }
 
-/** SMS templates never carry a subject, whatever the client sent. */
+/** SMS templates never carry a subject or a design, whatever the client sent. */
 function contentFor(input: TemplateInput) {
   return {
+    design: input.channel === "email" ? input.design : DEFAULT_EMAIL_DESIGN,
     subject: input.channel === "email" ? input.subject.trim() : "",
     body: input.body.trim(),
   };
@@ -81,11 +85,18 @@ export async function templateOptions(ctx: WorkspaceContext, channel: MarketingC
   requireMarketing(ctx, PERMISSIONS.MARKETING_READ);
   const docs = await ctx.db
     .collection<TemplateDoc>(MARKETING_COLLECTIONS.templates)
-    .find({ ...scopeOf(ctx), channel, isActive: true }, { projection: { name: 1, subject: 1, body: 1, version: 1 } })
+    .find({ ...scopeOf(ctx), channel, isActive: true }, { projection: { name: 1, design: 1, subject: 1, body: 1, version: 1 } })
     .sort({ normalizedName: 1 })
     .limit(200)
     .toArray();
-  return docs.map((doc) => ({ id: doc._id.toHexString(), name: doc.name, subject: doc.subject, body: doc.body, version: doc.version }));
+  return docs.map((doc) => ({
+    id: doc._id.toHexString(),
+    name: doc.name,
+    design: normalizeEmailDesign(doc.design),
+    subject: doc.subject,
+    body: doc.body,
+    version: doc.version,
+  }));
 }
 
 export async function createTemplate(ctx: WorkspaceContext, input: TemplateInput): Promise<TemplateDto> {
@@ -155,6 +166,7 @@ export async function duplicateTemplate(ctx: WorkspaceContext, idRaw: string): P
   return createTemplate(ctx, {
     name,
     channel: source.channel,
+    design: source.design,
     subject: source.subject,
     body: source.body,
     isActive: false,

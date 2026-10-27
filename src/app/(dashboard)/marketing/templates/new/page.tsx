@@ -14,7 +14,7 @@ export default async function NewTemplatePage() {
   }
   return (
     <div className="space-y-6">
-      <PageHeader title="New template" description="Plain text with allowed variables. Preview updates as you type." />
+      <PageHeader title="New template" description="Write plain text, pick a design, and preview the email as you type." />
       <TemplateForm canManage />
     </div>
   );

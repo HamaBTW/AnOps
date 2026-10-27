@@ -1,5 +1,6 @@
 import "server-only";
-import { escapeHtml, plainTextToHtml, renderTemplate, SMS_OPT_OUT_FOOTER, smsSegmentCount, SMS_BODY_MAX, type TemplateVariable } from "@/features/marketing/utils/template";
+import { renderTemplate, SMS_OPT_OUT_FOOTER, smsSegmentCount, SMS_BODY_MAX, type TemplateVariable } from "@/features/marketing/utils/template";
+import { normalizeEmailDesign, renderEmailHtml, type EmailDesign } from "@/features/marketing/utils/email-design";
 import type { MarketingChannel } from "@/features/marketing/types/constants";
 
 export type RenderedMessage = {
@@ -12,13 +13,14 @@ export type RenderedMessage = {
 };
 
 /**
- * Renders the campaign content for one recipient. Templates are plain text: every value is escaped for
- * the HTML part, and the text part is used verbatim. An unsubscribe line is always present, so no email
- * can be sent without an opt-out route, and every SMS carries the opt-out wording.
+ * Renders the campaign content for one recipient. The body is plain text: every value is escaped for
+ * the HTML part, and the text part is used verbatim. A curated design wraps that text in
+ * table-based, inline-styled HTML. An unsubscribe route is always present, so no email can be sent
+ * without an opt-out route, and every SMS carries the opt-out wording.
  */
 export function renderMessage(
   channel: MarketingChannel,
-  content: { subject: string; body: string },
+  content: { subject: string; body: string; design?: EmailDesign },
   values: Record<TemplateVariable, string>
 ): RenderedMessage {
   const subject = renderTemplate(content.subject, values);
@@ -32,10 +34,14 @@ export function renderMessage(
 
   const hasLinkInBody = content.body.includes("{{unsubscribe_url}}");
   const footerText = hasLinkInBody ? "" : `\n\nUnsubscribe: ${values.unsubscribe_url}`;
-  const footerHtml = hasLinkInBody
-    ? ""
-    : `<p style="margin-top:24px;font-size:12px;color:#666">Unsubscribe: <a href="${escapeHtml(values.unsubscribe_url)}">${escapeHtml(values.unsubscribe_url)}</a></p>`;
+  const html = renderEmailHtml({
+    design: normalizeEmailDesign(content.design),
+    subject,
+    body,
+    companyName: values.company_name,
+    unsubscribeUrl: values.unsubscribe_url,
+    unsubscribeInBody: hasLinkInBody,
+  });
   const text = `${body}${footerText}`;
-  const html = `<div>${plainTextToHtml(body)}</div>${footerHtml}`;
   return { channel, subject, text, html, segments: 1 };
 }

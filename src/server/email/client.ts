@@ -13,6 +13,25 @@ export type SendMailResult =
   | { delivered: true }
   | { delivered: false; reason: "not_configured" | "error"; error?: string };
 
+/**
+ * Low-level SMTP input. This is deliberately transport-only: templates and product
+ * rules (authentication vs marketing) live in their own modules.
+ */
+export type SmtpMessageInput = {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  /** Optional deterministic Message-ID, used by marketing to make retries recognisable. */
+  messageId?: string;
+};
+
+export type SmtpMessageResult = {
+  messageId: string;
+  response: string;
+  accepted: string[];
+};
+
 let transporter: Transporter | null = null;
 
 function getTransporter(): Transporter {
@@ -26,9 +45,58 @@ function getTransporter(): Transporter {
       env.EMAIL_SERVER_USER && env.EMAIL_SERVER_PASSWORD
         ? { user: env.EMAIL_SERVER_USER, pass: env.EMAIL_SERVER_PASSWORD }
         : undefined,
+    // Bound every phase so a stalled SMTP server cannot hold a request indefinitely.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
 
   return transporter;
+}
+
+/** The shared transport, or null when EMAIL_SERVER_HOST / EMAIL_FROM are missing. */
+export function getMailTransporter(): Transporter | null {
+  return isEmailConfigured() ? getTransporter() : null;
+}
+
+/**
+ * Sends one already-rendered message through the shared SMTP transport.
+ * Authentication and marketing both use this function; neither owns it.
+ */
+export async function sendSmtpMessage(input: SmtpMessageInput): Promise<SmtpMessageResult> {
+  const transport = getMailTransporter();
+  if (!transport) throw new Error("SMTP is not configured");
+
+  const info = await transport.sendMail({
+    from: env.EMAIL_FROM,
+    to: input.to,
+    subject: input.subject,
+    text: input.text,
+    html: input.html,
+    messageId: input.messageId,
+  });
+
+  const accepted = (info.accepted ?? []).map((value: unknown) => String(value));
+  const rejectedCount = (info.rejected ?? []).length;
+  if (rejectedCount > 0 && accepted.length === 0) {
+    throw Object.assign(new Error("SMTP rejected the recipient"), { code: "EENVELOPE" });
+  }
+  if (accepted.length === 0) {
+    throw new Error("SMTP did not accept the message");
+  }
+
+  return {
+    messageId: info.messageId || input.messageId || "",
+    response: info.response ?? "",
+    accepted,
+  };
+}
+
+/** Opens the SMTP connection and authenticates without sending a message. */
+export async function verifySmtpTransport(): Promise<void> {
+  const transport = getMailTransporter();
+  if (!transport) throw new Error("SMTP is not configured");
+  await transport.verify();
 }
 
 function describeTransport(): string {
@@ -54,8 +122,7 @@ export async function sendMail(input: MailInput): Promise<SendMailResult> {
   }
 
   try {
-    const info = await getTransporter().sendMail({
-      from: env.EMAIL_FROM,
+    const info = await sendSmtpMessage({
       to: input.to,
       subject: input.subject,
       text: input.text,
@@ -63,7 +130,7 @@ export async function sendMail(input: MailInput): Promise<SendMailResult> {
     });
 
     console.info(
-      `[email] SENT "${input.subject}" to ${input.to} (messageId=${info.messageId ?? "n/a"} response=${info.response ?? "n/a"})`
+      `[email] SENT "${input.subject}" to ${input.to} (messageId=${info.messageId || "n/a"} response=${info.response || "n/a"})`
     );
     return { delivered: true };
   } catch (error) {

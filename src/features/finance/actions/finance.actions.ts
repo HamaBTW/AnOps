@@ -7,58 +7,85 @@ import { customerCreateSchema, customerUpdateSchema, invoiceCreateDraftSchema, i
 
 export type ActionResult<T = unknown> = { success?: boolean; error?: string; data?: T };
 
-export async function createCustomerAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+export async function createCustomerAction(input: FormData | Record<string, any>): Promise<ActionResult<{ id: string }>> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
 
-    const raw = {
-      name: formData.get("name"),
-      email: formData.get("email") || "",
-      phone: formData.get("phone") || "",
-      taxId: formData.get("taxId") || "",
-      address: formData.get("address") || "",
-      notes: formData.get("notes") || "",
-      status: formData.get("status") || "active",
-    };
+    const raw = input instanceof FormData ? {
+      name: input.get("name"),
+      email: input.get("email") || "",
+      phone: input.get("phone") || "",
+      taxId: input.get("taxId") || "",
+      address: input.get("address") || "",
+      notes: input.get("notes") || "",
+      status: input.get("status") || "active",
+    } : input;
 
     const parsed = customerCreateSchema.safeParse(raw);
     if (!parsed.success) {
+      console.warn("[createCustomerAction] Validation failed:", parsed.error.issues);
       const msg = parsed.error.issues[0]?.message || "Invalid input";
       return { error: msg };
     }
 
     const service = await getFinanceService();
     const id = await service.createCustomer(parsed.data, auth.userId);
+    console.log("[createCustomerAction] Successfully created customer:", id);
     revalidatePath("/finance/customers");
+    revalidatePath("/finance/invoices");
     return { success: true, data: { id } };
   } catch (e) {
+    console.error("[createCustomerAction] Error:", e);
     const msg = e instanceof Error ? e.message : "Failed to create customer";
     return { error: msg };
   }
 }
 
-export async function updateCustomerAction(id: string, formData: FormData): Promise<ActionResult> {
+export async function updateCustomerAction(id: string, input: FormData | Record<string, any>): Promise<ActionResult<{ id: string }>> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
-    const _raw = {
-      name: formData.get("name") || undefined,
-      email: formData.get("email") || "",
-      phone: formData.get("phone") || "",
-      taxId: formData.get("taxId") || "",
-      address: formData.get("address") || "",
-      notes: formData.get("notes") || "",
-      status: formData.get("status") || undefined,
-    };
-    const parsed = customerUpdateSchema.safeParse(_raw);
+
+    const raw = input instanceof FormData ? {
+      name: input.get("name") || undefined,
+      email: input.get("email") || "",
+      phone: input.get("phone") || "",
+      taxId: input.get("taxId") || "",
+      address: input.get("address") || "",
+      notes: input.get("notes") || "",
+      status: input.get("status") || undefined,
+    } : input;
+
+    const parsed = customerUpdateSchema.safeParse(raw);
     if (!parsed.success) {
       const msg = parsed.error.issues[0]?.message || "Invalid input";
       return { error: msg };
     }
-    return { error: "Not implemented yet" };
+
+    const service = await getFinanceService();
+    await service.updateCustomer(id, parsed.data, auth.userId);
+    revalidatePath("/finance/customers");
+    revalidatePath("/finance/invoices");
+    return { success: true, data: { id } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to update customer";
+    return { error: msg };
+  }
+}
+
+export async function deleteCustomerAction(id: string): Promise<ActionResult<{ deactivated?: boolean; message?: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+
+    const service = await getFinanceService();
+    const result = await service.deleteCustomer(id, auth.userId);
+    revalidatePath("/finance/customers");
+    revalidatePath("/finance/invoices");
+    return { success: true, data: result };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to delete customer";
     return { error: msg };
   }
 }

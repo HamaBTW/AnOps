@@ -47,6 +47,10 @@ export class FinanceService {
     this.permissions = permissionsForRole(workspaceRole);
   }
 
+  hasPermission(permission: import("@/server/security/permissions").Permission): boolean {
+    return this.permissions.has(permission);
+  }
+
   private ensurePermission(permission: import("@/server/security/permissions").Permission) {
     assertPermission(this.permissions, permission);
   }
@@ -116,6 +120,31 @@ export class FinanceService {
     }));
   }
 
+  async getCustomer(customerId: string) {
+    this.ensurePermission("finance.read");
+    if (!ObjectId.isValid(customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer ID");
+    const db = await getDb();
+    const d = await db.collection("finance_customers").findOne({
+      _id: new ObjectId(customerId),
+      companyId: this.companyId,
+    });
+    if (!d) throw new AppError("NOT_FOUND", "Customer not found");
+
+    return {
+      id: d._id.toString(),
+      companyId: d.companyId.toString(),
+      name: d.name,
+      email: d.email,
+      phone: d.phone,
+      taxId: d.taxId,
+      address: d.address,
+      notes: d.notes,
+      status: d.status,
+      createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
+      updatedAt: d.updatedAt?.toISOString?.() || new Date().toISOString(),
+    };
+  }
+
   async createCustomer(input: { name: string; email?: string; phone?: string; taxId?: string; address?: string; notes?: string; status?: "active" | "inactive" }, userId: string) {
     this.ensurePermission("finance.customer.manage");
     const db = await getDb();
@@ -140,6 +169,79 @@ export class FinanceService {
     return result.insertedId.toString();
   }
 
+  async updateCustomer(
+    customerId: string,
+    input: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      taxId?: string;
+      address?: string;
+      notes?: string;
+      status?: "active" | "inactive";
+    },
+    userId: string
+  ) {
+    this.ensurePermission("finance.customer.manage");
+    if (!ObjectId.isValid(customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer ID");
+    const db = await getDb();
+    const now = new Date();
+
+    const updateFields: Record<string, any> = {
+      updatedAt: now,
+      updatedBy: userId,
+    };
+    if (input.name !== undefined) updateFields.name = input.name.trim();
+    if (input.email !== undefined) updateFields.email = input.email?.trim() || undefined;
+    if (input.phone !== undefined) updateFields.phone = input.phone?.trim() || undefined;
+    if (input.taxId !== undefined) updateFields.taxId = input.taxId?.trim() || undefined;
+    if (input.address !== undefined) updateFields.address = input.address?.trim() || undefined;
+    if (input.notes !== undefined) updateFields.notes = input.notes?.trim() || undefined;
+    if (input.status !== undefined) updateFields.status = input.status;
+
+    const res = await db.collection("finance_customers").updateOne(
+      { _id: new ObjectId(customerId), companyId: this.companyId },
+      { $set: updateFields }
+    );
+
+    if (res.matchedCount === 0) throw new AppError("NOT_FOUND", "Customer not found");
+    return { success: true };
+  }
+
+  async deleteCustomer(customerId: string, userId: string) {
+    this.ensurePermission("finance.customer.manage");
+    if (!ObjectId.isValid(customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer ID");
+    const db = await getDb();
+
+    // Check if customer has any invoices
+    const invoiceCount = await db.collection("finance_invoices").countDocuments({
+      companyId: this.companyId,
+      customerId: new ObjectId(customerId),
+    });
+
+    if (invoiceCount > 0) {
+      // Customer has historical invoices: soft-deactivate to protect financial integrity
+      const now = new Date();
+      await db.collection("finance_customers").updateOne(
+        { _id: new ObjectId(customerId), companyId: this.companyId },
+        { $set: { status: "inactive", updatedAt: now, updatedBy: userId } }
+      );
+      return {
+        success: true,
+        deactivated: true,
+        message: `Customer is linked to ${invoiceCount} invoice(s) and was deactivated to preserve financial records.`,
+      };
+    }
+
+    const res = await db.collection("finance_customers").deleteOne({
+      _id: new ObjectId(customerId),
+      companyId: this.companyId,
+    });
+
+    if (res.deletedCount === 0) throw new AppError("NOT_FOUND", "Customer not found");
+    return { success: true, deactivated: false };
+  }
+
   async listInvoices() {
     this.ensurePermission("finance.read");
     const db = await getDb();
@@ -150,10 +252,31 @@ export class FinanceService {
       .limit(100)
       .toArray();
 
+    // Collect customer IDs for lookup
+    const customerIds = docs
+      .map((d: any) => d.customerId)
+      .filter((id: any) => id && ObjectId.isValid(id));
+
+    const customerMap = new Map<string, { id: string; name: string; email?: string }>();
+    if (customerIds.length > 0) {
+      const customers = await db
+        .collection("finance_customers")
+        .find({ _id: { $in: customerIds }, companyId: this.companyId })
+        .toArray();
+      for (const c of customers) {
+        customerMap.set(c._id.toString(), {
+          id: c._id.toString(),
+          name: c.name,
+          email: c.email,
+        });
+      }
+    }
+
     return docs.map((d: any) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
       customerId: d.customerId?.toString(),
+      customer: d.customerId ? customerMap.get(d.customerId.toString()) : undefined,
       invoiceNumber: d.invoiceNumber,
       status: d.status,
       currency: d.currency,
@@ -168,6 +291,25 @@ export class FinanceService {
     }));
   }
 
+  async listInvoiceableProducts() {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const docs = await db
+      .collection("inventory_products")
+      .find({ companyId: this.companyId, isActive: true })
+      .sort({ name: 1 })
+      .limit(200)
+      .toArray();
+
+    return docs.map((d: any) => ({
+      id: d._id.toString(),
+      name: d.name,
+      sku: d.sku,
+      unitPrice: d.salePriceMilli ? d.salePriceMilli / 1000 : 0,
+      description: d.description || d.name,
+    }));
+  }
+
   async createInvoiceDraft(input: {
     customerId: string;
     currency?: string;
@@ -175,7 +317,7 @@ export class FinanceService {
     dueDate?: string;
     notes?: string;
     terms?: string;
-    lines: Array<{ description: string; quantity: number; unitPrice: number; taxRate?: number }>;
+    lines: Array<{ productId?: string; description: string; quantity: number; unitPrice: number; taxRate?: number }>;
   }, userId: string) {
     this.ensurePermission("finance.invoice.manage");
     if (!ObjectId.isValid(input.customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer");
@@ -203,8 +345,9 @@ export class FinanceService {
       total: totals.total,
       amountPaid: 0,
       balance: totals.total,
-      lines: input.lines.map((l, idx) => ({
+      lines: input.lines.map((l) => ({
         _id: new ObjectId(),
+        productId: l.productId && ObjectId.isValid(l.productId) ? new ObjectId(l.productId) : undefined,
         description: l.description.trim(),
         quantity: l.quantity,
         unitPrice: l.unitPrice,

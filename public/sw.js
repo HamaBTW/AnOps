@@ -1,4 +1,8 @@
-const CACHE_NAME = "anops-cache-v6";
+const PAGES_CACHE = "anops-pages-v6";     // Full HTML navigation responses only
+const RSC_CACHE = "anops-rsc-v6";         // RSC flight payloads (for client-side router)
+const ASSETS_CACHE = "anops-assets-v6";  // JS chunks, CSS, fonts, images
+
+const ALL_CACHES = [PAGES_CACHE, RSC_CACHE, ASSETS_CACHE];
 const OFFLINE_URL = "/offline";
 
 const STATIC_PRECACHE = [
@@ -8,86 +12,93 @@ const STATIC_PRECACHE = [
   "/brand-kit/02-app-icons/anops-web-icon-artwork-192x192.png",
 ];
 
+// ──────────────────────────────────────────────
+// Install: precache critical static assets
+// ──────────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
-      .open(CACHE_NAME)
+      .open(PAGES_CACHE)
       .then((cache) => cache.addAll(STATIC_PRECACHE))
       .then(() => self.skipWaiting())
   );
 });
 
+// ──────────────────────────────────────────────
+// Activate: clean up old caches
+// ──────────────────────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+        Promise.all(
+          keys
+            .filter((k) => !ALL_CACHES.includes(k))
+            .map((k) => caches.delete(k))
+        )
       )
       .then(() => self.clients.claim())
   );
 });
 
+// ──────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────
+function isRscRequest(request) {
+  return (
+    request.headers.get("RSC") === "1" ||
+    request.headers.has("Next-Router-State-Tree") ||
+    request.headers.has("Next-Url") ||
+    new URL(request.url).searchParams.has("_rsc")
+  );
+}
+
+// ──────────────────────────────────────────────
+// Fetch handler
+// ──────────────────────────────────────────────
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
 
-  // Skip auth, AI endpoints, and workers
+  // Skip completely: auth, CDN speculation rules, third-party
   if (
     url.pathname.startsWith("/api/auth") ||
     url.pathname.startsWith("/api/ai") ||
     url.pathname.startsWith("/api/v1/marketing/worker") ||
-    url.hostname.includes("locize.com") ||
-    url.pathname.includes("cdn-cgi")
+    url.pathname.includes("cdn-cgi") ||
+    !url.hostname.includes(self.location.hostname.split(".").slice(-2).join("."))
   ) {
     return;
   }
 
-  // 1. Next.js Static Chunks, JS, and CSS — MUST be Cache-First with background revalidate!
-  // If offline, serving the cached chunk avoids Turbopack ChunkLoadError
+  // ── 1. JS Chunks and CSS: Cache-First (prevents ChunkLoadError offline) ──
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.endsWith(".js") ||
     url.pathname.endsWith(".css")
   ) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
+      caches.open(ASSETS_CACHE).then(async (cache) => {
         const cached = await cache.match(request);
         if (cached) {
-          // If online, update cache in background
+          // Background update if online
           if (navigator.onLine) {
             fetch(request)
-              .then((fresh) => {
-                if (fresh && fresh.status === 200) {
-                  cache.put(request, fresh.clone());
-                }
-              })
+              .then((res) => { if (res && res.status === 200) cache.put(request, res.clone()); })
               .catch(() => {});
           }
           return cached;
         }
-
-        // Not cached yet: try network
         try {
-          const fresh = await fetch(request);
-          if (fresh && fresh.status === 200) {
-            cache.put(request, fresh.clone());
-          }
-          return fresh;
-        } catch (err) {
-          // If offline and chunk not found, search by filename
-          const filename = url.pathname.split("/").pop();
-          if (filename) {
-            const keys = await cache.keys();
-            const matchingKey = keys.find((k) => k.url.endsWith(filename));
-            if (matchingKey) {
-              const res = await cache.match(matchingKey);
-              if (res) return res;
-            }
-          }
-          return new Response("// Chunk offline unavailable", {
+          const res = await fetch(request);
+          if (res && res.status === 200) cache.put(request, res.clone());
+          return res;
+        } catch {
+          // Serve empty stub to prevent ChunkLoadError from crashing the app
+          return new Response("/* offline */", {
             status: 200,
             headers: { "Content-Type": "application/javascript" },
           });
@@ -97,88 +108,78 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2. Navigation and RSC flight requests
-  const isNavigation = request.mode === "navigate";
-  const isRscHeader =
-    request.headers.get("RSC") === "1" ||
-    request.headers.has("Next-Router-State-Tree") ||
-    request.headers.has("Next-Url");
-  const isRscQuery = url.searchParams.has("_rsc");
-
-  if (isNavigation || isRscHeader || isRscQuery) {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open(CACHE_NAME);
-
-        // If online, try network first
-        if (navigator.onLine) {
-          try {
-            const response = await fetch(request);
-            if (response && response.status === 200) {
-              cache.put(request, response.clone());
-              if (url.origin === self.location.origin) {
-                cache.put(url.pathname, response.clone());
-              }
-            }
-            return response;
-          } catch (e) {
-            // network failed, fallback to cache
-          }
-        }
-
-        // Offline or network error: Match from cache
-        const exactMatch = await cache.match(request);
-        if (exactMatch) return exactMatch;
-
-        const pathnameMatch = await cache.match(url.pathname);
-        if (pathnameMatch) return pathnameMatch;
-
-        const cleanPath = url.pathname.replace(/\/$/, "");
-        const cleanMatch = await cache.match(cleanPath);
-        if (cleanMatch) return cleanMatch;
-
-        // Check any cached key with the same pathname
-        const keys = await cache.keys();
-        const matchedKey = keys.find((req) => new URL(req.url).pathname === url.pathname);
-        if (matchedKey) {
-          const res = await cache.match(matchedKey);
-          if (res) return res;
-        }
-
-        // Fallback to /offline page
-        const offlinePage = await cache.match(OFFLINE_URL);
-        return (
-          offlinePage ||
-          new Response("Offline page unavailable", {
-            status: 503,
-            headers: { "Content-Type": "text/plain" },
-          })
-        );
-      })()
-    );
-    return;
-  }
-
-  // 3. Media, fonts, images (Cache-first)
+  // ── 2. Media / Fonts: Cache-First ──
   if (
     request.destination === "image" ||
     request.destination === "font" ||
     url.pathname.match(/\.(png|jpg|jpeg|svg|webp|woff2|woff|ttf|ico)$/)
   ) {
     event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
+      caches.open(ASSETS_CACHE).then(async (cache) => {
         const cached = await cache.match(request);
         if (cached) return cached;
         try {
-          const response = await fetch(request);
-          if (response && response.status === 200) {
-            cache.put(request, response.clone());
-          }
-          return response;
+          const res = await fetch(request);
+          if (res && res.status === 200) cache.put(request, res.clone());
+          return res;
         } catch {
           return new Response("", { status: 404 });
         }
       })
+    );
+    return;
+  }
+
+  // ── 3. RSC Flight payloads (client-side router transitions): stored in RSC_CACHE ──
+  if (isRscRequest(request)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(RSC_CACHE);
+        if (navigator.onLine) {
+          try {
+            const res = await fetch(request);
+            if (res && res.status === 200) cache.put(request, res.clone());
+            return res;
+          } catch (e) {}
+        }
+        // Offline: return cached RSC payload
+        const exact = await cache.match(request);
+        if (exact) return exact;
+        // Search by pathname across rsc payloads
+        const keys = await cache.keys();
+        const match = keys.find((k) => new URL(k.url).pathname === url.pathname);
+        if (match) {
+          const res = await cache.match(match);
+          if (res) return res;
+        }
+        // No RSC payload cached — respond with empty flight so the router falls back to HTML
+        return new Response("", { status: 204 });
+      })()
+    );
+    return;
+  }
+
+  // ── 4. Full HTML Navigation (browser page load / hard navigate): stored in PAGES_CACHE ──
+  if (request.mode === "navigate") {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(PAGES_CACHE);
+        if (navigator.onLine) {
+          try {
+            const res = await fetch(request);
+            if (res && res.status === 200) cache.put(request, res.clone());
+            return res;
+          } catch (e) {}
+        }
+        // Offline: serve the cached full HTML for this pathname
+        const exact = await cache.match(request);
+        if (exact) return exact;
+        const pathnameMatch = await cache.match(url.pathname);
+        if (pathnameMatch) return pathnameMatch;
+        // No HTML cached — show offline page
+        const offlinePage = await cache.match(OFFLINE_URL);
+        return offlinePage || new Response("Offline", { status: 503 });
+      })()
     );
     return;
   }

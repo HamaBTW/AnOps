@@ -134,6 +134,7 @@ export async function postInvoiceAction(invoiceId: string): Promise<ActionResult
     const service = await getFinanceService();
     await service.postInvoice(invoiceId, auth.userId);
     revalidatePath("/finance/invoices");
+    revalidatePath(`/finance/invoices/${invoiceId}`);
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
@@ -142,19 +143,37 @@ export async function postInvoiceAction(invoiceId: string): Promise<ActionResult
   }
 }
 
-export async function voidInvoiceAction(formData: FormData): Promise<ActionResult> {
+export async function voidInvoiceAction(input: FormData | { invoiceId: string; reason: string }): Promise<ActionResult> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
-    const parsed = invoiceVoidSchema.safeParse({ invoiceId: formData.get("invoiceId"), reason: formData.get("reason") });
+    const raw = input instanceof FormData
+      ? { invoiceId: input.get("invoiceId"), reason: input.get("reason") }
+      : input;
+    const parsed = invoiceVoidSchema.safeParse(raw);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const service = await getFinanceService();
     await service.voidInvoice(parsed.data.invoiceId, parsed.data.reason, auth.userId);
     revalidatePath("/finance/invoices");
+    revalidatePath(`/finance/invoices/${parsed.data.invoiceId}`);
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to void invoice";
+    return { error: msg };
+  }
+}
+
+export async function exportInvoicesCsvAction(): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    const csv = await service.exportInvoicesCsv();
+    const filename = `invoices_${new Date().toISOString().slice(0, 10)}.csv`;
+    return { success: true, data: { csv, filename } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to export invoices";
     return { error: msg };
   }
 }
@@ -183,14 +202,23 @@ export async function recordPaymentAction(formData: FormData): Promise<ActionRes
   }
 }
 
-export async function allocatePaymentAction(formData: FormData): Promise<ActionResult> {
+export async function allocatePaymentAction(input: FormData | { paymentId: string; allocations: Array<{ invoiceId: string; amount: number }> }): Promise<ActionResult> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
-    const allocRaw = formData.get("allocations");
+    let paymentId: string;
     let allocations: any[] = [];
-    if (typeof allocRaw === "string") { try { allocations = JSON.parse(allocRaw); } catch { allocations = []; } }
-    const parsed = paymentAllocateSchema.safeParse({ paymentId: formData.get("paymentId"), allocations });
+    if (input instanceof FormData) {
+      paymentId = String(input.get("paymentId") || "");
+      const allocRaw = input.get("allocations");
+      if (typeof allocRaw === "string") {
+        try { allocations = JSON.parse(allocRaw); } catch { allocations = []; }
+      }
+    } else {
+      paymentId = input.paymentId;
+      allocations = input.allocations;
+    }
+    const parsed = paymentAllocateSchema.safeParse({ paymentId, allocations });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const service = await getFinanceService();
     await service.allocatePayment(parsed.data.paymentId, parsed.data.allocations, auth.userId);
@@ -204,26 +232,41 @@ export async function allocatePaymentAction(formData: FormData): Promise<ActionR
   }
 }
 
-export async function createExpenseAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+export async function exportPaymentsCsvAction(): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
-    const raw = {
-      expenseDate: formData.get("expenseDate"),
-      categoryId: formData.get("categoryId") || "",
-      vendor: formData.get("vendor") || "",
-      description: formData.get("description"),
-      amount: formData.get("amount"),
-      tax: formData.get("tax") || 0,
-      currency: formData.get("currency") || "TND",
-      notes: formData.get("notes") || "",
-      receiptDocumentId: formData.get("receiptDocumentId") || "",
-    };
+    const service = await getFinanceService();
+    const csv = await service.exportPaymentsCsv();
+    const filename = `payments_${new Date().toISOString().slice(0, 10)}.csv`;
+    return { success: true, data: { csv, filename } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to export payments";
+    return { error: msg };
+  }
+}
+
+export async function createExpenseAction(input: FormData | Record<string, any>): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const raw = input instanceof FormData ? {
+      expenseDate: input.get("expenseDate"),
+      categoryId: input.get("categoryId") || "",
+      vendor: input.get("vendor") || "",
+      description: input.get("description"),
+      amount: input.get("amount"),
+      tax: input.get("tax") || 0,
+      currency: input.get("currency") || "TND",
+      notes: input.get("notes") || "",
+      receiptDocumentId: input.get("receiptDocumentId") || "",
+    } : input;
     const parsed = expenseCreateSchema.safeParse(raw);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const service = await getFinanceService();
     const id = await service.createExpense(parsed.data as any, auth.userId);
     revalidatePath("/finance/expenses");
+    revalidatePath("/finance");
     return { success: true, data: { id } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to create expense";
@@ -238,6 +281,7 @@ export async function submitExpenseAction(expenseId: string): Promise<ActionResu
     const service = await getFinanceService();
     await service.submitExpense(expenseId, auth.userId);
     revalidatePath("/finance/expenses");
+    revalidatePath("/finance");
     return { success: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to submit expense";
@@ -252,6 +296,7 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
     const service = await getFinanceService();
     await service.approveExpense(expenseId, auth.userId);
     revalidatePath("/finance/expenses");
+    revalidatePath("/finance");
     return { success: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to approve expense";
@@ -259,15 +304,19 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
   }
 }
 
-export async function rejectExpenseAction(formData: FormData): Promise<ActionResult> {
+export async function rejectExpenseAction(input: FormData | { expenseId: string; reason: string }): Promise<ActionResult> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
-    const parsed = expenseRejectSchema.safeParse({ expenseId: formData.get("expenseId"), reason: formData.get("reason") });
+    const raw = input instanceof FormData
+      ? { expenseId: input.get("expenseId"), reason: input.get("reason") }
+      : input;
+    const parsed = expenseRejectSchema.safeParse(raw);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const service = await getFinanceService();
     await service.rejectExpense(parsed.data.expenseId, parsed.data.reason, auth.userId);
     revalidatePath("/finance/expenses");
+    revalidatePath("/finance");
     return { success: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to reject expense";
@@ -286,6 +335,34 @@ export async function markExpensePaidAction(expenseId: string): Promise<ActionRe
     return { success: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to mark expense paid";
+    return { error: msg };
+  }
+}
+
+export async function createExpenseCategoryAction(name: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    const id = await service.createExpenseCategory(name);
+    revalidatePath("/finance/expenses");
+    return { success: true, data: { id } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to create category";
+    return { error: msg };
+  }
+}
+
+export async function exportExpensesCsvAction(): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    const csv = await service.exportExpensesCsv();
+    const filename = `expenses_${new Date().toISOString().slice(0, 10)}.csv`;
+    return { success: true, data: { csv, filename } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to export expenses";
     return { error: msg };
   }
 }

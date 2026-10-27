@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ButtonLink } from "@/shared/components/ui/button";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
 import { IconReceipt } from "@/shared/components/ui/brand-icons";
+import { InvoiceExportButton } from "@/features/finance/components/invoice-export-button";
 
 export const metadata: Metadata = {
   title: "Invoices | Finance | AnOps ERP",
@@ -17,6 +18,7 @@ function statusTone(status: string): BadgeTone {
     case "partially_paid":
       return "warning";
     case "overdue":
+    case "voided":
       return "error";
     case "posted":
       return "info";
@@ -48,9 +50,12 @@ export default async function FinanceInvoicesPage() {
             Create, issue, and reconcile billing documents tied to customer accounts
           </p>
         </div>
-        <ButtonLink href="/finance/invoices/new" variant="primary">
-          + New Invoice
-        </ButtonLink>
+        <div className="flex items-center gap-2">
+          {invoices.length > 0 && <InvoiceExportButton />}
+          <ButtonLink href="/finance/invoices/new" variant="primary">
+            + New Invoice
+          </ButtonLink>
+        </div>
       </div>
 
       <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden shadow-sm">
@@ -66,12 +71,13 @@ export default async function FinanceInvoicesPage() {
                 <th className="py-3 px-4 text-right">Total</th>
                 <th className="py-3 px-4 text-right">Paid</th>
                 <th className="py-3 px-4 text-right">Balance</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border-subtle)]">
               {invoices.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-[var(--color-text-secondary)]">
+                  <td colSpan={9} className="py-8 text-center text-[var(--color-text-secondary)]">
                     <div className="space-y-3">
                       <IconReceipt size={32} className="mx-auto text-[var(--color-text-secondary)] opacity-50" />
                       <div className="font-medium text-[var(--color-text-primary)]">No invoices issued yet</div>
@@ -86,7 +92,12 @@ export default async function FinanceInvoicesPage() {
                 invoices.map((inv) => (
                   <tr key={inv.id} className="hover:bg-[var(--color-bg-subtle)]/40 transition-colors">
                     <td className="py-3 px-4 font-mono font-medium text-[var(--color-text-primary)]">
-                      {inv.invoiceNumber}
+                      <Link
+                        href={`/finance/invoices/${inv.id}`}
+                        className="text-[var(--color-action-primary)] hover:underline font-semibold"
+                      >
+                        {inv.invoiceNumber}
+                      </Link>
                     </td>
                     <td className="py-3 px-4 text-[var(--color-text-primary)]">
                       {inv.customer?.name ? (
@@ -117,6 +128,14 @@ export default async function FinanceInvoicesPage() {
                     </td>
                     <td className="py-3 px-4 text-right font-semibold text-[var(--color-text-primary)]">
                       {fmt(inv.balance, inv.currency)}
+                    </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <Link
+                        href={`/finance/invoices/${inv.id}`}
+                        className="inline-flex items-center gap-1 text-xs text-[var(--color-action-primary)] hover:underline font-medium px-2 py-1 rounded hover:bg-[var(--color-action-primary)]/10"
+                      >
+                        View & PDF →
+                      </Link>
                     </td>
                   </tr>
                 ))

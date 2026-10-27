@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { WifiOff, Wifi, RefreshCw } from "lucide-react";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -25,57 +26,68 @@ export function useOnlineStatus() {
 
 export function OfflineIndicator() {
   const isOnline = useOnlineStatus();
-  const [hasDismissed, setHasDismissed] = useState(false);
   const [previouslyOffline, setPreviouslyOffline] = useState(false);
   const [showRestored, setShowRestored] = useState(false);
 
   useEffect(() => {
     if (!isOnline) {
       setPreviouslyOffline(true);
-      setHasDismissed(false);
     } else if (previouslyOffline) {
       setShowRestored(true);
-      const timer = setTimeout(() => setShowRestored(false), 3500);
+      const timer = setTimeout(() => setShowRestored(false), 4000);
       return () => clearTimeout(timer);
     }
   }, [isOnline, previouslyOffline]);
 
   if (isOnline && !showRestored) return null;
-  if (!isOnline && hasDismissed) return null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-2.5 rounded-lg border shadow-lg text-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 ${
+    <aside
+      role="alert"
+      aria-live="assertive"
+      className={`sticky top-0 z-[100] w-full px-4 py-2.5 shadow-md flex items-center justify-between transition-all duration-300 ${
         !isOnline
-          ? "bg-[var(--color-bg-surface,#181a1b)] border-amber-500/40 text-amber-200"
-          : "bg-[var(--color-bg-surface,#181a1b)] border-emerald-500/40 text-emerald-300"
+          ? "bg-amber-600 text-white font-medium text-sm border-b border-amber-700"
+          : "bg-emerald-600 text-white font-medium text-sm border-b border-emerald-700"
       }`}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={`inline-block w-2.5 h-2.5 rounded-full ${
-            !isOnline ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
-          }`}
-        />
-        <span className="font-medium">
-          {!isOnline
-            ? "Offline Mode — Browsing cached pages (Read-only)"
-            : "Connection restored — Online"}
-        </span>
-      </div>
+      <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          {!isOnline ? (
+            <WifiOff className="w-4 h-4 shrink-0 animate-pulse text-amber-200" />
+          ) : (
+            <Wifi className="w-4 h-4 shrink-0 text-emerald-200" />
+          )}
+          <span className="text-xs sm:text-sm tracking-wide">
+            {!isOnline ? (
+              <>
+                <strong className="font-semibold uppercase tracking-wider text-[11px] bg-amber-800/60 px-2 py-0.5 rounded mr-2">
+                  Offline Mode
+                </strong>
+                You are currently offline. Working with locally cached data &amp; queueing actions.
+              </>
+            ) : (
+              <>
+                <strong className="font-semibold uppercase tracking-wider text-[11px] bg-emerald-800/60 px-2 py-0.5 rounded mr-2">
+                  Connected
+                </strong>
+                Internet connection restored. Synchronizing updates...
+              </>
+            )}
+          </span>
+        </div>
 
-      {!isOnline && (
-        <button
-          type="button"
-          onClick={() => setHasDismissed(true)}
-          className="text-xs text-[var(--color-text-secondary)] hover:text-white px-1.5 py-0.5 rounded ml-2"
-          aria-label="Dismiss offline banner"
-        >
-          ✕
-        </button>
-      )}
-    </div>
+        {!isOnline && (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-1.5 text-xs bg-amber-800/80 hover:bg-amber-900 text-amber-100 px-3 py-1 rounded transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span className="hidden sm:inline">Retry</span>
+          </button>
+        )}
+      </div>
+    </aside>
   );
 }

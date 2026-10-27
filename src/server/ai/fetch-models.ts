@@ -1,4 +1,5 @@
 import "server-only";
+import { groqApiKeyList } from "@/server/ai/config";
 
 /**
  * Fetches the current available free models from each configured AI provider.
@@ -24,8 +25,7 @@ export type ProviderModels = {
 // Response: { data: [{ id, owned_by, ... }] }
 
 async function fetchGroqModels(): Promise<ProviderModels> {
-  const keysRaw = process.env.GROQ_API_KEYS ?? "";
-  const keys = keysRaw.split(",").map((k) => k.trim()).filter(Boolean);
+  const keys = (groqApiKeyList() ?? "").split(",").map((k) => k.trim()).filter(Boolean);
 
   if (keys.length === 0) {
     return { id: "groq", label: "Groq", icon: "🔥", available: false, models: [], error: "No API key configured" };

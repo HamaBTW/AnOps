@@ -19,6 +19,7 @@ import { assertPermission, PERMISSIONS } from "@/server/security/permissions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { assertPurchaseOrderTransition, statusAfterReceipt } from "@/server/purchasing/order-state";
 import { idKey } from "@/server/inventory/mappers";
+import { assertExportWithinLimit, MAX_EXPORT_ROWS } from "@/server/exports/limits";
 import { AppError } from "@/shared/lib/errors";
 import { isCountableUnit } from "@/shared/domain/units";
 import { formatQuantity, isWholeQuantity, parseQuantity } from "@/shared/lib/fixed-point";
@@ -89,6 +90,25 @@ export async function listReceipts(
     items: docs.map((doc) => toSummary(doc, codes.get(idKey(doc.warehouseId)) ?? "")),
     ...pageInfo(query.page, RECEIPT_PAGE_SIZE, total),
   };
+}
+
+/**
+ * Every receipt matching the status filter, newest first, with its lines. Bounded by MAX_EXPORT_ROWS.
+ * Only posted receipts are physical stock; drafts and cancelled receipts are exported with their status.
+ */
+export async function listReceiptsForExport(
+  ctx: WorkspaceContext,
+  query: { status?: "draft" | "posted" | "cancelled" }
+): Promise<ReceiptDetailDto[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.PURCHASING_READ);
+  const filter: Filter<GoodsReceiptDoc> = { ...tenantFilter(scope(ctx)) };
+  if (query.status) filter.status = query.status;
+
+  const receipts = ctx.db.collection<GoodsReceiptDoc>(COLLECTIONS.goodsReceipts);
+  assertExportWithinLimit(await receipts.countDocuments(filter));
+  const docs = await receipts.find(filter).sort({ createdAt: -1, _id: -1 }).limit(MAX_EXPORT_ROWS).toArray();
+  const codes = await warehouseCodes(ctx, [...new Set(docs.map((d) => idKey(d.warehouseId)))].map((id) => new ObjectId(id)));
+  return docs.map((doc) => toDetail(doc, codes.get(idKey(doc.warehouseId)) ?? "", false, false));
 }
 
 export async function listReceiptsForOrder(ctx: WorkspaceContext, orderId: string): Promise<ReceiptSummaryDto[]> {

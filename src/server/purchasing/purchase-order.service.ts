@@ -18,6 +18,7 @@ import { assertPermission, PERMISSIONS } from "@/server/security/permissions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { assertPurchaseOrderTransition } from "@/server/purchasing/order-state";
 import { idKey } from "@/server/inventory/mappers";
+import { assertExportWithinLimit, MAX_EXPORT_ROWS } from "@/server/exports/limits";
 import { isCountableUnit } from "@/shared/domain/units";
 import { AppError } from "@/shared/lib/errors";
 import {
@@ -148,14 +149,20 @@ function expectedDateOrNull(value: string): Date | null {
   return value ? new Date(`${value}T00:00:00.000Z`) : null;
 }
 
+/** Shared by the purchase-order list and the purchase-order export. */
+function purchaseOrderListFilter(ctx: WorkspaceContext, query: Pick<PurchaseOrderListQuery, "status" | "q">): Filter<PurchaseOrderDoc> {
+  const filter: Filter<PurchaseOrderDoc> = { ...tenantFilter(scope(ctx)) };
+  if (query.status !== "all") filter.status = query.status as PurchaseOrderStatus;
+  if (query.q) filter.orderNumber = { $regex: `^${escapeRegex(query.q.toUpperCase())}` };
+  return filter;
+}
+
 export async function listPurchaseOrders(
   ctx: WorkspaceContext,
   query: PurchaseOrderListQuery
 ): Promise<Paged<PurchaseOrderSummaryDto>> {
   assertPermission(ctx.permissions, PERMISSIONS.PURCHASING_READ);
-  const filter: Filter<PurchaseOrderDoc> = { ...tenantFilter(scope(ctx)) };
-  if (query.status !== "all") filter.status = query.status as PurchaseOrderStatus;
-  if (query.q) filter.orderNumber = { $regex: `^${escapeRegex(query.q.toUpperCase())}` };
+  const filter = purchaseOrderListFilter(ctx, query);
 
   const orders = ctx.db.collection<PurchaseOrderDoc>(COLLECTIONS.purchaseOrders);
   const [total, docs] = await Promise.all([
@@ -176,7 +183,23 @@ export async function getPurchaseOrder(ctx: WorkspaceContext, orderId: string): 
     .collection<PurchaseOrderDoc>(COLLECTIONS.purchaseOrders)
     .findOne({ _id: new ObjectId(orderId), ...tenantFilter(scope(ctx)) });
   if (!doc) throw new AppError("NOT_FOUND", "Purchase order not found");
+  return toDetailDto(doc, ctx);
+}
 
+/** Every purchase order matching the filters, newest first, with all lines. Bounded by MAX_EXPORT_ROWS. */
+export async function listPurchaseOrdersForExport(
+  ctx: WorkspaceContext,
+  query: Pick<PurchaseOrderListQuery, "status" | "q">
+): Promise<PurchaseOrderDetailDto[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.PURCHASING_READ);
+  const filter = purchaseOrderListFilter(ctx, query);
+  const orders = ctx.db.collection<PurchaseOrderDoc>(COLLECTIONS.purchaseOrders);
+  assertExportWithinLimit(await orders.countDocuments(filter));
+  const docs = await orders.find(filter).sort({ createdAt: -1, _id: -1 }).limit(MAX_EXPORT_ROWS).toArray();
+  return docs.map((doc) => toDetailDto(doc, ctx));
+}
+
+function toDetailDto(doc: PurchaseOrderDoc, ctx: WorkspaceContext): PurchaseOrderDetailDto {
   const isOpenForReceipt = doc.status === "approved" || doc.status === "partially_received";
   return {
     ...toSummaryDto(doc),
@@ -198,7 +221,15 @@ export async function getPurchaseOrder(ctx: WorkspaceContext, orderId: string): 
   };
 }
 
-export async function createPurchaseOrder(ctx: WorkspaceContext, input: PurchaseOrderInput): Promise<PurchaseOrderDetailDto> {
+/**
+ * `origin` is set only by replenishment conversion. The order takes a reserved ID and records its
+ * proposal, so a retry or recovery can find the order and the database refuses a second one.
+ */
+export async function createPurchaseOrder(
+  ctx: WorkspaceContext,
+  input: PurchaseOrderInput,
+  origin?: { orderId: ObjectId; proposalId: ObjectId }
+): Promise<PurchaseOrderDetailDto> {
   assertPermission(ctx.permissions, PERMISSIONS.PURCHASING_ORDER_MANAGE);
   const supplier = await loadActiveSupplier(ctx, input.supplierId);
   const { lines, subtotalMilli, taxMilli, totalMilli } = await buildLines(ctx, input);
@@ -206,7 +237,7 @@ export async function createPurchaseOrder(ctx: WorkspaceContext, input: Purchase
   const orderNumber = await nextSequenceNumber(ctx.db, `po:${idKey(ctx.companyId)}`, "PO");
 
   const doc: PurchaseOrderDoc = {
-    _id: new ObjectId(),
+    _id: origin?.orderId ?? new ObjectId(),
     ...tenantFilter(scope(ctx)),
     supplierId: supplier._id,
     supplierName: supplier.name,
@@ -216,6 +247,8 @@ export async function createPurchaseOrder(ctx: WorkspaceContext, input: Purchase
     expectedDate: expectedDateOrNull(input.expectedDate),
     notes: input.notes,
     lines,
+    // Written only when an origin is given, so the partial unique index ignores ordinary orders.
+    ...(origin ? { sourceReplenishmentProposalId: origin.proposalId } : {}),
     subtotalMilli,
     taxMilli,
     totalMilli,

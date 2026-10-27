@@ -8,6 +8,8 @@ import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { RECEIPT_STATUS } from "@/features/purchasing/labels";
+import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
+import { exportUrl } from "@/shared/lib/download";
 import { formatDate } from "@/shared/lib/format";
 
 export const metadata: Metadata = { title: "Goods receipts | AnOps ERP" };
@@ -27,7 +29,11 @@ export default async function ReceiptsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Goods receipts" description="Drafts are reviewed and posted. Posting is the only step that increases stock." />
+      <PageHeader
+        title="Goods receipts"
+        description="Drafts are reviewed and posted. Posting is the only step that increases stock."
+        actions={<ExportExcelButton href={exportUrl("goods-receipts", { status: query.status === "all" ? undefined : query.status })} />}
+      />
       <form method="get" className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
           <label htmlFor="status" className="text-sm font-semibold">Status</label>

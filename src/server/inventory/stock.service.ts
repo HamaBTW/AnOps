@@ -9,6 +9,7 @@ import {
   type WarehouseDoc,
 } from "@/server/db/documents";
 import { tenantFilter, MAX_BOUNDED_LIST } from "@/server/db/scope";
+import { assertExportWithinLimit, MAX_EXPORT_ROWS } from "@/server/exports/limits";
 import { pageInfo, skipFor } from "@/server/db/pagination";
 import { withTransaction } from "@/server/db/transactions";
 import { recordAudit } from "@/server/audit/audit.service";
@@ -154,6 +155,63 @@ export async function listBalancesForProduct(ctx: WorkspaceContext, productId: s
     MAX_BOUNDED_LIST
   );
   return result.items;
+}
+
+/**
+ * Every balance matching the filters, sorted by product SKU and warehouse code. Reuses the list's
+ * loader with the export cap, so counts and joins match the stock page exactly.
+ */
+export async function listStockBalancesForExport(
+  ctx: WorkspaceContext,
+  query: { productId?: string; warehouseId?: string }
+): Promise<StockBalanceDto[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
+  const filter: Filter<StockBalanceDoc> = { ...tenantFilter(scope(ctx)) };
+  if (query.productId) filter.productId = new ObjectId(query.productId);
+  if (query.warehouseId) filter.warehouseId = new ObjectId(query.warehouseId);
+  const result = await loadBalances(ctx.db, ctx, filter, 1, MAX_EXPORT_ROWS);
+  assertExportWithinLimit(result.total);
+  return result.items.sort(
+    (a, b) => a.productSku.localeCompare(b.productSku) || a.warehouseCode.localeCompare(b.warehouseCode)
+  );
+}
+
+/**
+ * Movements in the half-open window [from, toExclusive), newest first. The window is required so
+ * an export never reads the whole append-only ledger; the caller decides the default window.
+ */
+export async function listStockMovementsForExport(
+  ctx: WorkspaceContext,
+  query: { productId?: string; warehouseId?: string; from: Date; toExclusive: Date }
+): Promise<Array<StockMovementDto & { productName: string; unitOfMeasure: string }>> {
+  assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
+  const filter: Filter<StockMovementDoc> = {
+    ...tenantFilter(scope(ctx)),
+    createdAt: { $gte: query.from, $lt: query.toExclusive },
+  };
+  if (query.productId) filter.productId = new ObjectId(query.productId);
+  if (query.warehouseId) filter.warehouseId = new ObjectId(query.warehouseId);
+
+  const movements = ctx.db.collection<StockMovementDoc>(COLLECTIONS.inventoryStockMovements);
+  assertExportWithinLimit(await movements.countDocuments(filter));
+  const docs = await movements.find(filter).sort({ createdAt: -1, _id: -1 }).limit(MAX_EXPORT_ROWS).toArray();
+  const [labels, products] = await Promise.all([
+    movementLabels(ctx.db, ctx, docs),
+    ctx.db
+      .collection<ProductDoc>(COLLECTIONS.inventoryProducts)
+      .find({ ...tenantFilter(scope(ctx)), _id: { $in: [...new Set(docs.map((doc) => doc.productId))] } }, { projection: { name: 1, unitOfMeasure: 1 } })
+      .toArray(),
+  ]);
+  const productById = new Map(products.map((product) => [idKey(product._id), product]));
+  return docs.map((doc) => {
+    const label = labels.get(idKey(doc.productId) + ":" + idKey(doc.warehouseId));
+    const product = productById.get(idKey(doc.productId));
+    return {
+      ...toMovementDto(doc, label?.sku ?? "", label?.warehouseCode ?? ""),
+      productName: product?.name ?? "",
+      unitOfMeasure: product?.unitOfMeasure ?? "",
+    };
+  });
 }
 
 export async function listStockMovements(

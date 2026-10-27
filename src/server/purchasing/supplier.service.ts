@@ -9,6 +9,7 @@ import { AppError } from "@/shared/lib/errors";
 import type { SupplierInput } from "@/features/purchasing/schemas/purchasing.schema";
 import type { Paged, SupplierDto } from "@/features/purchasing/types";
 import { idKey } from "@/server/inventory/mappers";
+import { assertExportWithinLimit, MAX_EXPORT_ROWS } from "@/server/exports/limits";
 
 export const SUPPLIER_PAGE_SIZE = 25;
 
@@ -28,13 +29,19 @@ export function toSupplierDto(doc: SupplierDoc): SupplierDto {
   };
 }
 
+/** Shared by the supplier list and the supplier export. */
+function supplierListFilter(ctx: WorkspaceContext, q: string): Filter<SupplierDoc> {
+  const filter: Filter<SupplierDoc> = { ...tenantFilter(scope(ctx)) };
+  if (q) filter.normalizedName = { $regex: `^${escapeRegex(q.toLowerCase())}` };
+  return filter;
+}
+
 export async function listSuppliers(
   ctx: WorkspaceContext,
   query: { q: string; page: number }
 ): Promise<Paged<SupplierDto>> {
   assertPermission(ctx.permissions, PERMISSIONS.PURCHASING_READ);
-  const filter: Filter<SupplierDoc> = { ...tenantFilter(scope(ctx)) };
-  if (query.q) filter.normalizedName = { $regex: `^${escapeRegex(query.q.toLowerCase())}` };
+  const filter = supplierListFilter(ctx, query.q);
 
   const suppliers = ctx.db.collection<SupplierDoc>(COLLECTIONS.purchaseSuppliers);
   const [total, docs] = await Promise.all([
@@ -42,6 +49,16 @@ export async function listSuppliers(
     suppliers.find(filter).sort({ normalizedName: 1, _id: 1 }).skip(skipFor(query.page, SUPPLIER_PAGE_SIZE)).limit(SUPPLIER_PAGE_SIZE).toArray(),
   ]);
   return { items: docs.map(toSupplierDto), ...pageInfo(query.page, SUPPLIER_PAGE_SIZE, total) };
+}
+
+/** Every supplier matching the filter, sorted like the list. Bounded by MAX_EXPORT_ROWS. */
+export async function listSuppliersForExport(ctx: WorkspaceContext, query: { q: string }): Promise<SupplierDto[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.PURCHASING_READ);
+  const filter = supplierListFilter(ctx, query.q);
+  const suppliers = ctx.db.collection<SupplierDoc>(COLLECTIONS.purchaseSuppliers);
+  assertExportWithinLimit(await suppliers.countDocuments(filter));
+  const docs = await suppliers.find(filter).sort({ normalizedName: 1, _id: 1 }).limit(MAX_EXPORT_ROWS).toArray();
+  return docs.map(toSupplierDto);
 }
 
 export async function getSupplier(ctx: WorkspaceContext, supplierId: string): Promise<SupplierDto> {

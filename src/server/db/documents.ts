@@ -28,6 +28,7 @@ export const COLLECTIONS = {
   goodsReceipts: "goods_receipts",
   manufacturingBoms: "manufacturing_boms",
   manufacturingWorkOrders: "manufacturing_work_orders",
+  purchaseReplenishmentProposals: "purchase_replenishment_proposals",
 } as const;
 
 /** Every tenant-owned document carries exactly this scope. There is no other tenancy level. */
@@ -179,6 +180,8 @@ export type PurchaseOrderDoc = TenantScope & {
   expectedDate: Date | null;
   notes: string;
   lines: PurchaseOrderLineSub[];
+  /** Set only on orders created from a replenishment proposal. Unique per company (see indexes). */
+  sourceReplenishmentProposalId?: ObjectId;
   subtotalMilli: number;
   taxMilli: number;
   totalMilli: number;
@@ -279,6 +282,58 @@ export type WorkOrderDoc = TenantScope & {
   cancelledAt: Date | null;
   createdBy: ObjectId;
   completedBy: ObjectId | null;
+  createdAt: Date;
+  updatedAt: Date;
+  version: number;
+};
+
+export type ReplenishmentLineSub = {
+  productId: ObjectId;
+  sku: string;
+  productName: string;
+  unitOfMeasure: UnitOfMeasure;
+  /** Facts at generation time (micro-units). */
+  onHandMicro: number;
+  reorderPointMicro: number;
+  consumedMicro: number;
+  /** Prediction derived from the facts above: average daily consumption over the lookback window. */
+  forecastDailyUsageMicro: number;
+  /** Recommendation: whole-unit shortfall to cover the horizon plus the reorder point. */
+  suggestedMicro: number;
+  /** Model-written explanation. Validated against the product list; null when unavailable. */
+  rationale: string | null;
+};
+
+/**
+ * Replenishment proposal. Proposals are advisory: they change no stock and create no order
+ * until an authorised user converts them. `proposed` -> `converting` -> `converted` is claimed
+ * with a conditional update, so a double click or retry cannot create two purchase orders.
+ */
+export type ReplenishmentProposalDoc = TenantScope & {
+  _id: ObjectId;
+  warehouseId: ObjectId;
+  warehouseCode: string;
+  status: "proposed" | "converting" | "converted";
+  method: "trailing_consumption_v1";
+  lookbackDays: number;
+  horizonDays: number;
+  /** True when more candidate products existed than the generation limit. */
+  truncated: boolean;
+  /** Count of lines with a positive suggestion. Stored so list queries can skip the lines array. */
+  lineCount: number;
+  rationaleStatus: "generated" | "unavailable" | "invalid_output";
+  rationaleProvider: string | null;
+  rationaleModel: string | null;
+  lines: ReplenishmentLineSub[];
+  generatedBy: ObjectId;
+  generatedAt: Date;
+  /** Order reserved for the in-flight conversion. Written with the claim, so recovery can find it. */
+  conversionOrderId?: ObjectId | null;
+  /** When the current claim was taken. Recovery only releases claims older than its threshold. */
+  claimedAt?: Date | null;
+  convertedOrderId: ObjectId | null;
+  convertedBy: ObjectId | null;
+  convertedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;

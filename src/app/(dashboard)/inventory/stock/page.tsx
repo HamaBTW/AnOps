@@ -8,6 +8,8 @@ import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { StockOperationForm, type StockOperation } from "@/features/inventory/components/stock-operation-form";
 import { STOCK_STATUS_LABELS, STOCK_STATUS_TONES, MOVEMENT_LABELS } from "@/features/inventory/labels";
+import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
+import { exportUrl } from "@/shared/lib/download";
 import { formatDateTime, formatDecimalString } from "@/shared/lib/format";
 import { z } from "zod";
 
@@ -37,7 +39,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       <PageHeader title="Stock" description="On-hand quantities by product and warehouse. Every change is recorded in the movement history." />
 
       <section aria-labelledby="balances-heading" className="space-y-3">
-        <h2 id="balances-heading" className="text-lg font-semibold">On hand</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="balances-heading" className="text-lg font-semibold">On hand</h2>
+          <ExportExcelButton href={exportUrl("stock-on-hand", {})} ariaLabel="Export stock on hand to Excel" />
+        </div>
         {balances.items.length === 0 ? (
           <EmptyState
             title="No stock recorded"
@@ -89,7 +94,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
       )}
 
       <section aria-labelledby="movements-heading" className="space-y-3">
-        <h2 id="movements-heading" className="text-lg font-semibold">Movement history</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="movements-heading" className="text-lg font-semibold">Movement history</h2>
+          <ExportExcelButton href={exportUrl("stock-movements", {})} ariaLabel="Export recent stock movements to Excel" />
+        </div>
         {movements.items.length === 0 ? (
           <p className="text-sm text-[var(--color-text-secondary)]">No movements yet.</p>
         ) : (

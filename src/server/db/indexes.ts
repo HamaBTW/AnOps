@@ -61,6 +61,17 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, orderNumber: 1 }, name: "po_number_unique", unique: true },
     { key: { companyId: 1, status: 1, createdAt: -1 }, name: "po_status_time" },
     { key: { companyId: 1, supplierId: 1, createdAt: -1 }, name: "po_supplier_time" },
+    // At most one purchase order per replenishment proposal. The database enforces it, so a late or
+    // duplicate conversion write cannot create a second order.
+    {
+      key: { companyId: 1, sourceReplenishmentProposalId: 1 },
+      name: "po_replenishment_source_unique",
+      unique: true,
+      partialFilterExpression: { sourceReplenishmentProposalId: { $exists: true } },
+    },
+  ],
+  [COLLECTIONS.purchaseReplenishmentProposals]: [
+    { key: { companyId: 1, status: 1, generatedAt: -1 }, name: "replenishment_status_time" },
   ],
   [COLLECTIONS.goodsReceipts]: [
     { key: { companyId: 1, receiptNumber: 1 }, name: "gr_number_unique", unique: true },

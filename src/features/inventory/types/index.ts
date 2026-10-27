@@ -81,6 +81,8 @@ export type StockMovementDto = {
   quantity: string;
   deltaMicro: number;
   sourceType: string;
+  /** Document that caused the movement (receipt, work order, transfer ID). Null for manual entries. */
+  sourceId: string | null;
   reason: string;
   createdAt: string;
 };

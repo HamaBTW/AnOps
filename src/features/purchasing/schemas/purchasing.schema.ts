@@ -130,3 +130,27 @@ export const purchaseOrderListQuerySchema = z
   .strict();
 
 export type PurchaseOrderListQuery = z.infer<typeof purchaseOrderListQuerySchema>;
+
+/** Requests a replenishment proposal. The horizon is bounded so the projection stays meaningful. */
+export const replenishmentGenerateSchema = z
+  .object({
+    warehouseId: objectIdSchema,
+    horizonDays: z.coerce
+      .number({ message: "Enter the number of days to cover" })
+      .int("Use whole days")
+      .min(1, "Cover at least 1 day")
+      .max(90, "Cover at most 90 days"),
+  })
+  .strict();
+
+export type ReplenishmentGenerateInput = z.infer<typeof replenishmentGenerateSchema>;
+
+/** Conversion carries the version the approver reviewed, so suggestions cannot change under them. */
+export const replenishmentConvertSchema = z
+  .object({
+    supplierId: objectIdSchema,
+    expectedVersion: z.number().int().min(1),
+  })
+  .strict();
+
+export type ReplenishmentConvertInput = z.infer<typeof replenishmentConvertSchema>;

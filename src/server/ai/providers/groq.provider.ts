@@ -1,7 +1,9 @@
 import "server-only";
 
 import Groq from "groq-sdk";
+import type { ChatCompletion } from "groq-sdk/resources/chat/completions";
 import { KeyPool } from "@/server/ai/key-pool";
+import { groqApiKeyList } from "@/server/ai/config";
 import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
@@ -16,7 +18,16 @@ const FREE_MODELS = [
   "allam-2-7b",
 ];
 
-const MAX_RETRIES_PER_CALL = 3;
+/** Total attempts per call across keys and transient failures. */
+const MAX_ATTEMPTS = 3;
+/** Per-request ceiling. The SDK's own retries are disabled; this class owns retry policy. */
+const REQUEST_TIMEOUT_MS = 20_000;
+const BACKOFF_BASE_MS = 300;
+
+const DEFAULT_MAX_TOKENS = 1024;
+const DEFAULT_TEMPERATURE = 0.7;
+
+type ChatResult = { text: string; model: string; usage: AiCompletionResult["usage"] };
 
 export class GroqProvider implements AiProvider {
   readonly name = "Groq";
@@ -25,7 +36,7 @@ export class GroqProvider implements AiProvider {
   private pool: KeyPool;
 
   constructor() {
-    this.pool = new KeyPool(process.env.GROQ_API_KEYS);
+    this.pool = new KeyPool(groqApiKeyList());
   }
 
   get isAvailable(): boolean {
@@ -45,88 +56,100 @@ export class GroqProvider implements AiProvider {
     }
 
     const model = options.model ?? FREE_MODELS[0];
-    let lastError: Error | null = null;
+    let lastFailure = "no attempt made";
 
-    for (let attempt = 0; attempt < MAX_RETRIES_PER_CALL; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       let apiKey: string;
       try {
         apiKey = this.pool.next();
       } catch (err) {
-        // All keys exhausted
+        // All keys exhausted: transient, the caller may retry later.
         throw new AiProviderError(this.name, (err as Error).message, true);
       }
 
-      const client = new Groq({ apiKey });
+      const client = new Groq({ apiKey, timeout: REQUEST_TIMEOUT_MS, maxRetries: 0 });
 
+      let response: ChatCompletion;
       try {
-        const response = await client.chat.completions.create({
-          model,
-          messages: options.messages,
-          max_tokens: options.maxTokens ?? 1024,
-          temperature: options.temperature ?? 0.7,
-        });
-
-        const choice = response.choices[0];
-        return {
-          text: choice.message?.content ?? "",
-          provider: this.name,
-          model,
-          usage: {
-            promptTokens: response.usage?.prompt_tokens,
-            completionTokens: response.usage?.completion_tokens,
-            totalTokens: response.usage?.total_tokens,
-          },
-        };
+        response = await client.chat.completions.create(buildRequest(model, options));
       } catch (err: unknown) {
-        const status = (err as { status?: number })?.status;
+        const status = errorStatus(err);
 
         if (status === 429) {
-          // Rate-limited — mark key and retry with next
+          // Rate-limited: cool this key down and rotate immediately.
           this.pool.markRateLimited(apiKey);
-          lastError = err as Error;
-          console.warn(`[Groq] 429 on key ...${apiKey.slice(-6)}, rotating (attempt ${attempt + 1}/${MAX_RETRIES_PER_CALL})`);
+          lastFailure = "rate limited";
+          console.warn(`[Groq] 429 on key ...${apiKey.slice(-6)}, rotating (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
           continue;
         }
 
-        // If the model was not found (404 / deprecated) and was an override, try the default free model
+        if (isTransient(err, status)) {
+          // Timeouts, network errors and 5xx are retried with a short backoff.
+          lastFailure = status ? `HTTP ${status}` : "network or timeout";
+          await sleep(BACKOFF_BASE_MS * 2 ** attempt);
+          continue;
+        }
+
+        // If the model was not found (404) and was an override, try the default free model once.
         if (status === 404 && model !== FREE_MODELS[0]) {
           console.warn(`[Groq] Model "${model}" not found (404), recovering with ${FREE_MODELS[0]}`);
           try {
-            const fallbackRes = await client.chat.completions.create({
-              model: FREE_MODELS[0],
-              messages: options.messages,
-              max_tokens: options.maxTokens ?? 1024,
-              temperature: options.temperature ?? 0.7,
-            });
-            const choice = fallbackRes.choices[0];
-            return {
-              text: choice.message?.content ?? "",
-              provider: this.name,
-              model: FREE_MODELS[0],
-              usage: {
-                promptTokens: fallbackRes.usage?.prompt_tokens,
-                completionTokens: fallbackRes.usage?.completion_tokens,
-                totalTokens: fallbackRes.usage?.total_tokens,
-              },
-            };
-          } catch {
-            // fall through to error
+            const fallback = await client.chat.completions.create(buildRequest(FREE_MODELS[0], options));
+            return { ...toResult(fallback, FREE_MODELS[0]), provider: this.name };
+          } catch (fallbackErr: unknown) {
+            throw new AiProviderError(this.name, `API error (HTTP ${errorStatus(fallbackErr) ?? "unknown"})`, false);
           }
         }
 
-        // Non-retryable error
-        throw new AiProviderError(
-          this.name,
-          `API error: ${(err as Error).message}`,
-          false
-        );
+        // Non-retryable. Never forward the provider's message: it can echo request content.
+        throw new AiProviderError(this.name, `API error (HTTP ${status ?? "unknown"})`, false);
       }
+
+      return { ...toResult(response, model), provider: this.name };
     }
 
-    throw new AiProviderError(
-      this.name,
-      `All retries exhausted: ${lastError?.message}`,
-      true
-    );
+    throw new AiProviderError(this.name, `All attempts exhausted: ${lastFailure}`, true);
   }
+}
+
+function buildRequest(model: string, options: AiCompletionOptions) {
+  return {
+    model,
+    messages: options.messages,
+    max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
+    temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+    ...(options.jsonObject ? { response_format: { type: "json_object" as const } } : {}),
+  };
+}
+
+/** Validates the provider response before it is trusted. A malformed response is a non-retryable failure. */
+function toResult(response: ChatCompletion, model: string): ChatResult {
+  const content = response.choices?.[0]?.message?.content;
+  if (typeof content !== "string") {
+    throw new AiProviderError("Groq", "Malformed response: no message content", false);
+  }
+  return {
+    text: content,
+    model,
+    usage: {
+      promptTokens: response.usage?.prompt_tokens,
+      completionTokens: response.usage?.completion_tokens,
+      totalTokens: response.usage?.total_tokens,
+    },
+  };
+}
+
+function errorStatus(err: unknown): number | undefined {
+  const status = (err as { status?: unknown })?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function isTransient(err: unknown, status: number | undefined): boolean {
+  if (status !== undefined) return status >= 500 && status <= 599;
+  const name = (err as { name?: string })?.name;
+  return name === "APIConnectionError" || name === "APIConnectionTimeoutError";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

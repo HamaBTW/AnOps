@@ -4,6 +4,8 @@ import { listSuppliers } from "@/server/purchasing/supplier.service";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { SupplierManager } from "@/features/purchasing/components/supplier-manager";
+import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
+import { exportUrl } from "@/shared/lib/download";
 import { z } from "zod";
 
 export const metadata: Metadata = { title: "Suppliers | AnOps ERP" };
@@ -16,7 +18,11 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
   const result = await listSuppliers(ctx, { q, page });
   return (
     <div className="space-y-6">
-      <PageHeader title="Suppliers" description="Vendors you buy from. Suppliers with orders are deactivated, never deleted." />
+      <PageHeader
+        title="Suppliers"
+        description="Vendors you buy from. Suppliers with orders are deactivated, never deleted."
+        actions={<ExportExcelButton href={exportUrl("suppliers", { q })} />}
+      />
       <form method="get" role="search" className="max-w-md space-y-1.5">
         <label htmlFor="q" className="text-sm font-semibold">Search by name</label>
         <input id="q" name="q" defaultValue={q} maxLength={80} className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm" />

@@ -27,6 +27,11 @@ export type AiCompletionOptions = {
    * If set, AiMaster routes to this provider first.
    */
   provider?: string;
+  /**
+   * Ask the provider for JSON output (Groq JSON mode). Only the Groq adapter honours it;
+   * other adapters ignore it, so callers that need JSON must pin `provider: "groq"`.
+   */
+  jsonObject?: boolean;
 };
 
 export type AiCompletionResult = {

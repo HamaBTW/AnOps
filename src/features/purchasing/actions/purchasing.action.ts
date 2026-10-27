@@ -5,6 +5,8 @@ import {
   purchaseOrderInputSchema,
   purchaseOrderUpdateSchema,
   receiptInputSchema,
+  replenishmentConvertSchema,
+  replenishmentGenerateSchema,
   supplierInputSchema,
 } from "@/features/purchasing/schemas/purchasing.schema";
 import { objectIdSchema } from "@/shared/lib/schema-primitives";
@@ -17,6 +19,12 @@ import {
   updatePurchaseOrder,
 } from "@/server/purchasing/purchase-order.service";
 import { cancelReceipt, createReceipt, postReceipt } from "@/server/purchasing/receipt.service";
+import {
+  convertReplenishmentProposal,
+  generateReplenishmentProposal,
+  type ReplenishmentProposalDto,
+  reconcileReplenishmentProposal,
+} from "@/server/purchasing/replenishment.service";
 import { z } from "zod";
 import type { ActionResult } from "@/shared/lib/errors";
 import type { PurchaseOrderDetailDto, ReceiptDetailDto, SupplierDto } from "@/features/purchasing/types";
@@ -112,4 +120,44 @@ export async function cancelReceiptAction(id: unknown): Promise<ActionResult<nul
     refreshPurchasing();
     return null;
   });
+}
+
+/** Generates an advisory replenishment proposal. Changes no stock and creates no order. */
+export async function generateReplenishmentAction(raw: unknown): Promise<ActionResult<ReplenishmentProposalDto>> {
+  return runAction(
+    "purchasing.replenishment.generate",
+    async (ctx) => generateReplenishmentProposal(ctx, parseInput(replenishmentGenerateSchema, raw)),
+    { rateLimit: POSTING_RATE_LIMIT }
+  );
+}
+
+/** Converts a reviewed proposal into a DRAFT purchase order. Requires approval rights. */
+export async function convertReplenishmentAction(
+  id: unknown,
+  raw: unknown
+): Promise<ActionResult<PurchaseOrderDetailDto>> {
+  return runAction("purchasing.replenishment.convert", async (ctx) => {
+    const proposalId = parseInput(objectIdSchema, id);
+    const input = parseInput(replenishmentConvertSchema, raw);
+    const order = await convertReplenishmentProposal(ctx, proposalId, input);
+    refreshPurchasing();
+    return order;
+  }, { rateLimit: POSTING_RATE_LIMIT });
+}
+
+/**
+ * Recovers a proposal left in `converting` by an interrupted conversion. It links an existing order or
+ * releases a stale claim. It never creates an order.
+ */
+export async function reconcileReplenishmentAction(id: unknown): Promise<ActionResult<ReplenishmentProposalDto>> {
+  return runAction(
+    "purchasing.replenishment.reconcile",
+    async (ctx) => {
+      const proposalId = parseInput(objectIdSchema, id);
+      const proposal = await reconcileReplenishmentProposal(ctx, proposalId);
+      refreshPurchasing();
+      return proposal;
+    },
+    { rateLimit: POSTING_RATE_LIMIT }
+  );
 }

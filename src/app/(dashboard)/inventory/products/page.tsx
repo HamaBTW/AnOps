@@ -8,6 +8,8 @@ import { EmptyState } from "@/shared/components/data-display/empty-state";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { ButtonLink, Button, selectClass } from "@/shared/components/ui/button";
+import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
+import { exportUrl } from "@/shared/lib/download";
 import { formatDecimalString } from "@/shared/lib/format";
 import { STOCK_STATUS_LABELS, STOCK_STATUS_TONES } from "@/features/inventory/labels";
 import { UNIT_LABELS, type UnitOfMeasure } from "@/shared/domain/units";
@@ -31,7 +33,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <PageHeader
         title="Products"
         description={`${result.total} product${result.total === 1 ? "" : "s"} · ${query.status === "all" ? "all statuses" : query.status}`}
-        actions={canManage ? <ButtonLink href="/inventory/products/new" variant="primary">New product</ButtonLink> : undefined}
+        actions={
+          <>
+            <ExportExcelButton href={exportUrl("products", { q: query.q, status: query.status })} />
+            {canManage && <ButtonLink href="/inventory/products/new" variant="primary">New product</ButtonLink>}
+          </>
+        }
       />
 
       <form method="get" role="search" className="grid gap-3 sm:grid-cols-[1fr_200px_auto] sm:items-end">

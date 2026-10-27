@@ -28,6 +28,7 @@ import {
 } from "@/features/inventory/schemas/inventory.schema";
 import type { CategoryDto, Paged, ProductDto, WarehouseDto } from "@/features/inventory/types";
 import { idKey, toProductDto, toWarehouseDto } from "@/server/inventory/mappers";
+import { assertExportWithinLimit, MAX_EXPORT_ROWS } from "@/server/exports/limits";
 
 const DUPLICATE_KEY = 11000;
 
@@ -156,8 +157,8 @@ export async function setCategoryActive(ctx: WorkspaceContext, categoryId: strin
 
 // ---------- Products ----------
 
-export async function listProducts(ctx: WorkspaceContext, query: ProductListQuery): Promise<Paged<ProductDto>> {
-  assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
+/** Shared by the product list and the product export, so both show the same rows for the same filters. */
+export function productListFilter(ctx: WorkspaceContext, query: Pick<ProductListQuery, "q" | "status" | "categoryId">): Filter<ProductDoc> {
   const filter: Filter<ProductDoc> = { ...tenantFilter(scope(ctx)) };
   if (query.status === "active") filter.isActive = true;
   if (query.status === "archived") filter.isActive = false;
@@ -167,6 +168,24 @@ export async function listProducts(ctx: WorkspaceContext, query: ProductListQuer
     const sku = escapeRegex(query.q.toUpperCase());
     filter.$or = [{ normalizedName: { $regex: `^${name}` } }, { normalizedSku: { $regex: `^${sku}` } }];
   }
+  return filter;
+}
+
+async function toProductDtos(ctx: WorkspaceContext, docs: ProductDoc[]): Promise<ProductDto[]> {
+  const ids = docs.map((doc) => doc._id);
+  const categoryIds = docs.flatMap((doc) => (doc.categoryId ? [doc.categoryId] : []));
+  const [onHand, names] = await Promise.all([
+    sumOnHandByProduct(ctx.db, ctx, ids),
+    categoryNames(ctx.db, ctx, categoryIds),
+  ]);
+  return docs.map((doc) =>
+    toProductDto(doc, onHand.get(idKey(doc._id)) ?? 0, doc.categoryId ? names.get(idKey(doc.categoryId)) ?? null : null)
+  );
+}
+
+export async function listProducts(ctx: WorkspaceContext, query: ProductListQuery): Promise<Paged<ProductDto>> {
+  assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
+  const filter = productListFilter(ctx, query);
 
   const products = ctx.db.collection<ProductDoc>(COLLECTIONS.inventoryProducts);
   const [total, docs] = await Promise.all([
@@ -179,19 +198,17 @@ export async function listProducts(ctx: WorkspaceContext, query: ProductListQuer
       .toArray(),
   ]);
 
-  const ids = docs.map((doc) => doc._id);
-  const categoryIds = docs.flatMap((doc) => (doc.categoryId ? [doc.categoryId] : []));
-  const [onHand, names] = await Promise.all([
-    sumOnHandByProduct(ctx.db, ctx, ids),
-    categoryNames(ctx.db, ctx, categoryIds),
-  ]);
+  return { items: await toProductDtos(ctx, docs), ...pageInfo(query.page, PRODUCT_PAGE_SIZE, total) };
+}
 
-  return {
-    items: docs.map((doc) =>
-      toProductDto(doc, onHand.get(idKey(doc._id)) ?? 0, doc.categoryId ? names.get(idKey(doc.categoryId)) ?? null : null)
-    ),
-    ...pageInfo(query.page, PRODUCT_PAGE_SIZE, total),
-  };
+/** Every product matching the filters, sorted like the list. Bounded by MAX_EXPORT_ROWS. */
+export async function listProductsForExport(ctx: WorkspaceContext, query: Pick<ProductListQuery, "q" | "status" | "categoryId">): Promise<ProductDto[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
+  const filter = productListFilter(ctx, query);
+  const products = ctx.db.collection<ProductDoc>(COLLECTIONS.inventoryProducts);
+  assertExportWithinLimit(await products.countDocuments(filter));
+  const docs = await products.find(filter).sort({ normalizedName: 1, _id: 1 }).limit(MAX_EXPORT_ROWS).toArray();
+  return toProductDtos(ctx, docs);
 }
 
 export async function getProduct(ctx: WorkspaceContext, productId: string): Promise<ProductDto> {

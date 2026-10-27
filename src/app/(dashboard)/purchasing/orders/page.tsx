@@ -9,6 +9,8 @@ import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { PO_STATUS } from "@/features/purchasing/labels";
 import { ButtonLink, Button, selectClass } from "@/shared/components/ui/button";
+import { ExportExcelButton } from "@/shared/components/data-display/export-excel-button";
+import { exportUrl } from "@/shared/lib/download";
 import { formatDate, formatMoney } from "@/shared/lib/format";
 
 export const metadata: Metadata = { title: "Purchase orders | AnOps ERP" };
@@ -30,7 +32,12 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
       <PageHeader
         title="Purchase orders"
         description="Orders are approved first. Stock increases only when goods are received and the receipt is posted."
-        actions={canCreate ? <ButtonLink href="/purchasing/orders/new" variant="primary">New order</ButtonLink> : undefined}
+        actions={
+          <>
+            <ExportExcelButton href={exportUrl("purchase-orders", { q: query.q, status: query.status })} />
+            {canCreate && <ButtonLink href="/purchasing/orders/new" variant="primary">New order</ButtonLink>}
+          </>
+        }
       />
       <form method="get" role="search" className="grid gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
         <div className="space-y-1.5">

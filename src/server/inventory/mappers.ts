@@ -75,6 +75,7 @@ export function toMovementDto(
     quantity: trimDecimal(formatQuantity(Math.abs(movement.deltaMicro), 6)),
     deltaMicro: movement.deltaMicro,
     sourceType: movement.sourceType,
+    sourceId: movement.sourceId ? movement.sourceId.toHexString() : null,
     reason: movement.reason,
     createdAt: movement.createdAt.toISOString(),
   };

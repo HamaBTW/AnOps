@@ -100,3 +100,16 @@ export type InventoryOverviewDto = {
   recentMovements: StockMovementDto[];
   currencyCode: string;
 };
+
+export type OpeningStockOutcome =
+  | { status: "none" }
+  | { status: "posted" }
+  | { status: "failed"; message: string };
+
+/** A created product plus what happened to its opening stock. A failed outcome means no stock was recorded. */
+export type ProductCreatedResult = { product: ProductDto; openingStock: OpeningStockOutcome };
+
+export type OpeningStockBatchResult = {
+  posted: { productId: string }[];
+  failed: { productId: string; message: string }[];
+};

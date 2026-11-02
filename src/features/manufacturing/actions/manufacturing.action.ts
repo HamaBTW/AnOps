@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { bomInputSchema, bomUpdateSchema, workOrderInputSchema } from "@/features/manufacturing/schemas/manufacturing.schema";
+import { bomInputSchema, bomUpdateSchema, materialPreviewSchema, workOrderInputSchema } from "@/features/manufacturing/schemas/manufacturing.schema";
 import { objectIdSchema } from "@/shared/lib/schema-primitives";
 import { parseInput, runAction } from "@/server/actions/run-action";
 import { activateBom, archiveBom, createBomDraft, updateBomDraft } from "@/server/manufacturing/bom.service";
-import { cancelWorkOrder, completeWorkOrder, createWorkOrder, startWorkOrder } from "@/server/manufacturing/work-order.service";
+import { cancelWorkOrder, completeWorkOrder, createWorkOrder, previewMaterialAvailability, startWorkOrder } from "@/server/manufacturing/work-order.service";
 import type { ActionResult } from "@/shared/lib/errors";
-import type { BomDetailDto, WorkOrderDetailDto } from "@/features/manufacturing/types";
+import type { BomDetailDto, MaterialAvailabilityDto, WorkOrderDetailDto } from "@/features/manufacturing/types";
 
 const versionSchema = z.number().int().min(1);
 
@@ -83,5 +83,12 @@ export async function cancelWorkOrderAction(id: unknown, expectedVersion: unknow
     await cancelWorkOrder(ctx, parseInput(objectIdSchema, id), parseInput(versionSchema, expectedVersion));
     refreshManufacturing();
     return null;
+  });
+}
+
+/** Read-only: what this production run would need versus what the warehouse holds. Writes nothing. */
+export async function previewMaterialAvailabilityAction(raw: unknown): Promise<ActionResult<MaterialAvailabilityDto>> {
+  return runAction("manufacturing.work_order.preview", async (ctx) => previewMaterialAvailability(ctx, parseInput(materialPreviewSchema, raw)), {
+    rateLimit: { limit: 120, windowMs: 60_000 },
   });
 }

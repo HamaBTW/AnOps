@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import {
   categoryInputSchema,
+  openingStockBatchSchema,
   productInputSchema,
+  productWithOpeningStockSchema,
   productUpdateSchema,
   stockAdjustmentInputSchema,
   stockMoveInputSchema,
@@ -24,9 +26,10 @@ import {
   updateProduct,
   updateWarehouse,
 } from "@/server/inventory/catalog.service";
+import { createProductWithOpeningStock, getProductStockContext, recordOpeningStockBatch, type ProductStockContext } from "@/server/inventory/onboarding.service";
 import { adjustStock, issueStock, receiveStock, transferStock } from "@/server/inventory/stock.service";
 import type { ActionResult } from "@/shared/lib/errors";
-import type { CategoryDto, ProductDto, WarehouseDto } from "@/features/inventory/types";
+import type { CategoryDto, OpeningStockBatchResult, ProductCreatedResult, ProductDto, WarehouseDto } from "@/features/inventory/types";
 
 const STOCK_RATE_LIMIT = { limit: 60, windowMs: 60_000 };
 
@@ -70,6 +73,27 @@ export async function createProductAction(raw: unknown): Promise<ActionResult<Pr
     refreshInventory();
     return result;
   });
+}
+
+/** Creates the product and, when a quantity is given, posts its opening stock through the receipt ledger. */
+export async function createProductWithStockAction(raw: unknown): Promise<ActionResult<ProductCreatedResult>> {
+  return runAction("inventory.product.create_with_stock", async (ctx) => {
+    const result = await createProductWithOpeningStock(ctx, parseInput(productWithOpeningStockSchema, raw));
+    refreshInventory();
+    return result;
+  });
+}
+
+export async function recordOpeningStockAction(raw: unknown): Promise<ActionResult<OpeningStockBatchResult>> {
+  return runAction(
+    "inventory.stock.opening",
+    async (ctx) => {
+      const result = await recordOpeningStockBatch(ctx, parseInput(openingStockBatchSchema, raw));
+      refreshInventory();
+      return result;
+    },
+    { rateLimit: STOCK_RATE_LIMIT }
+  );
 }
 
 export async function updateProductAction(id: unknown, raw: unknown): Promise<ActionResult<ProductDto>> {
@@ -165,5 +189,14 @@ export async function adjustStockAction(raw: unknown): Promise<ActionResult<null
       return null;
     },
     { rateLimit: STOCK_RATE_LIMIT }
+  );
+}
+
+/** Read-only: on hand, reorder level and quantity already on order for the products a form is showing. */
+export async function getStockContextAction(ids: unknown): Promise<ActionResult<ProductStockContext[]>> {
+  return runAction(
+    "inventory.stock.context",
+    async (ctx) => getProductStockContext(ctx, parseInput(z.array(objectIdSchema).max(100), ids)),
+    { rateLimit: { limit: 240, windowMs: 60_000 } }
   );
 }

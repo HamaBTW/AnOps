@@ -70,6 +70,50 @@ function checkCountableReorderPoint(
 
 export const productInputSchema = productBaseSchema.superRefine(checkCountableReorderPoint);
 
+/**
+ * Create a product and, optionally, record its opening stock in one step. The stock is posted through the
+ * normal receipt ledger, so it is a real, auditable movement rather than a field on the product.
+ */
+export const productWithOpeningStockSchema = productBaseSchema
+  .extend({
+    openingWarehouseId: optionalObjectIdSchema,
+    openingQuantity: nonNegativeQuantitySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    checkCountableReorderPoint(value, ctx);
+    const quantity = Number(value.openingQuantity);
+    if (quantity <= 0) return;
+    if (!value.isStorable) {
+      ctx.addIssue({ code: "custom", path: ["openingQuantity"], message: "Only stored products can have opening stock" });
+    }
+    if (!value.openingWarehouseId) {
+      ctx.addIssue({ code: "custom", path: ["openingWarehouseId"], message: "Choose the warehouse that holds this stock" });
+    }
+    if (isCountableUnit(value.unitOfMeasure) && !isWholeQuantityString(value.openingQuantity)) {
+      ctx.addIssue({ code: "custom", path: ["openingQuantity"], message: "Countable products need a whole-number quantity" });
+    }
+  });
+
+export type ProductWithOpeningStockInput = z.infer<typeof productWithOpeningStockSchema>;
+
+/** Opening stock for products that already exist: one warehouse, many products, each with its own quantity. */
+export const openingStockBatchSchema = z
+  .object({
+    warehouseId: objectIdSchema,
+    entries: z
+      .array(z.object({ productId: objectIdSchema, quantity: positiveQuantitySchema }).strict())
+      .min(1, "Enter a quantity for at least one product")
+      .max(50, "Record at most 50 products at a time"),
+  })
+  .strict()
+  .refine((value) => new Set(value.entries.map((entry) => entry.productId)).size === value.entries.length, {
+    message: "Each product can appear only once",
+    path: ["entries"],
+  });
+
+export type OpeningStockBatchInput = z.infer<typeof openingStockBatchSchema>;
+
 /** Edits carry the version the user saw, so a stale form cannot overwrite newer changes. */
 export const productUpdateSchema = productBaseSchema
   .extend({ expectedVersion: z.number().int().min(1) })

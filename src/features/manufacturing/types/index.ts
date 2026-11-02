@@ -57,6 +57,8 @@ export type WorkOrderDetailDto = WorkOrderSummaryDto & {
     consumed: string;
     onHand: string;
     shortfall: string;
+    /** Exact shortfall (up to six decimals, trimmed) for prefilling a purchase order. */
+    shortfallExact: string;
     stockStatus: StockStatus;
     sufficient: boolean;
   }[];
@@ -64,3 +66,21 @@ export type WorkOrderDetailDto = WorkOrderSummaryDto & {
 };
 
 export type ManufacturingPage<T> = { items: T[] } & PageInfo;
+
+/** What a production run would need versus what the warehouse holds right now. Read-only; nothing is reserved. */
+export type MaterialAvailabilityDto = {
+  materials: {
+    productId: string;
+    sku: string;
+    productName: string;
+    unitOfMeasure: UnitOfMeasure;
+    planned: string;
+    onHand: string;
+    shortfall: string;
+    /** Shortfall as an exact, trimmed quantity that can be typed into a purchase order line. */
+    shortfallExact: string;
+    sufficient: boolean;
+  }[];
+  shortCount: number;
+  warehouseCode: string;
+};

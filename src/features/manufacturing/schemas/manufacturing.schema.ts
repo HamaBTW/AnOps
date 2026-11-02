@@ -76,6 +76,12 @@ export const workOrderInputSchema = z
   .strict();
 export type WorkOrderInput = z.infer<typeof workOrderInputSchema>;
 
+/** The fields that decide material needs. Used to preview availability before a work order exists. */
+export const materialPreviewSchema = z
+  .object({ bomId: objectIdSchema, warehouseId: objectIdSchema, quantity: positiveQuantitySchema })
+  .strict();
+export type MaterialPreviewInput = z.infer<typeof materialPreviewSchema>;
+
 export const bomListQuerySchema = z
   .object({
     status: z.enum(["all", "draft", "active", "archived"]).default("all"),

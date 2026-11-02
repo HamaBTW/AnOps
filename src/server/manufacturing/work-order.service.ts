@@ -17,7 +17,7 @@ import { nextSequenceNumber } from "@/server/db/counters";
 import { withTransaction } from "@/server/db/transactions";
 import { recordAudit } from "@/server/audit/audit.service";
 import { applyLedgerEntries, type LedgerEntry } from "@/server/inventory/stock-ledger";
-import { computeStockStatus, idKey } from "@/server/inventory/mappers";
+import { computeStockStatus, idKey, trimDecimal } from "@/server/inventory/mappers";
 import { assertPermission, PERMISSIONS } from "@/server/security/permissions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { assertWorkOrderTransition } from "@/server/manufacturing/work-order-state";
@@ -25,8 +25,8 @@ import { quantityFitsUnit } from "@/features/inventory/schemas/inventory.schema"
 import { isCountableUnit } from "@/shared/domain/units";
 import { AppError } from "@/shared/lib/errors";
 import { formatQuantity, isWholeQuantity, parseQuantity, scaleQuantity } from "@/shared/lib/fixed-point";
-import type { WorkOrderInput } from "@/features/manufacturing/schemas/manufacturing.schema";
-import type { ManufacturingPage, WorkOrderDetailDto, WorkOrderSummaryDto } from "@/features/manufacturing/types";
+import type { MaterialPreviewInput, WorkOrderInput } from "@/features/manufacturing/schemas/manufacturing.schema";
+import type { ManufacturingPage, MaterialAvailabilityDto, WorkOrderDetailDto, WorkOrderSummaryDto } from "@/features/manufacturing/types";
 
 export const WORK_ORDER_PAGE_SIZE = 25;
 
@@ -122,6 +122,7 @@ export async function getWorkOrder(ctx: WorkspaceContext, orderId: string): Prom
         consumed: formatQuantity(component.consumedMicro, 3),
         onHand: formatQuantity(onHand, 3),
         shortfall: formatQuantity(shortfall, 3),
+        shortfallExact: trimDecimal(formatQuantity(shortfall, 6)),
         stockStatus: computeStockStatus({ isStorable: product?.isStorable ?? false, reorderPointMicro: product?.reorderPointMicro ?? 0 }, onHand),
         sufficient: shortfall === 0,
       };
@@ -133,6 +134,49 @@ export async function getWorkOrder(ctx: WorkspaceContext, orderId: string): Prom
         (doc.status === "draft" && canManage) || (doc.status === "in_progress" && canExecute),
     },
   };
+}
+
+/**
+ * Shows what a production run would need against what the chosen warehouse holds right now, before any work
+ * order exists. It reads the active BOM and the live balances and writes nothing: completion still re-checks
+ * and consumes stock atomically, so this is guidance, never a reservation.
+ */
+export async function previewMaterialAvailability(ctx: WorkspaceContext, input: MaterialPreviewInput): Promise<MaterialAvailabilityDto> {
+  assertPermission(ctx.permissions, PERMISSIONS.MANUFACTURING_READ);
+  assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
+  const bom = await ctx.db
+    .collection<BomDoc>(COLLECTIONS.manufacturingBoms)
+    .findOne({ _id: new ObjectId(input.bomId), ...tenantFilter(scope(ctx)), status: "active" });
+  if (!bom) throw new AppError("VALIDATION_ERROR", "Choose an active bill of materials", { bomId: "Unknown BOM" });
+  const warehouse = await ctx.db
+    .collection<WarehouseDoc>(COLLECTIONS.inventoryWarehouses)
+    .findOne({ _id: new ObjectId(input.warehouseId), ...tenantFilter(scope(ctx)) }, { projection: { code: 1 } });
+  if (!warehouse) throw new AppError("VALIDATION_ERROR", "Choose a warehouse", { warehouseId: "Unknown warehouse" });
+
+  const quantityMicro = parseQuantity(input.quantity);
+  const balances = await ctx.db
+    .collection<StockBalanceDoc>(COLLECTIONS.inventoryStockBalances)
+    .find({ ...tenantFilter(scope(ctx)), warehouseId: warehouse._id, productId: { $in: bom.components.map((c) => c.productId) } })
+    .toArray();
+  const onHandByProduct = new Map(balances.map((b) => [idKey(b.productId), b.onHandMicro]));
+
+  const materials = bom.components.map((component) => {
+    const plannedMicro = plannedComponentMicro(component.quantityPerUnitMicro, quantityMicro);
+    const onHand = onHandByProduct.get(idKey(component.productId)) ?? 0;
+    const shortfallMicro = Math.max(0, plannedMicro - onHand);
+    return {
+      productId: idKey(component.productId),
+      sku: component.sku,
+      productName: component.productName,
+      unitOfMeasure: component.unitOfMeasure,
+      planned: formatQuantity(plannedMicro, 3),
+      onHand: formatQuantity(onHand, 3),
+      shortfall: formatQuantity(shortfallMicro, 3),
+      shortfallExact: trimDecimal(formatQuantity(shortfallMicro, 6)),
+      sufficient: shortfallMicro === 0,
+    };
+  });
+  return { materials, shortCount: materials.filter((m) => !m.sufficient).length, warehouseCode: warehouse.code };
 }
 
 /**

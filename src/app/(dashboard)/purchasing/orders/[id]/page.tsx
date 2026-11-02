@@ -17,6 +17,21 @@ import { BackLink } from "@/shared/components/ui/back-link";
 
 export const metadata: Metadata = { title: "Purchase order | AnOps ERP" };
 
+/** Tells the user what happens next for this order, so nobody has to know the purchase-order lifecycle. */
+function NextStep({ status, canApprove, canReceive }: { status: string; canApprove: boolean; canReceive: boolean }) {
+  let text: string | null = null;
+  if (status === "draft") text = canApprove ? "Next: check the lines, then approve the order. Approving does not change stock." : "Next: ask someone with approval rights to approve this draft.";
+  else if (status === "approved" || status === "partially_received")
+    text = canReceive ? "Next: when the delivery arrives, record it in “Receive goods” below. That is what updates your stock." : "Next: goods arrive and are received by someone with receiving rights.";
+  else if (status === "received") text = "Done: every line was received and stock is updated. See the receipts below, or check Inventory > Stock.";
+  if (!text) return null;
+  return (
+    <p role="status" className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-4 py-3 text-sm text-[var(--color-text-primary)]">
+      {text}
+    </p>
+  );
+}
+
 export default async function PurchaseOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await getPageWorkspace();
   const { id } = await params;
@@ -56,6 +71,8 @@ export default async function PurchaseOrderDetailPage({ params }: { params: Prom
           Expected {formatDate(order.expectedDate)} · Approved {formatDate(order.approvedAt)}
         </span>
       </div>
+
+      <NextStep status={order.status} canApprove={order.permissions.canApprove} canReceive={order.permissions.canReceive && openLines.length > 0} />
 
       <OrderActions orderId={order.id} version={order.version} canApprove={order.permissions.canApprove} canCancel={order.permissions.canCancel} />
 
@@ -103,10 +120,12 @@ export default async function PurchaseOrderDetailPage({ params }: { params: Prom
 
       {order.permissions.canReceive && openLines.length > 0 && (
         <section aria-labelledby="receive-heading" className="space-y-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
-          <h2 id="receive-heading" className="text-lg font-semibold">Record a receipt</h2>
+          <h2 id="receive-heading" className="text-lg font-semibold">Receive goods</h2>
           <ReceiptForm
             orderId={order.id}
             warehouses={warehouses.filter((w) => w.isActive).map((w) => ({ id: w.id, label: `${w.code} · ${w.name}` }))}
+            canPost={ctx.permissions.has("purchasing.receipt.post")}
+            canCreateWarehouse={ctx.permissions.has("inventory.warehouse.manage")}
             lines={openLines.map((line) => ({ id: line.id, sku: line.sku, productName: line.productName, unitOfMeasure: line.unitOfMeasure, remaining: line.remaining }))}
           />
         </section>

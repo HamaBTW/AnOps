@@ -18,6 +18,9 @@ export default async function NewWorkOrderPage() {
       <WorkOrderForm
         boms={boms.map((b) => ({ id: b.id, label: b.label }))}
         warehouses={warehouses.map((w) => ({ id: w.id, label: `${w.code} · ${w.name}` }))}
+        canCreateWarehouse={ctx.permissions.has("inventory.warehouse.manage")}
+        canCreateBom={ctx.permissions.has("manufacturing.bom.manage")}
+        canOrderMaterials={ctx.permissions.has("purchasing.order.manage")}
       />
     </div>
   );

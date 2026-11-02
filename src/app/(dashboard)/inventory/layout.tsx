@@ -6,6 +6,7 @@ const TABS = [
   { label: "Categories", href: "/inventory/categories" },
   { label: "Warehouses", href: "/inventory/warehouses" },
   { label: "Stock", href: "/inventory/stock" },
+  { label: "Guided setup", href: "/inventory/setup" },
 ];
 
 export default function InventoryLayout({ children }: { children: React.ReactNode }) {

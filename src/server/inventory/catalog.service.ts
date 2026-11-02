@@ -18,7 +18,7 @@ import { pageInfo, skipFor } from "@/server/db/pagination";
 import { assertPermission, PERMISSIONS } from "@/server/security/permissions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
-import { parseMoney, parseQuantity } from "@/shared/lib/fixed-point";
+import { formatMoneyAmount, parseMoney, parseQuantity } from "@/shared/lib/fixed-point";
 import {
   PRODUCT_PAGE_SIZE,
   type ProductInput,
@@ -362,11 +362,11 @@ export async function setProductActive(ctx: WorkspaceContext, productId: string,
 }
 
 /** Minimal active-product list for pickers, bounded to keep the payload small. */
-export async function listProductOptions(ctx: WorkspaceContext): Promise<{ id: string; sku: string; name: string; unitOfMeasure: string; isStorable: boolean }[]> {
+export async function listProductOptions(ctx: WorkspaceContext): Promise<{ id: string; sku: string; name: string; unitOfMeasure: string; isStorable: boolean; cost: string }[]> {
   assertPermission(ctx.permissions, PERMISSIONS.INVENTORY_READ);
   const docs = await ctx.db
     .collection<ProductDoc>(COLLECTIONS.inventoryProducts)
-    .find({ ...tenantFilter(scope(ctx)), isActive: true }, { projection: { sku: 1, name: 1, unitOfMeasure: 1, isStorable: 1 } })
+    .find({ ...tenantFilter(scope(ctx)), isActive: true }, { projection: { sku: 1, name: 1, unitOfMeasure: 1, isStorable: 1, costMilli: 1 } })
     .sort({ normalizedName: 1 })
     .limit(MAX_BOUNDED_LIST)
     .toArray();
@@ -376,6 +376,7 @@ export async function listProductOptions(ctx: WorkspaceContext): Promise<{ id: s
     name: doc.name,
     unitOfMeasure: doc.unitOfMeasure,
     isStorable: doc.isStorable,
+    cost: formatMoneyAmount(doc.costMilli, 3),
   }));
 }
 

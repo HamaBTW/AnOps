@@ -10,6 +10,9 @@ import { WORK_ORDER_STATUS } from "@/features/manufacturing/labels";
 import { STOCK_STATUS_LABELS, STOCK_STATUS_TONES } from "@/features/inventory/labels";
 import { formatDateTime, formatDecimalString } from "@/shared/lib/format";
 import { BackLink } from "@/shared/components/ui/back-link";
+import { ButtonLink } from "@/shared/components/ui/button";
+import { buildShortagePurchaseHref } from "@/features/purchasing/shortage-link";
+import { ShoppingCart } from "lucide-react";
 
 export const metadata: Metadata = { title: "Work order | AnOps ERP" };
 
@@ -25,6 +28,12 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
   }
   const status = WORK_ORDER_STATUS[wo.status];
   const short = wo.materials.filter((m) => !m.sufficient);
+  const canOrder = ctx.permissions.has("purchasing.order.manage");
+  // Only what is still to be consumed counts: a started order may already have used some of a material.
+  const orderHref = buildShortagePurchaseHref(
+    short.map((m) => ({ productId: m.productId, quantity: m.shortfallExact })),
+    { workOrderId: wo.id }
+  );
 
   return (
     <div className="space-y-8">
@@ -65,9 +74,19 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
       <section aria-labelledby="materials-heading" className="space-y-3">
         <h2 id="materials-heading" className="text-lg font-semibold">Materials</h2>
         {short.length > 0 && wo.status !== "completed" && (
-          <p role="status" className="rounded-[var(--radius-control)] border border-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] p-3 text-sm text-[var(--color-status-warning)]">
-            {short.length} material{short.length === 1 ? " is" : "s are"} short in {wo.warehouseCode}. Completion will be refused until stock covers the plan.
-          </p>
+          <div role="status" className="flex flex-col gap-3 rounded-[var(--radius-control)] border border-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] p-4 text-sm text-[var(--color-status-warning)] sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              {short.length} material{short.length === 1 ? " is" : "s are"} short in {wo.warehouseCode}. Completion will be refused until stock covers the plan.
+            </p>
+            {canOrder ? (
+              <ButtonLink href={orderHref} variant="secondary" className="shrink-0">
+                <ShoppingCart aria-hidden className="size-4" />
+                Order the missing materials
+              </ButtonLink>
+            ) : (
+              <p className="shrink-0 font-semibold">Ask a buyer to order them.</p>
+            )}
+          </div>
         )}
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
           <table className="w-full min-w-[760px] text-left text-sm">

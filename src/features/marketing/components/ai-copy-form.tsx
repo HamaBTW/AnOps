@@ -20,7 +20,7 @@ const TONE_LABELS: Record<(typeof AI_TONES)[number], string> = {
   formal: "Formal",
 };
 const LANGUAGE_LABELS: Record<(typeof AI_LANGUAGES)[number], string> = { en: "English", fr: "Français", ar: "العربية" };
-const CHANNEL_NAMES: Record<(typeof AI_CHANNELS)[number], string> = { email: CHANNEL_LABELS.email, sms: CHANNEL_LABELS.sms, facebook_page: "Facebook Page" };
+const CHANNEL_NAMES: Record<(typeof AI_CHANNELS)[number], string> = { email: CHANNEL_LABELS.email, sms: CHANNEL_LABELS.sms, telegram: CHANNEL_LABELS.telegram, facebook_page: "Facebook Page" };
 
 /** Brief form. The brief is sent once to the server; the server builds the prompt and keeps it out of the browser. */
 export function AiCopyForm({ aiReady, initial }: { aiReady: boolean; initial?: Partial<AiRequestInput> }) {

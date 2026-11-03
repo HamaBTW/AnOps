@@ -16,6 +16,8 @@ export type IntegrationCheck = {
   ok: boolean;
   checkedAt: Date;
   errorCode: string | null;
+  /** Small non-secret facts from the check, for example the bot's display name. */
+  details?: Record<string, string | number | boolean | null>;
 };
 
 export type IntegrationStatus = {
@@ -26,6 +28,8 @@ export type IntegrationStatus = {
 
 export const INTEGRATION_CHECKS_COLLECTION = "marketing_integration_checks";
 export const EMAIL_INTEGRATION_CHECK_ID = "email_delivery";
+export const TELEGRAM_INTEGRATION_CHECK_ID = "telegram_bot";
+export const TELEGRAM_WEBHOOK_CHECK_ID = "telegram_webhook";
 export const INTEGRATION_CHECK_FRESH_MS = 7 * 86_400_000;
 
 export function classifyIntegration(input: {
@@ -85,26 +89,27 @@ export type IntegrationCheckDoc = {
   ok: boolean;
   errorCode: string | null;
   checkedBy: ObjectId | null;
+  details?: IntegrationCheck["details"];
 };
 
 export async function loadIntegrationCheck(db: Db, id: string): Promise<IntegrationCheck | null> {
   const doc = await db
     .collection<IntegrationCheckDoc>(INTEGRATION_CHECKS_COLLECTION)
-    .findOne({ _id: id }, { projection: { ok: 1, checkedAt: 1, errorCode: 1 } });
-  return doc ? { ok: doc.ok, checkedAt: doc.checkedAt, errorCode: doc.errorCode } : null;
+    .findOne({ _id: id }, { projection: { ok: 1, checkedAt: 1, errorCode: 1, details: 1 } });
+  return doc ? { ok: doc.ok, checkedAt: doc.checkedAt, errorCode: doc.errorCode, details: doc.details } : null;
 }
 
 export async function recordIntegrationCheck(
   db: Db,
   id: string,
-  result: { ok: boolean; errorCode: string | null },
+  result: { ok: boolean; errorCode: string | null; details?: IntegrationCheck["details"] },
   checkedBy: ObjectId
 ): Promise<IntegrationCheck> {
   const checkedAt = new Date();
   await db.collection<IntegrationCheckDoc>(INTEGRATION_CHECKS_COLLECTION).updateOne(
     { _id: id },
-    { $set: { checkedAt, ok: result.ok, errorCode: result.errorCode, checkedBy } },
+    { $set: { checkedAt, ok: result.ok, errorCode: result.errorCode, checkedBy, details: result.details ?? {} } },
     { upsert: true }
   );
-  return { ok: result.ok, checkedAt, errorCode: result.errorCode };
+  return { ok: result.ok, checkedAt, errorCode: result.errorCode, details: result.details };
 }

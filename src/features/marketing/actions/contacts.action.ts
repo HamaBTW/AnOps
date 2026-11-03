@@ -14,6 +14,7 @@ import { parseInput, runAction } from "@/server/actions/run-action";
 import type { ActionResult } from "@/shared/lib/errors";
 import { createContact, deleteContact, getContact, setContactActive, updateContact, type ContactDetailDto, type ContactDto } from "@/server/marketing/contact.service";
 import { changeConsent } from "@/server/marketing/consent.service";
+import { createTelegramLink, disconnectTelegram, type TelegramLinkDto } from "@/server/marketing/telegram.service";
 import { assignTags, createTag, deleteTag, removeTags, updateTag, type TagDto } from "@/server/marketing/tag.service";
 
 function refresh(): void {
@@ -108,4 +109,29 @@ export async function removeTagsAction(raw: unknown): Promise<ActionResult<{ rem
     refresh();
     return result;
   });
+}
+
+/** A fresh single-use deep link. Limited to a few per minute: each one invalidates the previous link. */
+export async function createTelegramLinkAction(id: unknown): Promise<ActionResult<TelegramLinkDto>> {
+  return runAction(
+    "marketing.telegram.link",
+    async (ctx) => {
+      const result = await createTelegramLink(ctx, parseInput(objectIdSchema, id));
+      refresh();
+      return result;
+    },
+    { rateLimit: { limit: 10, windowMs: 60_000 } }
+  );
+}
+
+export async function disconnectTelegramAction(id: unknown): Promise<ActionResult<null>> {
+  return runAction(
+    "marketing.telegram.disconnect",
+    async (ctx) => {
+      await disconnectTelegram(ctx, parseInput(objectIdSchema, id));
+      refresh();
+      return null;
+    },
+    { rateLimit: { limit: 20, windowMs: 60_000 } }
+  );
 }

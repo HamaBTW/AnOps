@@ -13,10 +13,11 @@ import { Button, selectClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
 import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
-import { renderTemplate, smsSegmentCount, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TEMPLATE_VARIABLES, type TemplateVariable } from "@/features/marketing/utils/template";
+import { renderTemplate, smsSegmentCount, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TELEGRAM_BODY_MAX, TELEGRAM_VARIABLES, TEMPLATE_VARIABLES, type TemplateVariable } from "@/features/marketing/utils/template";
 import { DEFAULT_EMAIL_DESIGN, renderEmailHtml, type EmailDesign } from "@/features/marketing/utils/email-design";
 import { EmailDesignPicker } from "@/features/marketing/components/email-design-picker";
 import { EmailPreview } from "@/features/marketing/components/email-preview";
+import { TelegramPreview } from "@/features/marketing/components/telegram-preview";
 import type { CampaignDto } from "@/server/marketing/campaign.service";
 
 type CampaignFormValues = z.input<typeof campaignInputSchema>;
@@ -139,6 +140,8 @@ export function CampaignForm({
               <p className="break-words"><span className="font-semibold">Subject:</span> {renderedSubject || "—"}</p>
               <EmailPreview html={emailHtml} title="Message preview" className="mt-3" />
             </>
+          ) : channel === "telegram" ? (
+            <TelegramPreview body={renderedBody} />
           ) : (
             <>
               <p className="whitespace-pre-wrap break-words">{renderedBody ? smsText : "Your SMS appears here."}</p>
@@ -196,14 +199,16 @@ export function CampaignForm({
         {errors.design?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.design.message}</p>}
 
         <div className="space-y-1.5">
-          <label htmlFor="body" className="text-sm font-semibold">{channel === "email" ? "Message" : "SMS message"}</label>
+          <label htmlFor="body" className="text-sm font-semibold">{channel === "email" ? "Message" : channel === "telegram" ? "Telegram message" : "SMS message"}</label>
           <textarea id="body" rows={channel === "email" ? 9 : 5} aria-invalid={Boolean(errors.body)} className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-3 text-sm focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]" {...register("body")} />
           {errors.body?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.body.message}</p>}
           <p className="text-xs text-[var(--color-text-secondary)]">
             {channel === "email"
               ? "Plain text; the design adds layout and the unsubscribe footer. "
-              : ""}
-            Variables: {TEMPLATE_VARIABLES.map((name) => `{{${name}}}`).join(" ")}
+              : channel === "telegram"
+                ? `Plain text, up to ${TELEGRAM_BODY_MAX.toLocaleString("en-US")} characters. Only customers who linked their Telegram chat and agreed to Telegram marketing are sent this. `
+                : ""}
+            Variables: {(channel === "telegram" ? TELEGRAM_VARIABLES : TEMPLATE_VARIABLES).map((name) => `{{${name}}}`).join(" ")}
           </p>
         </div>
 

@@ -8,6 +8,7 @@ import { PageHeader } from "@/shared/components/data-display/page-header";
 import { Pagination } from "@/shared/components/data-display/pagination";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { CampaignForm } from "@/features/marketing/components/campaign-form";
+import { TelegramPreview } from "@/features/marketing/components/telegram-preview";
 import { EmailPreview } from "@/features/marketing/components/email-preview";
 import { CampaignActions } from "@/features/marketing/components/campaign-actions";
 import { DeliveryFilter } from "@/features/marketing/components/delivery-filter";
@@ -106,6 +107,8 @@ export default async function CampaignDetailPage({
                 unsubscribeInBody: campaign.body.includes("{{unsubscribe_url}}"),
               })}
             />
+          ) : campaign.channel === "telegram" ? (
+            <TelegramPreview body={renderTemplate(campaign.body, SAMPLE_VALUES)} />
           ) : (
             <p className="whitespace-pre-wrap break-words text-sm">{renderTemplate(campaign.body, SAMPLE_VALUES)}</p>
           )}

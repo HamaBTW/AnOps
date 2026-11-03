@@ -4,7 +4,7 @@ import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { getCampaignReport } from "@/server/marketing/analytics.service";
 import { PageHeader } from "@/shared/components/data-display/page-header";
 import { StatCard } from "@/features/marketing/components/stat-card";
-import { EXCLUSION_LABELS, DELIVERY_STATUS_LABELS } from "@/features/marketing/labels";
+import { CHANNEL_LABELS, EXCLUSION_LABELS, DELIVERY_STATUS_LABELS } from "@/features/marketing/labels";
 import { DELIVERY_STATUSES, type DeliveryStatus } from "@/features/marketing/types/constants";
 import { orNotFound } from "@/server/marketing/page-guard";
 
@@ -23,7 +23,7 @@ export default async function CampaignReportPage({ params }: { params: Promise<{
     <div className="space-y-8">
       <PageHeader
         title={report.name}
-        description={`${report.channel === "email" ? "Email" : "SMS"} campaign report · ${report.status.replace("_", " ")}`}
+        description={`${CHANNEL_LABELS[report.channel]} campaign report · ${report.status.replace("_", " ")}`}
         actions={<Link href={`/marketing/campaigns/${report.campaignId}`} className="inline-flex min-h-[44px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm">Open campaign</Link>}
       />
 
@@ -52,21 +52,36 @@ export default async function CampaignReportPage({ params }: { params: Promise<{
         <h2 id="rates" className="text-base font-semibold">Rates</h2>
         <dl className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           {([
-            ["Delivery rate", report.rates.deliveryRate, report.definitions.deliveryRate],
-            ["Bounce rate", report.rates.bounceRate, report.definitions.bounceRate],
-            ["Complaint rate", report.rates.complaintRate, report.definitions.complaintRate],
-            ["Failure rate", report.rates.failureRate, report.definitions.failureRate],
-            ["Open rate (estimate)", report.rates.openRateEstimate, report.definitions.openRateEstimate],
-            ["Click rate", report.rates.clickRate, report.definitions.clickRate],
-          ] as const).map(([label, value, definition]) => (
+            ["Delivery rate", report.rates.deliveryRate, report.definitions.deliveryRate, report.support.delivery],
+            ["Bounce rate", report.rates.bounceRate, report.definitions.bounceRate, report.support.bounce],
+            ["Complaint rate", report.rates.complaintRate, report.definitions.complaintRate, report.support.bounce],
+            ["Failure rate", report.rates.failureRate, report.definitions.failureRate, true],
+            ["Open rate (estimate)", report.rates.openRateEstimate, report.definitions.openRateEstimate, report.support.opens],
+            ["Click rate", report.rates.clickRate, report.definitions.clickRate, report.support.clicks],
+          ] as const).map(([label, value, definition, supported]) => (
             <div key={label} className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4">
               <dt className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">{label}</dt>
-              <dd className="mt-2 text-2xl font-semibold tabular-nums">{percent(value)}</dd>
-              <dd className="mt-2 text-xs text-[var(--color-text-secondary)]">{definition}</dd>
+              {supported ? (
+                <>
+                  <dd className="mt-2 text-2xl font-semibold tabular-nums">{percent(value)}</dd>
+                  <dd className="mt-2 text-xs text-[var(--color-text-secondary)]">{definition}</dd>
+                </>
+              ) : (
+                <>
+                  <dd className="mt-2 text-base font-semibold text-[var(--color-text-secondary)]">Not reported by {CHANNEL_LABELS[report.channel]}</dd>
+                  <dd className="mt-2 text-xs text-[var(--color-text-secondary)]">Shown as unavailable, not as zero.</dd>
+                </>
+              )}
             </div>
           ))}
         </dl>
-        {report.openTracking === "not_reported" && (
+        {report.channel === "telegram" && (
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Telegram tells AnOps when it accepts a message, not whether it was delivered or read, so only acceptance, failures,
+            pending messages and opt-outs are measured. The delivery breakdown below counts messages Telegram accepted as Sent.
+          </p>
+        )}
+        {report.channel !== "telegram" && report.openTracking === "not_reported" && (
           <p className="text-sm text-[var(--color-text-secondary)]">Open and click rates appear only when the sending provider reports those events. None are reported yet.</p>
         )}
         <p className="text-sm text-[var(--color-text-secondary)]">Unsubscribes through this campaign: <span className="font-semibold text-[var(--color-text-primary)]">{report.unsubscribes}</span></p>

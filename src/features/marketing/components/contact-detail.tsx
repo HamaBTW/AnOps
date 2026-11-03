@@ -16,8 +16,10 @@ import {
 import { Button, selectClass } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { formatDateTime } from "@/shared/lib/format";
-import { consentLabel, LIFECYCLE_LABELS, SOURCE_LABELS } from "@/features/marketing/labels";
+import { CHANNEL_LABELS, consentLabel, LIFECYCLE_LABELS, SOURCE_LABELS } from "@/features/marketing/labels";
 import { ContactForm } from "@/features/marketing/components/contact-form";
+import { TelegramConnection } from "@/features/marketing/components/telegram-connection";
+import type { TelegramConnectionDto } from "@/server/marketing/telegram.service";
 import { tunisiaLocalToIso } from "@/features/marketing/utils/datetime";
 import { MARKETING_CHANNELS } from "@/features/marketing/types/constants";
 import type { ContactDetailDto } from "@/server/marketing/contact.service";
@@ -46,6 +48,8 @@ export function ContactDetail({
   canManage,
   canConsent,
   canTag,
+  telegram,
+  telegramBotReady,
 }: {
   contact: ContactDetailDto;
   history: ConsentEventDto[];
@@ -53,6 +57,8 @@ export function ContactDetail({
   canManage: boolean;
   canConsent: boolean;
   canTag: boolean;
+  telegram: TelegramConnectionDto;
+  telegramBotReady: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -157,6 +163,14 @@ export function ContactDetail({
         )}
       </section>
 
+      <TelegramConnection
+        contactId={contact.id}
+        connection={telegram}
+        botReady={telegramBotReady}
+        canManage={canManage}
+        consentGranted={contact.consent.telegram?.status === "granted"}
+      />
+
       <ConsentSection contact={contact} history={history} canConsent={canConsent} onChanged={() => router.refresh()} />
 
       {canManage && (
@@ -212,7 +226,7 @@ function ConsentSection({
     defaultValues: { channel: "email", status: "granted", source: "manual", occurredAt: "" },
   });
   const channel = watch("channel");
-  const current = channel === "email" ? contact.consent.email : contact.consent.sms;
+  const current = contact.consent[channel];
 
   const submit = (values: ConsentForm) =>
     startTransition(async () => {
@@ -233,14 +247,14 @@ function ConsentSection({
     <section aria-labelledby="consent" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
       <h2 id="consent" className="text-base font-semibold">Marketing consent</h2>
       <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-        Consent is kept per channel. Email consent never authorises SMS. Withdrawals are recorded and never deleted.
+        Consent is kept per channel. Email consent never authorises SMS, and neither authorises Telegram. Withdrawals are recorded and never deleted.
       </p>
-      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-        {(["email", "sms"] as const).map((item) => {
-          const state = item === "email" ? contact.consent.email : contact.consent.sms;
+      <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+        {(["email", "sms", "telegram"] as const).map((item) => {
+          const state = contact.consent[item];
           return (
             <div key={item} className="rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-3 text-sm">
-              <dt className="font-semibold">{item === "email" ? "Email" : "SMS"}</dt>
+              <dt className="font-semibold">{CHANNEL_LABELS[item]}</dt>
               <dd className="mt-1">
                 {state ? (
                   <>
@@ -263,6 +277,7 @@ function ConsentSection({
             <select id="consent-channel" className={selectClass} {...register("channel")}>
               <option value="email">Email</option>
               <option value="sms">SMS</option>
+              <option value="telegram">Telegram (needs a connected chat)</option>
             </select>
           </div>
           <div className="space-y-1.5">
@@ -298,7 +313,7 @@ function ConsentSection({
               </p>
             )}
           </div>
-          <p className="text-xs text-[var(--color-text-secondary)] sm:col-span-2">Current {channel === "email" ? "email" : "SMS"} state: {current ? consentLabel(current.status) : consentLabel("not_granted")}</p>
+          <p className="text-xs text-[var(--color-text-secondary)] sm:col-span-2">Current {CHANNEL_LABELS[channel]} state: {current ? consentLabel(current.status) : consentLabel("not_granted")}</p>
           <div className="sm:col-span-2 flex justify-end">
             <Button type="submit" variant="primary" disabled={pending}>{pending ? "Saving…" : "Record"}</Button>
           </div>
@@ -312,7 +327,7 @@ function ConsentSection({
         <ol className="mt-2 divide-y divide-[var(--color-border-subtle)] text-sm">
           {history.map((event) => (
             <li key={event.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:justify-between">
-              <span>{event.channel === "email" ? "Email" : "SMS"} · {consentLabel(event.status)}</span>
+              <span>{CHANNEL_LABELS[event.channel]} · {consentLabel(event.status)}</span>
               <span className="text-[var(--color-text-secondary)]">
                 {formatDateTime(event.occurredAt)} · {event.source.replace("_", " ")} · {event.recordedByUser ? "by a team member" : "by the contact"}
               </span>

@@ -13,10 +13,11 @@ import { Button, selectClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";
 import { CHANNEL_LABELS } from "@/features/marketing/labels";
 import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
-import { renderTemplate, smsSegmentCount, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TEMPLATE_VARIABLES, type TemplateVariable } from "@/features/marketing/utils/template";
+import { renderTemplate, smsSegmentCount, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TELEGRAM_BODY_MAX, TELEGRAM_VARIABLES, TEMPLATE_VARIABLES, type TemplateVariable } from "@/features/marketing/utils/template";
 import { DEFAULT_EMAIL_DESIGN, renderEmailHtml, type EmailDesign } from "@/features/marketing/utils/email-design";
 import { EmailDesignPicker } from "@/features/marketing/components/email-design-picker";
 import { EmailPreview } from "@/features/marketing/components/email-preview";
+import { TelegramPreview } from "@/features/marketing/components/telegram-preview";
 import type { TemplateDto } from "@/server/marketing/template.service";
 
 const SAMPLE: Record<TemplateVariable, string> = {
@@ -70,6 +71,7 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
       }),
     [design, rendered, renderedSubject, body]
   );
+  const allowedVariables: readonly string[] = channel === "telegram" ? TELEGRAM_VARIABLES : TEMPLATE_VARIABLES;
   const smsText = `${rendered} ${SMS_OPT_OUT_FOOTER}`;
   const smsLength = smsText.length;
 
@@ -113,6 +115,8 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
               <p className="break-words text-sm"><span className="font-semibold">Subject:</span> {renderedSubject || "—"}</p>
               <EmailPreview html={emailHtml} title="Email preview" className="mt-3" />
             </>
+          ) : channel === "telegram" ? (
+            <TelegramPreview body={rendered} />
           ) : (
             <>
               <p className="whitespace-pre-wrap break-words text-sm">{smsText.trim() === SMS_OPT_OUT_FOOTER ? "Your SMS appears here." : smsText}</p>
@@ -123,7 +127,7 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
           )}
         </div>
         <p className="text-xs text-[var(--color-text-secondary)]">
-          Allowed variables: {TEMPLATE_VARIABLES.map((name) => `{{${name}}}`).join(", ")}. Any other {"{{…}}"} is rejected on save.
+          Allowed variables: {allowedVariables.map((name) => `{{${name}}}`).join(", ")}. Any other {"{{…}}"} is rejected on save.
         </p>
       </aside>
 
@@ -153,7 +157,7 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
         {errors.design?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.design.message}</p>}
 
         <div className="space-y-1.5">
-          <label htmlFor="body" className="text-sm font-semibold">{channel === "email" ? "Message" : "SMS message"}</label>
+          <label htmlFor="body" className="text-sm font-semibold">{channel === "email" ? "Message" : channel === "telegram" ? "Telegram message" : "SMS message"}</label>
           <textarea
             id="body"
             rows={channel === "email" ? 10 : 5}
@@ -166,7 +170,9 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
           <p id="body-help" className="text-xs text-[var(--color-text-secondary)]">
             {channel === "email"
               ? "Plain text. Line breaks are kept; the chosen design supplies the layout and unsubscribe footer."
-              : `Up to ${SMS_BODY_MAX - SMS_OPT_OUT_FOOTER.length - 1} characters. "${SMS_OPT_OUT_FOOTER}" is added automatically.`}
+              : channel === "telegram"
+                ? `Plain text, up to ${TELEGRAM_BODY_MAX.toLocaleString("en-US")} characters. Nothing is formatted or shortened. "Send /stop to stop receiving marketing messages." is added automatically.`
+                : `Up to ${SMS_BODY_MAX - SMS_OPT_OUT_FOOTER.length - 1} characters. "${SMS_OPT_OUT_FOOTER}" is added automatically.`}
           </p>
           {errors.body?.message && <p role="alert" className="text-xs text-[#c0392b]">{errors.body.message}</p>}
         </div>
@@ -174,7 +180,7 @@ export function TemplateForm({ template, canManage }: { template?: TemplateDto; 
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold">Insert a variable</legend>
           <div className="flex flex-wrap gap-2">
-            {TEMPLATE_VARIABLES.filter((name) => name !== "unsubscribe_url" || channel === "email").map((name) => (
+            {TEMPLATE_VARIABLES.filter((name) => (channel === "telegram" ? (TELEGRAM_VARIABLES as readonly string[]).includes(name) : name !== "unsubscribe_url" || channel === "email")).map((name) => (
               <button
                 key={name}
                 type="button"

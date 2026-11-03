@@ -7,6 +7,9 @@ import {
   EMAIL_SUBJECT_MAX,
   SMS_BODY_MAX,
   SMS_OPT_OUT_FOOTER,
+  TELEGRAM_BODY_MAX,
+  TELEGRAM_VARIABLES,
+  extractTemplateTokens,
   findUnknownTemplateVariables,
   TEMPLATE_VARIABLES,
 } from "@/features/marketing/utils/template";
@@ -220,26 +223,41 @@ function validateMessageContent(
       ctx.addIssue({ code: "custom", path: ["body"], message: `Maximum ${EMAIL_BODY_MAX} characters` });
     }
   } else {
+    const label = value.channel === "sms" ? "SMS" : "Telegram";
     if (value.design !== DEFAULT_EMAIL_DESIGN) {
-      ctx.addIssue({ code: "custom", path: ["design"], message: "SMS messages always use the plain style" });
+      ctx.addIssue({ code: "custom", path: ["design"], message: `${label} messages always use the plain style` });
     }
     if (value.subject.trim() !== "") {
-      ctx.addIssue({ code: "custom", path: ["subject"], message: "SMS messages have no subject" });
+      ctx.addIssue({ code: "custom", path: ["subject"], message: `${label} messages have no subject` });
     }
-    if (value.body.length + 1 + SMS_OPT_OUT_FOOTER.length > SMS_BODY_MAX) {
+    if (value.channel === "sms" && value.body.length + 1 + SMS_OPT_OUT_FOOTER.length > SMS_BODY_MAX) {
       ctx.addIssue({
         code: "custom",
         path: ["body"],
         message: `SMS is limited to ${SMS_BODY_MAX} characters including the opt-out line`,
       });
     }
+    if (value.channel === "telegram" && value.body.length > TELEGRAM_BODY_MAX) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["body"],
+        message: `Telegram messages are limited to ${TELEGRAM_BODY_MAX} characters before the opt-out line is added`,
+      });
+    }
   }
-  const unknown = [...new Set([...findUnknownTemplateVariables(value.subject), ...findUnknownTemplateVariables(value.body)])];
-  if (unknown.length > 0) {
+  const allowed: readonly string[] = value.channel === "telegram" ? TELEGRAM_VARIABLES : TEMPLATE_VARIABLES;
+  const unknown = [
+    ...new Set([...findUnknownTemplateVariables(value.subject), ...findUnknownTemplateVariables(value.body)]),
+  ];
+  const disallowed = [
+    ...new Set([...extractTemplateTokens(value.subject), ...extractTemplateTokens(value.body)]),
+  ].filter((name) => !allowed.includes(name));
+  if (unknown.length > 0 || disallowed.length > 0) {
+    const name = unknown[0] ?? disallowed[0];
     ctx.addIssue({
       code: "custom",
       path: ["body"],
-      message: `Unknown variable {{${unknown[0]}}}. Allowed: ${TEMPLATE_VARIABLES.map((name) => `{{${name}}}`).join(", ")}`,
+      message: `Unknown variable {{${name}}}. Allowed: ${allowed.map((item) => `{{${item}}}`).join(", ")}`,
     });
   }
 }

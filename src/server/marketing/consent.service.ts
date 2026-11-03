@@ -1,7 +1,7 @@
 import "server-only";
 import { ObjectId, type Db } from "mongodb";
-import { MARKETING_COLLECTIONS, type ConsentEventDoc, type ConsentSource, type ConsentStateDoc, type ConsentStatus, type ContactDoc } from "@/server/marketing/documents";
-import { MARKETING_CHANNELS, type MarketingChannel } from "@/features/marketing/types/constants";
+import { MARKETING_COLLECTIONS, type ConsentEventDoc, type ConsentSource, type ConsentStateDoc, type ConsentStatus, type ContactDoc, type TelegramSubscriptionDoc } from "@/server/marketing/documents";
+import { DIRECT_CONTACT_CHANNELS, type DirectContactChannel, type MarketingChannel } from "@/features/marketing/types/constants";
 import { recordAudit } from "@/server/audit/audit.service";
 import type { Tx } from "@/server/db/transactions";
 import { withTransaction } from "@/server/db/transactions";
@@ -16,6 +16,7 @@ export type ConsentStateDto = { status: ConsentStatus; occurredAt: string; sourc
 export type ConsentDto = {
   email: ConsentStateDto | null;
   sms: ConsentStateDto | null;
+  telegram: ConsentStateDto | null;
 };
 
 export type ConsentEventDto = {
@@ -129,20 +130,21 @@ export async function syncConsentStatuses(
   args: {
     companyId: ObjectId;
     contactId: ObjectId;
-    hasAddress: Record<MarketingChannel, boolean>;
-    desired: Record<MarketingChannel, boolean>;
+    hasAddress: Record<DirectContactChannel, boolean>;
+    desired: Record<DirectContactChannel, boolean>;
     recordedBy: ObjectId;
     requestId: string;
   },
   tx: Tx
-): Promise<MarketingChannel[]> {
+): Promise<DirectContactChannel[]> {
   const states = await db
     .collection<ConsentStateDoc>(MARKETING_COLLECTIONS.consentStates)
     .find({ companyId: args.companyId, contactId: args.contactId, purpose: PURPOSE }, { session: tx.session })
     .toArray();
-  const changed: MarketingChannel[] = [];
+  const changed: DirectContactChannel[] = [];
 
-  for (const channel of MARKETING_CHANNELS) {
+  // Telegram consent is never touched here: saving the contact form must not grant or withdraw it.
+  for (const channel of DIRECT_CONTACT_CHANNELS) {
     const granted = states.some((state) => state.channel === channel && state.status === "granted");
     const wanted = args.desired[channel];
     if (wanted === granted) continue;
@@ -184,12 +186,26 @@ export async function changeConsent(
   const contactId = toObjectId(contactIdRaw);
   const contact = await assertContact(ctx.db, ctx.companyId, contactId);
 
+  let telegramChatId: string | null = null;
   if (input.status === "granted") {
     if (input.channel === "email" && !contact.normalizedEmail) {
       throw new AppError("VALIDATION_ERROR", "This contact has no email address to consent for", { email: "Add an email address first" });
     }
     if (input.channel === "sms" && !contact.phone) {
       throw new AppError("VALIDATION_ERROR", "This contact has no phone number to consent for", { phone: "Add a phone number first" });
+    }
+    if (input.channel === "telegram") {
+      // Pressing Start proves the customer controls the chat. It is not marketing consent, so an operator
+      // records that consent explicitly, and only once a chat is linked.
+      const linked = await ctx.db
+        .collection<TelegramSubscriptionDoc>(MARKETING_COLLECTIONS.telegramSubscriptions)
+        .findOne({ companyId: ctx.companyId, contactId, status: "active" }, { projection: { chatId: 1 } });
+      if (!linked) {
+        throw new AppError("VALIDATION_ERROR", "Connect this contact to Telegram before recording Telegram consent", {
+          channel: "Connect Telegram first",
+        });
+      }
+      telegramChatId = linked.chatId;
     }
   }
 
@@ -222,6 +238,14 @@ export async function changeConsent(
       },
       tx
     );
+    // An explicit new grant lifts the opt-out that /stop recorded for this chat. A bounce or manual
+    // suppression is a different reason and stays.
+    if (telegramChatId && result.stateChanged) {
+      await ctx.db.collection(MARKETING_COLLECTIONS.suppressions).deleteOne(
+        { companyId: ctx.companyId, channel: "telegram", normalizedDestination: telegramChatId, reason: "unsubscribed" },
+        { session: tx.session }
+      );
+    }
     return result;
   });
 }
@@ -242,7 +266,7 @@ export async function getConsentState(ctx: WorkspaceContext, contactIdRaw: strin
       source: source.get(channel) ?? null,
     };
   };
-  return { email: dto("email"), sms: dto("sms") };
+  return { email: dto("email"), sms: dto("sms"), telegram: dto("telegram") };
 }
 
 async function latestSources(db: Db, ctx: WorkspaceContext, contactId: ObjectId): Promise<Map<MarketingChannel, ConsentSource>> {

@@ -8,7 +8,7 @@ import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import { consumeRateLimit } from "@/server/security/rate-limit";
 import type { AiRequestInput } from "@/features/marketing/schemas/marketing.schema";
-import { EMAIL_SUBJECT_MAX, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER } from "@/features/marketing/utils/template";
+import { EMAIL_SUBJECT_MAX, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TELEGRAM_BODY_MAX } from "@/features/marketing/utils/template";
 import { MARKETING_PAGE_SIZE, pageMeta, requireMarketing, scopeOf, skipOf, toObjectId } from "@/server/marketing/common";
 import { PERMISSIONS } from "@/server/security/permissions";
 import { createSocialPost } from "@/server/marketing/social/post.service";
@@ -32,6 +32,7 @@ export const COPY_SYSTEM_PROMPT = [
 const LIMITS = {
   email: { subject: EMAIL_SUBJECT_MAX, body: 1500 },
   sms: { subject: 0, body: SMS_BODY_MAX - SMS_OPT_OUT_FOOTER.length - 1 },
+  telegram: { subject: 0, body: Math.min(1500, TELEGRAM_BODY_MAX) },
   facebook_page: { subject: 0, body: 1500 },
 } as const;
 

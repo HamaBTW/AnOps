@@ -4,6 +4,8 @@ import { getBrevoState, type BrevoState } from "@/server/marketing/providers/bre
 import { createBrevoEmailProvider, createBrevoSmsProvider } from "@/server/marketing/providers/brevo/adapters";
 import { createSmtpEmailProvider, verifySmtpEmailProvider } from "@/server/marketing/providers/smtp/adapters";
 import { getSmtpState, type SmtpState } from "@/server/marketing/providers/smtp/config";
+import { createTelegramProvider } from "@/server/marketing/providers/telegram/adapters";
+import { getTelegramState, type TelegramState } from "@/server/marketing/providers/telegram/config";
 import type { MessageProviders } from "@/server/marketing/providers/types";
 
 export { ProviderError } from "@/server/marketing/providers/types";
@@ -12,10 +14,13 @@ export type { MessageProvider, MessageProviders, OutboundMessage } from "@/serve
 /**
  * Builds the provider registry from already-resolved configuration states.
  * SMTP (the existing Gmail/SMTP account) is preferred for email; Brevo email is
- * only a fallback when SMTP is not configured. SMS remains Brevo-only.
+ * only a fallback when SMTP is not configured. SMS remains Brevo-only. Telegram uses the Bot API and is
+ * independent of both.
  */
-export function selectConfiguredProviders(smtp: SmtpState, brevo: BrevoState): MessageProviders {
+export function selectConfiguredProviders(smtp: SmtpState, brevo: BrevoState, telegram?: TelegramState): MessageProviders {
   const providers: MessageProviders = {};
+
+  if (telegram?.configured) providers.telegram = createTelegramProvider(telegram.config);
 
   if (brevo.configured) {
     const sms = createBrevoSmsProvider(brevo.config);
@@ -38,7 +43,7 @@ export function selectConfiguredProviders(smtp: SmtpState, brevo: BrevoState): M
  * refused and nothing is ever reported as sent.
  */
 export function getConfiguredProviders(): MessageProviders {
-  return selectConfiguredProviders(getSmtpState(), getBrevoState());
+  return selectConfiguredProviders(getSmtpState(), getBrevoState(), getTelegramState());
 }
 
 export type EmailProviderTest = { ok: boolean; errorCode: string | null; providerName: string | null };

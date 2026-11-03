@@ -3,10 +3,11 @@ import Link from "next/link";
 import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { getDashboard } from "@/server/marketing/analytics.service";
 import { PageHeader } from "@/shared/components/data-display/page-header";
-import { CAMPAIGN_STATUS_LABELS, DELIVERY_STATUS_LABELS, LIFECYCLE_LABELS } from "@/features/marketing/labels";
-import { CAMPAIGN_STATUSES, DELIVERY_STATUSES, LIFECYCLE_STAGES } from "@/features/marketing/types/constants";
+import { CAMPAIGN_STATUS_LABELS, CHANNEL_LABELS, DELIVERY_STATUS_LABELS, LIFECYCLE_LABELS } from "@/features/marketing/labels";
+import { CAMPAIGN_STATUSES, DELIVERY_STATUSES, LIFECYCLE_STAGES, MARKETING_CHANNELS } from "@/features/marketing/types/constants";
 import { StatCard } from "@/features/marketing/components/stat-card";
 import { ButtonLink } from "@/shared/components/ui/button";
+import { StatusBadge } from "@/shared/components/data-display/status-badge";
 
 export const metadata: Metadata = { title: "Marketing | AnOps ERP" };
 
@@ -21,9 +22,9 @@ export default async function MarketingOverviewPage() {
         actions={<ButtonLink href="/marketing/campaigns/new" variant="primary">New campaign</ButtonLink>}
       />
 
-      {!data.integrations.email && !data.integrations.sms && (
+      {!data.integrations.email && !data.integrations.sms && !data.integrations.telegram && (
         <div role="status" className="rounded-[var(--radius-card)] border border-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] p-4 text-sm text-[var(--color-status-warning)]">
-          No email or SMS provider is connected. Campaigns can be drafted and approved, but they cannot be scheduled
+          No email, SMS or Telegram provider is connected. Campaigns can be drafted and approved, but they cannot be scheduled
           until a provider is configured. See <Link className="underline" href="/marketing/integrations">Integrations</Link>.
         </div>
       )}
@@ -36,6 +37,27 @@ export default async function MarketingOverviewPage() {
           <StatCard label="Campaigns scheduled" value={data.campaigns.scheduled} hint={`${data.campaigns.completed} completed`} href="/marketing/campaigns" />
           <StatCard label="Queued deliveries" value={data.deliveries.queued} hint={`${data.deliveries.accepted} accepted by provider`} />
         </div>
+      </section>
+
+      <section aria-labelledby="channels" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
+        <h2 id="channels" className="mb-1 text-base font-semibold">Channels</h2>
+        <p className="mb-4 text-sm text-[var(--color-text-secondary)]">
+          Each channel has its own provider and its own consent. &ldquo;Accepted&rdquo; counts messages the provider took; it is not a read or delivery count.
+        </p>
+        <ul className="divide-y divide-[var(--color-border-subtle)]">
+          {MARKETING_CHANNELS.map((channel) => (
+            <li key={channel} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="w-20 font-semibold">{CHANNEL_LABELS[channel]}</span>
+                <StatusBadge label={data.integrations[channel] ? "Provider ready" : "No provider"} tone={data.integrations[channel] ? "success" : "neutral"} />
+              </div>
+              <p className="text-sm tabular-nums text-[var(--color-text-secondary)]">
+                {data.channels[channel].campaigns} campaign{data.channels[channel].campaigns === 1 ? "" : "s"} · {data.channels[channel].accepted} accepted
+                {channel === "telegram" && ` · ${data.telegram.connectedContacts} contact${data.telegram.connectedContacts === 1 ? "" : "s"} connected${data.telegram.blockedContacts > 0 ? `, ${data.telegram.blockedContacts} unreachable` : ""}`}
+              </p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

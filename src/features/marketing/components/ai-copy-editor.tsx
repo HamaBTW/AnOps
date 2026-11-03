@@ -111,7 +111,7 @@ export function AiCopyEditor({
             <div className="space-y-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5">
               <h2 id="use" className="text-base font-semibold">Use in a draft campaign</h2>
               {compatible.length === 0 ? (
-                <p className="text-sm text-[var(--color-text-secondary)]">No draft {CHANNEL_LABELS[generation.channel as "email" | "sms"]} campaign exists. <Link className="underline" href="/marketing/campaigns/new">Create one</Link>.</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">No draft {CHANNEL_LABELS[generation.channel as "email" | "sms" | "telegram"]} campaign exists. <Link className="underline" href="/marketing/campaigns/new">Create one</Link>.</p>
               ) : (
                 <>
                   <label htmlFor="campaign-target" className="text-sm font-semibold">Campaign</label>

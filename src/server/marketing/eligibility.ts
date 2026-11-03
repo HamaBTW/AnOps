@@ -1,6 +1,6 @@
 import "server-only";
 import type { Db, ObjectId } from "mongodb";
-import { MARKETING_COLLECTIONS, type ConsentStateDoc, type ContactDoc, type SuppressionDoc } from "@/server/marketing/documents";
+import { MARKETING_COLLECTIONS, type ConsentStateDoc, type ContactDoc, type SuppressionDoc, type TelegramSubscriptionDoc } from "@/server/marketing/documents";
 import type { MarketingChannel } from "@/features/marketing/types/constants";
 
 /**
@@ -10,7 +10,7 @@ import type { MarketingChannel } from "@/features/marketing/types/constants";
  *
  * Checks, in order:
  *  1. The contact is active and not in the inactive lifecycle stage.
- *  2. A destination exists for the channel (email address or phone number).
+ *  2. A destination exists for the channel (email address, phone number, or an active Telegram chat link).
  *  3. Effective marketing consent for this exact channel is granted. Consent for one channel never
  *     authorises another.
  *  4. The destination is not on the company suppression list (unsubscribed, bounced, complained, manual).
@@ -35,14 +35,28 @@ export const EXCLUSION_REASONS: readonly ExclusionReason[] = [
 
 export const EXCLUSION_LABELS: Record<ExclusionReason, string> = {
   contact_inactive: "Contact inactive",
-  missing_destination: "No valid address",
+  missing_destination: "No valid address or chat",
   no_consent: "No marketing consent",
   suppressed: "Suppressed",
 };
 
+/**
+ * Destination stored on the contact itself. Telegram has none: its chat id lives on the subscription a
+ * customer created by pressing Start, so it is resolved in evaluateEligibility instead.
+ */
 export function destinationFor(contact: EligibilityInput, channel: MarketingChannel): string {
   if (channel === "email") return contact.normalizedEmail ?? "";
-  return contact.phone;
+  if (channel === "sms") return contact.phone;
+  return "";
+}
+
+/** Active chat ids by contact. A blocked or disconnected subscription is not a usable destination. */
+async function activeTelegramChats(db: Db, companyId: ObjectId, contactIds: ObjectId[]): Promise<Map<string, string>> {
+  const rows = await db
+    .collection<TelegramSubscriptionDoc>(MARKETING_COLLECTIONS.telegramSubscriptions)
+    .find({ companyId, status: "active", contactId: { $in: contactIds } }, { projection: { contactId: 1, chatId: 1 } })
+    .toArray();
+  return new Map(rows.map((row) => [row.contactId.toHexString(), row.chatId]));
 }
 
 export async function evaluateEligibility(
@@ -55,7 +69,10 @@ export async function evaluateEligibility(
   if (contacts.length === 0) return results;
 
   const ids = contacts.map((contact) => contact._id);
-  const destinations = contacts.map((contact) => destinationFor(contact, channel)).filter((value) => value !== "");
+  const chats = channel === "telegram" ? await activeTelegramChats(db, companyId, ids) : null;
+  const destinationOf = (contact: EligibilityInput): string =>
+    chats ? chats.get(contact._id.toHexString()) ?? "" : destinationFor(contact, channel);
+  const destinations = contacts.map(destinationOf).filter((value) => value !== "");
 
   const [states, suppressed] = await Promise.all([
     db
@@ -78,7 +95,7 @@ export async function evaluateEligibility(
 
   for (const contact of contacts) {
     const contactId = contact._id.toHexString();
-    const destination = destinationFor(contact, channel);
+    const destination = destinationOf(contact);
     let reason: ExclusionReason | null = null;
     if (!contact.isActive || contact.lifecycleStage === "inactive") reason = "contact_inactive";
     else if (destination === "") reason = "missing_destination";

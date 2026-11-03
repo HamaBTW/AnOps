@@ -13,6 +13,7 @@ import { normalizeEmailDesign } from "@/features/marketing/utils/email-design";
 import { recordAudit } from "@/server/audit/audit.service";
 import { AppError } from "@/shared/lib/errors";
 import { runSocialPublishJob } from "@/server/marketing/social/post.service";
+import { markTelegramUnreachable } from "@/server/marketing/telegram.service";
 
 /** Deliveries handled per run. Worst case (every send times out) must fit inside JOB_LEASE_MS. */
 export const DELIVERY_BATCH_SIZE = 20;
@@ -221,7 +222,12 @@ const DEFINITE_REJECTIONS = new Set([
   "SMTP_REJECTED",
   "SMTP_AUTH_REJECTED",
   "SMTP_RECIPIENT_REJECTED",
+  "TELEGRAM_BOT_BLOCKED",
+  "TELEGRAM_CHAT_NOT_FOUND",
 ]);
+
+/** Codes that mean the chat itself cannot be reached, so the subscription stops being a destination. */
+const TELEGRAM_UNREACHABLE = new Set(["TELEGRAM_BOT_BLOCKED", "TELEGRAM_CHAT_NOT_FOUND"]);
 
 export function classifySendFailure(
   error: unknown,
@@ -281,12 +287,16 @@ async function sendDelivery(
   const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   let providerCalled = false;
   try {
-    const unsubscribeUrl = `${getAppUrl()}/unsubscribe?token=${createUnsubscribeToken({
-      companyId: campaign.companyId.toHexString(),
-      contactId: contact._id.toHexString(),
-      channel: campaign.channel,
-      campaignId: campaign._id.toHexString(),
-    })}`;
+    // Telegram opts out with /stop in the chat, so it has no link and no signed token.
+    const unsubscribeUrl =
+      campaign.channel === "telegram"
+        ? ""
+        : `${getAppUrl()}/unsubscribe?token=${createUnsubscribeToken({
+            companyId: campaign.companyId.toHexString(),
+            contactId: contact._id.toHexString(),
+            channel: campaign.channel,
+            campaignId: campaign._id.toHexString(),
+          })}`;
     const rendered = renderMessage(
       campaign.channel,
       { subject: campaign.subject, body: campaign.body, design: normalizeEmailDesign(campaign.design) },
@@ -326,7 +336,8 @@ async function sendDelivery(
         {
           $set: {
             status: "pending",
-            nextAttemptAt: new Date(Date.now() + retryDelayMs(attempt)),
+            // Never sooner than the provider asked for (Telegram's retry_after).
+            nextAttemptAt: new Date(Date.now() + Math.max(retryDelayMs(attempt), error instanceof ProviderError ? error.retryAfterMs ?? 0 : 0)),
             lastErrorCode: failure.code,
             updatedAt: now,
           },
@@ -339,6 +350,9 @@ async function sendDelivery(
         { _id: delivery._id },
         { $set: { status: "failed", failedAt: now, lastErrorCode: failure.code, nextAttemptAt: null, updatedAt: now } }
       );
+      if (campaign.channel === "telegram" && TELEGRAM_UNREACHABLE.has(failure.code)) {
+        await markTelegramUnreachable(db, campaign.companyId, contact._id, failure.code, `delivery:${delivery._id.toHexString()}`);
+      }
     }
   } finally {
     clearTimeout(timer);

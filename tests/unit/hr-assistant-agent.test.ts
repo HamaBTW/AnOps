@@ -149,4 +149,25 @@ describe("AI HR Assistant - Solde de Congé Counting Derivation & RBAC", () => {
     expect(res.content).toContain("John Doe");
     expect(res.content).toContain("was not found in company records");
   });
+
+  it("ensures responses use clean markdown and zero raw LaTeX delimiters", async () => {
+    const res = await askHRAssistant(
+      "How is my leave balance counted and what is the formula?",
+      "507f1f77bcf86cd799439011",
+      companyId,
+      {
+        role: "employee",
+        isAdmin: false,
+        employeeId: "507f1f77bcf86cd799439011",
+        fullName: "Nour Khemir",
+      }
+    );
+
+    expect(res.content).not.toContain("\\[");
+    expect(res.content).not.toContain("\\]");
+    expect(res.content).not.toContain("\\textbf{");
+    expect(res.content).not.toContain("\\text{");
+    expect(res.content).not.toContain("\\sum");
+    expect(res.content).not.toContain("\\boxed{");
+  });
 });

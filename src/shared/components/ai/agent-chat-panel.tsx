@@ -140,19 +140,101 @@ function initMessage(content: string): ChatMessage {
   };
 }
 
-function renderMarkdown(text: string) {
-  return text
-    // 1. Action links: [Label](#action:action-name) or [Label](action:action-name)
-    .replace(
-      /\[(.*?)\]\(#?action:([^)]+)\)/g,
-      '<a href="#action:$2" data-action="$2" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] hover:opacity-90 transition-all shadow-xs my-1 mr-1.5 cursor-pointer no-underline"><span class="truncate">$1</span> <svg class="w-3 h-3 shrink-0 inline ml-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
-    )
-    // 2. Regular links: [Label](url)
-    .replace(
-      /\[(.*?)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer" class="font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity">$1</a>'
-    )
-    // 3. Auto-convert common action phrases to interactive links if the AI wrote plain text
+function cleanLatex(formula: string): string {
+  return formula
+    .replace(/\\textbf\{([^}]*)\}/g, "$1")
+    .replace(/\\text\{([^}]*)\}/g, "$1")
+    .replace(/\\mathrm\{([^}]*)\}/g, "$1")
+    .replace(/\\mathbf\{([^}]*)\}/g, "$1")
+    .replace(/\\boxed\{([^}]*)\}/g, "$1")
+    .replace(/\\sum(?:_\{[^}]*\})?(?:\^\{[^}]*\})?/g, "Σ")
+    .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\div/g, "÷")
+    .replace(/\\le(?:q)?/g, "≤")
+    .replace(/\\ge(?:q)?/g, "≥")
+    .replace(/\\approx/g, "≈")
+    .replace(/\\neq/g, "≠")
+    .replace(/\\pm/g, "±")
+    .replace(/\\quad|\\qquad/g, "  ")
+    .replace(/\\[,;!]/g, " ")
+    .replace(/\\/g, "")
+    .trim();
+}
+
+function renderMarkdown(text: string): string {
+  // 1. Preserve fenced code blocks
+  const codeBlocks: string[] = [];
+  let out = text.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length;
+    const safeCode = code
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const langBadge = lang
+      ? `<div class="text-[9px] uppercase font-bold text-neutral-400 mb-1 tracking-wider">${lang}</div>`
+      : "";
+    codeBlocks.push(
+      `<div class="my-2.5 rounded-lg bg-neutral-950 text-neutral-100 p-3 border border-neutral-800 text-xs font-mono overflow-x-auto shadow-xs">${langBadge}<pre class="m-0 leading-relaxed font-mono"><code>${safeCode.trim()}</code></pre></div>`
+    );
+    return `__CODE_BLOCK_${idx}__`;
+  });
+
+  // 2. Convert LaTeX display math blocks: \[ ... \] or $$ ... $$
+  out = out.replace(/(?:\\\[|\$\$)([\s\S]*?)(?:\\\]|\$\$)/g, (_, math) => {
+    const clean = cleanLatex(math);
+    return `<div class="my-2.5 px-3 py-2 rounded-lg bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)] font-mono text-xs font-bold text-center text-[var(--color-text-primary)] shadow-2xs">${clean}</div>`;
+  });
+
+  // 3. Convert LaTeX inline math: \( ... \)
+  out = out.replace(/\\\((.*?)\\\)/g, (_, math) => {
+    const clean = cleanLatex(math);
+    return `<code class="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">${clean}</code>`;
+  });
+
+  // 4. Markdown tables
+  out = out.replace(/(?:^|\n)((?:\|[^\n]+\|\n?)+)/g, (_, tableText) => {
+    const lines = tableText.trim().split("\n").map((l: string) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return tableText;
+
+    const rows: string[][] = [];
+    for (const line of lines) {
+      if (/^\|(?:\s*:?-+:?\s*\|)+$/.test(line)) continue; // skip separator row
+      const cells = line.split("|").slice(1, -1).map((c: string) => c.trim());
+      if (cells.length > 0) rows.push(cells);
+    }
+    if (rows.length === 0) return tableText;
+
+    const [header, ...bodyRows] = rows;
+    const ths = header
+      .map((h: string) => `<th class="px-2.5 py-1.5 text-left font-bold border-b border-[var(--color-border-subtle)] text-[11px]">${h}</th>`)
+      .join("");
+    const trs = bodyRows
+      .map((r: string[]) => {
+        const tds = r
+          .map((c: string) => `<td class="px-2.5 py-1.5 border-b border-[var(--color-border-subtle)]/60 text-[11px] text-[var(--color-text-secondary)]">${c}</td>`)
+          .join("");
+        return `<tr class="hover:bg-[var(--color-bg-subtle)]/40 transition-colors">${tds}</tr>`;
+      })
+      .join("");
+
+    return `\n<div class="my-2.5 overflow-x-auto rounded-lg border border-[var(--color-border-subtle)] shadow-2xs"><table class="w-full text-xs text-left border-collapse"><thead class="bg-[var(--color-bg-subtle)] text-[var(--color-text-primary)]"><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>\n`;
+  });
+
+  // 5. Action links: [Label](#action:action-name) or [Label](action:action-name)
+  out = out.replace(
+    /\[(.*?)\]\(#?action:([^)]+)\)/g,
+    '<a href="#action:$2" data-action="$2" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] hover:opacity-90 transition-all shadow-xs my-1 mr-1.5 cursor-pointer no-underline"><span class="truncate">$1</span> <svg class="w-3 h-3 shrink-0 inline ml-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
+  );
+
+  // 6. Regular links: [Label](url)
+  out = out.replace(
+    /\[(.*?)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity">$1</a>'
+  );
+
+  // 7. Auto-convert common action phrases
+  out = out
     .replace(
       /(HR Portal\s*→\s*Leave\s*Balance\s*section|Leave\s*Balance\s*section)/gi,
       '<a href="#action:view-leave-balance" data-action="view-leave-balance" class="inline-flex items-center gap-1 font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity cursor-pointer">$1 <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
@@ -160,14 +242,41 @@ function renderMarkdown(text: string) {
     .replace(
       /(submit a (?:new )?leave request|submit a leave request|request (?:time off|leave))/gi,
       '<a href="#action:submit-leave-request" data-action="submit-leave-request" class="inline-flex items-center gap-1 font-bold underline text-[var(--color-action-primary)] hover:opacity-80 transition-opacity cursor-pointer">$1 <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg></a>'
-    )
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`([^`]+)`/g, "<code class='bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-[0.85em] font-mono'>$1</code>")
+    );
+
+  // 8. Horizontal rules
+  out = out.replace(/^(?:---+|\*\*\*+|___+)$/gm, '<hr class="my-3 border-t border-[var(--color-border-subtle)]" />');
+
+  // 9. Blockquotes
+  out = out.replace(/^> (.*)$/gm, '<blockquote class="pl-3 py-1 my-2 border-l-2 border-[var(--color-action-primary)] text-xs text-[var(--color-text-secondary)] italic bg-[var(--color-bg-subtle)]/40 rounded-r">$1</blockquote>');
+
+  // 10. Headers
+  out = out
+    .replace(/^#### (.+)$/gm, "<h4 class='text-xs font-bold uppercase tracking-wider mt-3 mb-1 text-[var(--color-text-primary)]'>$1</h4>")
     .replace(/^### (.+)$/gm, "<h3 class='text-sm font-bold mt-3 mb-1 text-[var(--color-text-primary)]'>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2 class='text-base font-bold mt-4 mb-1 text-[var(--color-text-primary)]'>$1</h2>")
+    .replace(/^## (.+)$/gm, "<h2 class='text-base font-bold mt-4 mb-1 text-[var(--color-text-primary)]'>$1</h2>");
+
+  // 11. Bold, inline code, italics
+  out = out
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code class='bg-black/10 dark:bg-white/10 rounded px-1.5 py-0.5 text-[0.85em] font-mono font-bold'>$1</code>");
+
+  // 12. Lists
+  out = out
     .replace(/^- (.+)$/gm, "<li class='ml-4 list-disc'>$1</li>")
-    .replace(/(<li.*<\/li>\n?)+/g, (match) => `<ul class='space-y-0.5 my-1'>${match}</ul>`)
-    .replace(/\n/g, "<br/>");
+    .replace(/^[0-9]+\.\s+(.+)$/gm, "<li class='ml-4 list-decimal'>$1</li>")
+    .replace(/(<li class='ml-4 list-disc'>[\s\S]*?<\/li>\n?)+/g, (m) => `<ul class='space-y-0.5 my-1.5'>${m}</ul>`)
+    .replace(/(<li class='ml-4 list-decimal'>[\s\S]*?<\/li>\n?)+/g, (m) => `<ol class='space-y-0.5 my-1.5'>${m}</ol>`);
+
+  // 13. Restore code blocks
+  out = out.replace(/__CODE_BLOCK_(\d+)__/g, (_, idx) => codeBlocks[Number(idx)] || "");
+
+  // 14. Convert newlines to <br/> while avoiding double breaks around block elements
+  out = out.replace(/\n{2,}/g, "<br/><br/>").replace(/\n/g, "<br/>");
+  out = out.replace(/<\/(div|table|thead|tbody|tr|th|td|ul|ol|li|blockquote|h2|h3|h4|hr)><br\/>/g, "</$1>");
+  out = out.replace(/<br\/><(div|table|thead|tbody|tr|th|td|ul|ol|li|blockquote|h2|h3|h4|hr)/g, "<$1");
+
+  return out;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

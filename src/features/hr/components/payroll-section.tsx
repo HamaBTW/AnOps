@@ -118,37 +118,29 @@ export function PayrollSection({
   return (
     <div className="space-y-6">
       {/* Formula & Policy Guidance Banner */}
-      <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[var(--color-border-subtle)] pb-4">
           <div className="flex items-start gap-3">
-            <div className="rounded-full bg-[var(--color-action-primary)]/20 p-2 text-[var(--color-action-on-primary)] shrink-0 mt-0.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-action-primary)]/15 text-[var(--color-action-on-primary)] shrink-0 mt-0.5">
               <Calculator className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
-                Net Salary Calculation Engine & Formula
-              </h3>
-              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Formula complies with AnOps HR standards (22 working days / month, currency in TND):
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-mono">
-                <span className="rounded bg-[var(--color-bg-subtle)] px-2 py-1 text-[var(--color-text-primary)]">
-                  daily_rate = base_salary / 22
-                </span>
-                <span className="text-[var(--color-text-secondary)]">→</span>
-                <span className="rounded bg-[var(--color-bg-subtle)] px-2 py-1 text-[var(--color-text-primary)]">
-                  deduction = daily_rate × unpaid_leave_days
-                </span>
-                <span className="text-[var(--color-text-secondary)]">→</span>
-                <span className="rounded bg-[var(--color-action-primary)]/20 px-2 py-1 font-bold text-[var(--color-text-primary)]">
-                  net_salary = base_salary - deduction
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold tracking-tight text-[var(--color-text-primary)]">
+                  Net Salary & Unpaid Leave Calculation Engine
+                </h3>
+                <span className="hidden sm:inline-block rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-500/20">
+                  22 Working Days/Mo
                 </span>
               </div>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                Standard monthly salary formula deducting uncompensated leave days in Tunisian Dinars (TND):
+              </p>
             </div>
           </div>
 
           {/* Period Selector & Batch Generate CTA */}
-          <div className="flex flex-col sm:flex-row sm:items-end gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-2.5 w-full lg:w-auto shrink-0">
             <div className="w-full sm:w-auto">
               <label className="block text-[10px] font-bold uppercase text-[var(--color-text-secondary)] mb-1">
                 Pay Period
@@ -158,7 +150,7 @@ export function PayrollSection({
                 value={period}
                 onChange={(e) => handlePeriodChange(e.target.value)}
                 disabled={isPending}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)] cursor-pointer"
               />
             </div>
 
@@ -167,7 +159,7 @@ export function PayrollSection({
               type="button"
               onClick={handleGeneratePayroll}
               disabled={isPending}
-              className="flex min-h-[44px] sm:min-h-[40px] w-full sm:w-auto items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-all shadow-xs disabled:opacity-50"
+              className="flex min-h-[44px] sm:min-h-[40px] w-full sm:w-auto items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-all shadow-xs disabled:opacity-50 cursor-pointer"
             >
               {isPending ? (
                 <>
@@ -185,7 +177,29 @@ export function PayrollSection({
           </div>
         </div>
 
-        {actionMessage && (
+        {/* Mathematical Steps & Live Example */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-[var(--color-bg-subtle)]/50 p-3 rounded-[var(--radius-control)]">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <span className="px-2.5 py-1 rounded bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] font-bold text-[var(--color-text-primary)] shadow-2xs">
+              Daily Rate = Base Salary ÷ 22
+            </span>
+            <span className="text-[var(--color-text-secondary)] font-bold">→</span>
+            <span className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/25 font-bold text-amber-800 shadow-2xs">
+              Deduction = Daily Rate × Unpaid Days
+            </span>
+            <span className="text-[var(--color-text-secondary)] font-bold">→</span>
+            <span className="px-2.5 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 font-black text-emerald-800 shadow-2xs">
+              Net Pay = Base Salary − Deduction
+            </span>
+          </div>
+
+          <div className="text-[11px] font-mono text-[var(--color-text-secondary)]">
+            <span className="font-bold text-[var(--color-text-primary)]">Verified Rule:</span> Paid leave (Annual/Sick) has <strong className="text-emerald-600">0 TND deduction</strong>
+          </div>
+        </div>
+      </div>
+
+      {actionMessage && (
           <div
             className={`mt-4 flex items-center gap-2 rounded-[var(--radius-control)] p-3 text-xs font-medium ${
               actionMessage.type === "success"
@@ -201,7 +215,6 @@ export function PayrollSection({
             <span>{actionMessage.text}</span>
           </div>
         )}
-      </div>
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">

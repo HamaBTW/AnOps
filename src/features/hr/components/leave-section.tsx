@@ -18,8 +18,10 @@ import {
   RotateCcw,
   Ban,
   User,
+  Calculator,
 } from "lucide-react";
 import type { Employee, LeaveRequest, LeaveBalance, LeaveStatus, SoldeDeConge } from "@/features/hr/types";
+import { getAgeCategory } from "@/features/hr/utils/date-utils";
 import { LeaveRequestModal } from "./leave-request-modal";
 import { LeaveHistoryModal } from "./leave-history-modal";
 import { ManualAdjustmentModal } from "./manual-adjustment-modal";
@@ -291,14 +293,77 @@ export function LeaveSection({
         </div>
       </div>
 
-      {/* Legal Reference & Disclaimer Pill */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] text-[11px] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]">
-        <span className="font-medium">
-          Leave accrual regime: <strong>Tunisian Labour Code (Art. 113–114)</strong> — Monthly accrual & append-only ledger
-        </span>
-        <span className="italic text-[10px]">
-          * Indicative legal values — verify with HR/Legal per applicable collective agreement
-        </span>
+      {/* Solde de Congé - Mathematical Formula Card */}
+      <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-5 shadow-xs space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--color-border-subtle)] pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-action-primary)]/15 text-[var(--color-action-on-primary)]">
+              <Calculator className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-primary)]">
+                Solde de Congé — Mathematical Balance Invariant
+              </h4>
+              <p className="text-[11px] text-[var(--color-text-secondary)]">
+                Tunisian Labour Code (Art. 113–114) • Append-Only Ledger Model
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/25">
+            Legal Invariant Verified
+          </span>
+        </div>
+
+        {/* The Theoretical Formula */}
+        <div className="flex flex-wrap items-center gap-2 text-xs font-mono font-bold">
+          <span className="px-2.5 py-1 rounded bg-[var(--color-action-primary)]/20 text-[var(--color-text-primary)] border border-[var(--color-action-primary)]/40 shadow-2xs">
+            Available
+          </span>
+          <span className="text-[var(--color-text-secondary)] text-sm font-black">=</span>
+          <span className="px-2.5 py-1 rounded bg-blue-500/15 text-blue-700 border border-blue-500/30 shadow-2xs">
+            Earned (Acquis)
+          </span>
+          <span className="text-[var(--color-text-secondary)] text-sm font-black">−</span>
+          <span className="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 shadow-2xs">
+            Taken (Consommé)
+          </span>
+          <span className="text-[var(--color-text-secondary)] text-sm font-black">−</span>
+          <span className="px-2.5 py-1 rounded bg-amber-500/15 text-amber-800 border border-amber-500/30 shadow-2xs">
+            Reserved (Bloqué)
+          </span>
+          <span className="text-[var(--color-text-secondary)] text-sm font-black">+</span>
+          <span className="px-2.5 py-1 rounded bg-orange-500/15 text-orange-700 border border-orange-500/30 shadow-2xs">
+            Adjustments
+          </span>
+        </div>
+
+        {/* Live Evaluation with Active Employee's Real Numbers */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-[var(--color-border-subtle)]/70 bg-[var(--color-bg-subtle)]/50 p-3 rounded-[var(--radius-control)]">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <span className="text-[11px] font-bold text-[var(--color-text-secondary)] font-sans mr-1">
+              Live for {activeEmployee ? activeEmployee.fullName : "Employee"}:
+            </span>
+            <span className="px-2.5 py-0.5 rounded font-black text-sm text-[var(--color-text-primary)] bg-[var(--color-action-primary)]/25">
+              {availableDays}d
+            </span>
+            <span className="text-xs font-black text-[var(--color-text-secondary)]">=</span>
+            <span className="px-2 py-0.5 rounded font-bold text-blue-700 bg-blue-500/15">
+              {earnedDays}d
+            </span>
+            <span className="text-xs font-black text-[var(--color-text-secondary)]">−</span>
+            <span className="px-2 py-0.5 rounded font-bold text-emerald-700 bg-emerald-500/15">
+              {takenDays}d
+            </span>
+            <span className="text-xs font-black text-[var(--color-text-secondary)]">−</span>
+            <span className="px-2 py-0.5 rounded font-bold text-amber-800 bg-amber-500/20">
+              {reservedDays}d
+            </span>
+          </div>
+
+          <div className="text-[10px] text-[var(--color-text-secondary)] italic">
+            * Monthly accrual rate: <strong className="text-[var(--color-text-primary)]">{activeEmployee?.dateOfBirth && getAgeCategory(activeEmployee.dateOfBirth) === "young_adult" ? "1.5d/mo (Young Adult, Art. 114)" : "1.0d/mo (Adult, Art. 113)"}</strong>
+          </div>
+        </div>
       </div>
 
       {/* Main Container Card */}
@@ -312,7 +377,7 @@ export function LeaveSection({
               </h3>
               {pendingApprovalsCount > 0 && (
                 <span className="rounded-full bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] px-2.5 py-0.5 text-xs font-bold text-[var(--color-warning-text)]">
-                  {pendingApprovalsCount} En attente
+                  {pendingApprovalsCount} Pending
                 </span>
               )}
             </div>

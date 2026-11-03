@@ -562,30 +562,95 @@ async function run() {
   // Karim: Spring leave (March, 2d) -> leaves 10d unconsumed ready for offboarding demo
   await recordTakenLeave(karim, "CP", "2026-03-12", "2026-03-13", 2, "Personal time off");
 
-  // Nour: Unpaid Leaves in BOTH October and November (2 days each)
-  await recordTakenLeave(nour, "UNPAID", "2026-10-15", "2026-10-16", 2, "Family emergency (unpaid leave)");
-  await db.collection("leave_requests").insertOne({
-    companyId: cId,
-    employeeId: nour.id,
-    employeeName: nour.fullName,
-    departmentName: nour.departmentName,
-    leaveType: "unpaid",
-    leaveTypeId: typeMap["UNPAID"],
-    isPaid: false,
-    startDate: "2026-11-05",
-    endDate: "2026-11-06",
-    days: 2,
-    reason: "Personal leave (unpaid)",
-    status: "approved",
-    reviewedBy: "HR Administrator",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-
   // Hedi: Summer leave (August, 4d)
   await recordTakenLeave(hedi, "CP", "2026-08-17", "2026-08-20", 4, "Summer family vacation");
 
-  console.log("   ✓ Injected seasonal leave requests (Spring, Summer, Autumn, Winter).");
+  // -------------------------------------------------------------
+  // DIVERSE UNPAID LEAVES ACROSS THE YEAR (For Varied Payroll Deductions)
+  // -------------------------------------------------------------
+  const tarek = empMap["tarek.ayari@demo.anops.tn"];
+  const ines = empMap["ines.benamor@demo.anops.tn"];
+
+  const unpaidLeaveRecords = [
+    // July 2026: Tarek Ayari (1 day unpaid)
+    {
+      emp: tarek,
+      start: "2026-07-10",
+      end: "2026-07-10",
+      days: 1,
+      reason: "Extended personal weekend (unpaid leave)",
+    },
+    // August 2026: Karim Mansour (3 days unpaid)
+    {
+      emp: karim,
+      start: "2026-08-24",
+      end: "2026-08-26",
+      days: 3,
+      reason: "Apartment moving & relocation (unpaid leave)",
+    },
+    // September 2026: Hedi Bouazizi (1 day unpaid)
+    {
+      emp: hedi,
+      start: "2026-09-18",
+      end: "2026-09-18",
+      days: 1,
+      reason: "Personal family business (unpaid leave)",
+    },
+    // October 2026: Nour Khemir (2 days unpaid)
+    {
+      emp: nour,
+      start: "2026-10-15",
+      end: "2026-10-16",
+      days: 2,
+      reason: "Urgent family matter (unpaid leave)",
+    },
+    // October 2026: Ines Ben Amor (1 day unpaid)
+    {
+      emp: ines,
+      start: "2026-10-23",
+      end: "2026-10-23",
+      days: 1,
+      reason: "Personal appointment absence (unpaid leave)",
+    },
+    // November 2026: Nour Khemir (2 days unpaid)
+    {
+      emp: nour,
+      start: "2026-11-05",
+      end: "2026-11-06",
+      days: 2,
+      reason: "Personal leave (unpaid)",
+    },
+    // November 2026: Youssef Trabelsi (1 day unpaid)
+    {
+      emp: youssef,
+      start: "2026-11-09",
+      end: "2026-11-09",
+      days: 1,
+      reason: "Design conference / study day (unpaid leave)",
+    },
+  ];
+
+  for (const ul of unpaidLeaveRecords) {
+    await db.collection("leave_requests").insertOne({
+      companyId: cId,
+      employeeId: ul.emp.id,
+      employeeName: ul.emp.fullName,
+      departmentName: ul.emp.departmentName,
+      leaveType: "unpaid",
+      leaveTypeId: typeMap["UNPAID"],
+      isPaid: false,
+      startDate: ul.start,
+      endDate: ul.end,
+      days: ul.days,
+      reason: ul.reason,
+      status: "approved",
+      reviewedBy: "HR Administrator",
+      createdAt: new Date(`${ul.start}T08:00:00Z`),
+      updatedAt: new Date(`${ul.end}T18:00:00Z`),
+    });
+  }
+
+  console.log("   ✓ Injected seasonal leave requests & varied unpaid leaves across the year.");
 
   // 8. Inject 5 Months of Complete Company Payslips (July -> November 2026)
   console.log("\n💰 8. Generating 5 Months of Historical Payslips (July, August, September, October, November)...");
@@ -600,11 +665,11 @@ async function run() {
     for (const emp of Object.values(empMap)) {
       if (emp.hireDate > `${pMonth}-28`) continue;
 
-      let unpaidDays = 0;
-      // Check if Nour took unpaid leave in Oct or Nov
-      if (emp.fullName === "Nour Khemir" && (pMonth === "2026-10" || pMonth === "2026-11")) {
-        unpaidDays = 2;
-      }
+      // Find all approved unpaid leaves for this employee in this month
+      const empUnpaids = unpaidLeaveRecords.filter(
+        (ul) => ul.emp.id === emp.id && ul.start.startsWith(pMonth)
+      );
+      const unpaidDays = empUnpaids.reduce((sum, ul) => sum + ul.days, 0);
 
       const dailyRate = Math.round((emp.baseSalary / 22) * 100) / 100;
       const deduction = Math.round((dailyRate * unpaidDays) * 100) / 100;

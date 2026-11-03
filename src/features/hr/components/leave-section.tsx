@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import {
   Calendar,
   Plus,
@@ -17,8 +17,9 @@ import {
   CalendarCheck,
   RotateCcw,
   Ban,
+  User,
 } from "lucide-react";
-import type { Employee, LeaveRequest, LeaveBalance, LeaveStatus } from "@/features/hr/types";
+import type { Employee, LeaveRequest, LeaveBalance, LeaveStatus, SoldeDeConge } from "@/features/hr/types";
 import { LeaveRequestModal } from "./leave-request-modal";
 import { LeaveHistoryModal } from "./leave-history-modal";
 import { ManualAdjustmentModal } from "./manual-adjustment-modal";
@@ -26,6 +27,7 @@ import {
   reviewLeaveRequestAction,
   cancelLeaveRequestAction,
   runMonthlyAccrualAction,
+  getSoldeDeCongeAction,
 } from "@/features/hr/actions/leave.action";
 import { Portal } from "@/shared/components/ui/portal";
 
@@ -62,6 +64,25 @@ export function LeaveSection({
   const isAdmin = userRole === "hr_admin";
   const [activeTab, setActiveTab] = useState<"all" | "my">(isAdmin ? "all" : "my");
 
+  // Selected employee for admin view & ledger breakdown
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>(
+    currentEmployee?.id || employees[0]?.id || ""
+  );
+
+  const activeEmployee = useMemo(() => {
+    return employees.find((e) => e.id === selectedEmployeeId) || currentEmployee || employees[0];
+  }, [employees, selectedEmployeeId, currentEmployee]);
+
+  const [liveSolde, setLiveSolde] = useState<SoldeDeConge | null>(null);
+
+  useEffect(() => {
+    if (selectedEmployeeId) {
+      getSoldeDeCongeAction(selectedEmployeeId).then((res) => {
+        if (res.data) setLiveSolde(res.data);
+      });
+    }
+  }, [selectedEmployeeId]);
+
   // Modals state
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
@@ -77,7 +98,7 @@ export function LeaveSection({
 
   const filteredRequests = useMemo(() => {
     return leaveRequests.filter((r) => {
-      if (activeTab === "my" && currentEmployee && r.employeeId !== currentEmployee.id) {
+      if (activeTab === "my" && activeEmployee && r.employeeId !== activeEmployee.id) {
         return false;
       }
       if (statusFilter !== "all" && r.status !== statusFilter) {
@@ -85,7 +106,7 @@ export function LeaveSection({
       }
       return true;
     });
-  }, [leaveRequests, activeTab, currentEmployee, statusFilter]);
+  }, [leaveRequests, activeTab, activeEmployee, statusFilter]);
 
   const pendingApprovalsCount = useMemo(() => {
     return leaveRequests.filter((r) => r.status === "pending").length;
@@ -160,10 +181,10 @@ export function LeaveSection({
   };
 
   // Solde metrics breakdown
-  const earnedDays = leaveBalance.earned ?? leaveBalance.allowance;
-  const takenDays = leaveBalance.taken ?? leaveBalance.usedPaidDays;
-  const reservedDays = leaveBalance.reserved ?? 0;
-  const availableDays = leaveBalance.available ?? leaveBalance.remainingDays;
+  const earnedDays = liveSolde?.earned ?? leaveBalance.earned ?? leaveBalance.allowance;
+  const takenDays = liveSolde?.taken ?? leaveBalance.taken ?? leaveBalance.usedPaidDays;
+  const reservedDays = liveSolde?.reserved ?? leaveBalance.reserved ?? 0;
+  const availableDays = liveSolde?.available ?? leaveBalance.available ?? leaveBalance.remainingDays;
 
   return (
     <div className="space-y-6">
@@ -172,6 +193,40 @@ export function LeaveSection({
         <div className="flex items-center gap-2 p-3 rounded-[var(--radius-control)] bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-xs font-semibold">
           <CheckCircle className="h-4 w-4" />
           <span>{accrualSuccess}</span>
+        </div>
+      )}
+
+      {/* Admin Employee Switcher Bar */}
+      {isAdmin && employees.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-[var(--radius-card)] bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] shadow-xs">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wide">
+              <User className="h-4 w-4 text-[var(--color-action-primary)]" />
+              Viewing Employee:
+            </span>
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              className="min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)] transition-colors cursor-pointer"
+            >
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.fullName} — {emp.jobTitle} ({emp.departmentName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {activeEmployee && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] font-medium">
+                Category: <strong className="text-[var(--color-text-primary)] capitalize">{activeEmployee.dateOfBirth ? "Age-tracked" : "Standard"}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 font-bold border border-emerald-500/20 capitalize">
+                {activeEmployee.status}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -231,7 +286,7 @@ export function LeaveSection({
             <span className="text-xs font-semibold text-[var(--color-text-primary)]">days remaining</span>
           </div>
           <p className="mt-1 text-[11px] text-[var(--color-text-primary)]">
-            {currentEmployee?.fullName ?? "Your Balance"}
+            {activeEmployee ? `${activeEmployee.fullName}'s Balance` : "Your Balance"}
           </p>
         </div>
       </div>
@@ -746,13 +801,20 @@ export function LeaveSection({
       )}
 
       {/* Leave History Modal */}
-      {currentEmployee && (
+      {activeEmployee && (
         <LeaveHistoryModal
           isOpen={historyModalOpen}
           onClose={() => setHistoryModalOpen(false)}
-          employee={currentEmployee}
+          employee={activeEmployee}
           isAdmin={isAdmin}
-          onRefresh={onRefresh}
+          onRefresh={() => {
+            onRefresh();
+            if (selectedEmployeeId) {
+              getSoldeDeCongeAction(selectedEmployeeId).then((res) => {
+                if (res.data) setLiveSolde(res.data);
+              });
+            }
+          }}
         />
       )}
 
@@ -762,8 +824,15 @@ export function LeaveSection({
           isOpen={adjustmentModalOpen}
           onClose={() => setAdjustmentModalOpen(false)}
           employees={employees}
-          selectedEmployeeId={currentEmployee?.id}
-          onSuccess={onRefresh}
+          selectedEmployeeId={activeEmployee?.id}
+          onSuccess={() => {
+            onRefresh();
+            if (selectedEmployeeId) {
+              getSoldeDeCongeAction(selectedEmployeeId).then((res) => {
+                if (res.data) setLiveSolde(res.data);
+              });
+            }
+          }}
         />
       )}
     </div>

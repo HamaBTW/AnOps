@@ -1,4 +1,5 @@
 "use client";
+import { ModalPortal } from "@/shared/components/ui/modal-portal";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -61,7 +62,7 @@ export function TimesheetLogModal({
   const unitLabel = agreement.rateType === "hourly" ? "Hours" : "Days";
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+    <ModalPortal><div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
       <div className="relative w-full max-w-lg rounded-[var(--radius-card)] bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] p-6 shadow-2xl space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-[var(--color-border-subtle)] pb-3">
@@ -153,6 +154,7 @@ export function TimesheetLogModal({
         </form>
       </div>
     </div>
+  </ModalPortal>
   );
 }
 

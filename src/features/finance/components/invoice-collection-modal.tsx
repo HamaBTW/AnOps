@@ -1,4 +1,5 @@
 "use client";
+import { ModalPortal } from "@/shared/components/ui/modal-portal";
 
 import { useState, useTransition } from "react";
 import {
@@ -67,7 +68,7 @@ export function InvoiceCollectionModal({
     : undefined;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
+    <ModalPortal><div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
       <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3">
@@ -197,6 +198,7 @@ export function InvoiceCollectionModal({
         )}
       </div>
     </div>
+  </ModalPortal>
   );
 }
 

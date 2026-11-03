@@ -1,4 +1,5 @@
 "use client";
+import { ModalPortal } from "@/shared/components/ui/modal-portal";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -150,7 +151,7 @@ export function InvoiceDetailActions({
 
       {/* Void Reason Modal */}
       {showVoidModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 print:hidden backdrop-blur-sm">
+        <ModalPortal><div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 print:hidden backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-xl space-y-4">
             <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
               Void Invoice: {invoiceNumber}
@@ -188,6 +189,7 @@ export function InvoiceDetailActions({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
     </div>
   );

@@ -330,6 +330,7 @@ export function HRDashboardClient({
         <AIHRAssistant
           currentEmployee={currentEmployee}
           employees={initialEmployees}
+          userRole={userRole}
           onNavigateTab={setActiveTab}
           onOpenLeaveRequest={() => {
             setActiveTab("leave");

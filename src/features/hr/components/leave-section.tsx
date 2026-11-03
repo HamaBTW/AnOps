@@ -338,30 +338,62 @@ export function LeaveSection({
         </div>
 
         {/* Live Evaluation with Active Employee's Real Numbers */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-[var(--color-border-subtle)]/70 bg-[var(--color-bg-subtle)]/50 p-3 rounded-[var(--radius-control)]">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-            <span className="text-[11px] font-bold text-[var(--color-text-secondary)] font-sans mr-1">
-              Live for {activeEmployee ? activeEmployee.fullName : "Employee"}:
-            </span>
-            <span className="px-2.5 py-0.5 rounded font-black text-sm text-[var(--color-text-primary)] bg-[var(--color-action-primary)]/25">
-              {availableDays}d
-            </span>
-            <span className="text-xs font-black text-[var(--color-text-secondary)]">=</span>
-            <span className="px-2 py-0.5 rounded font-bold text-blue-700 bg-blue-500/15">
-              {earnedDays}d
-            </span>
-            <span className="text-xs font-black text-[var(--color-text-secondary)]">−</span>
-            <span className="px-2 py-0.5 rounded font-bold text-emerald-700 bg-emerald-500/15">
-              {takenDays}d
-            </span>
-            <span className="text-xs font-black text-[var(--color-text-secondary)]">−</span>
-            <span className="px-2 py-0.5 rounded font-bold text-amber-800 bg-amber-500/20">
-              {reservedDays}d
-            </span>
+        <div className="space-y-3 pt-2.5 border-t border-[var(--color-border-subtle)]/70 bg-[var(--color-bg-subtle)]/50 p-3.5 rounded-[var(--radius-control)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+              <span className="text-[11px] font-bold text-[var(--color-text-secondary)] font-sans mr-1">
+                Live for {activeEmployee ? activeEmployee.fullName : "Employee"}:
+              </span>
+              <span className="px-2.5 py-0.5 rounded font-black text-sm text-[var(--color-text-primary)] bg-[var(--color-action-primary)]/25">
+                {availableDays}d
+              </span>
+              <span className="text-xs font-black text-[var(--color-text-secondary)]">=</span>
+              <span className="px-2 py-0.5 rounded font-bold text-blue-700 bg-blue-500/15">
+                {earnedDays}d
+              </span>
+              <span className="text-xs font-black text-[var(--color-text-secondary)]">−</span>
+              <span className="px-2 py-0.5 rounded font-bold text-emerald-700 bg-emerald-500/15">
+                {takenDays}d
+              </span>
+              <span className="text-xs font-black text-[var(--color-text-secondary)]">−</span>
+              <span className="px-2 py-0.5 rounded font-bold text-amber-800 bg-amber-500/20">
+                {reservedDays}d
+              </span>
+            </div>
+
+            <div className="text-[10px] text-[var(--color-text-secondary)] italic">
+              * Accrual rate: <strong className="text-[var(--color-text-primary)]">{activeEmployee?.dateOfBirth && getAgeCategory(activeEmployee.dateOfBirth) === "young_adult" ? "1.5d/mo (Young Adult, Art. 114)" : "1.0d/mo (Adult, Art. 113)"}</strong>
+            </div>
           </div>
 
-          <div className="text-[10px] text-[var(--color-text-secondary)] italic">
-            * Monthly accrual rate: <strong className="text-[var(--color-text-primary)]">{activeEmployee?.dateOfBirth && getAgeCategory(activeEmployee.dateOfBirth) === "young_adult" ? "1.5d/mo (Young Adult, Art. 114)" : "1.0d/mo (Adult, Art. 113)"}</strong>
+          {/* Step-by-Step Educational Derivation */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2.5 border-t border-[var(--color-border-subtle)]/60 text-[11px]">
+            <div className="p-2 rounded bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)]/80">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block mb-0.5">
+                1. Monthly Accrual (Acquis)
+              </span>
+              <p className="text-[var(--color-text-secondary)] leading-relaxed">
+                Accrued across <strong>11 months</strong> in 2026 (Jan–Nov) at <strong>{activeEmployee?.dateOfBirth && getAgeCategory(activeEmployee.dateOfBirth) === "young_adult" ? "1.5" : "1.0"}d/month</strong> = <strong className="text-blue-700">{earnedDays}d</strong> total.
+              </p>
+            </div>
+
+            <div className="p-2 rounded bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)]/80">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block mb-0.5">
+                2. Usage & Future Holds
+              </span>
+              <p className="text-[var(--color-text-secondary)] leading-relaxed">
+                Consumed: <strong className="text-emerald-700">{takenDays}d</strong> (past leaves) + Reserved: <strong className="text-amber-800">{reservedDays}d</strong> (approved upcoming leaves).
+              </p>
+            </div>
+
+            <div className="p-2 rounded bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)]/80">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-action-primary)] block mb-0.5">
+                3. Net Available Balance
+              </span>
+              <p className="text-[var(--color-text-secondary)] leading-relaxed">
+                <strong className="text-[var(--color-text-primary)]">{earnedDays}d Earned</strong> − {takenDays}d Taken − {reservedDays}d Reserved = <strong className="text-[var(--color-action-primary)]">{availableDays}d Available</strong> to request.
+              </p>
+            </div>
           </div>
         </div>
       </div>

@@ -52,10 +52,24 @@ export async function chatWithHRAssistantAction(
 
     const { userMessage, employeeId, model, provider, history } = parsed.data;
 
+    // Security: Non-admins cannot query other employee IDs via client payload
+    let effectiveEmployeeId = employeeId;
+    if (!authUser.isAdmin) {
+      effectiveEmployeeId = authUser.employee?.id || employeeId;
+    }
+
     const response = await hrAgent.chat(
       history as AgentMessage[],
       userMessage,
-      { employeeId, companyId: authUser.companyId },
+      {
+        employeeId: effectiveEmployeeId,
+        companyId: authUser.companyId,
+        isAdmin: authUser.isAdmin,
+        userRole: authUser.role,
+        userEmployeeId: authUser.employee?.id,
+        userFullName: authUser.employee?.fullName,
+        userEmail: authUser.email,
+      },
       model,     // model override — undefined = let AiMaster auto-select
       provider   // provider override — undefined = let AiMaster auto-select
     );

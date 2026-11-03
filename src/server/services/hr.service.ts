@@ -2325,14 +2325,135 @@ export async function getPayrollSummary(period: string, companyId: string): Prom
 // Feature 5: AI HR Assistant Engine
 // ==========================================
 
-export async function askHRAssistant(promptText: string, employeeId: string, companyId: string): Promise<AIChatMessage> {
+export async function askHRAssistant(
+  promptText: string,
+  employeeId: string,
+  companyId: string,
+  authUser?: { role?: string; isAdmin?: boolean; employeeId?: string; fullName?: string }
+): Promise<AIChatMessage> {
   const query = promptText.trim().toLowerCase();
   const cId = requireCompanyId(companyId);
-  const emp = await getEmployeeById(employeeId, cId?.toString());
-  const employeeName = emp?.fullName || "Employee";
-
+  const currentYear = new Date().getFullYear();
   const messageId = "msg-" + Date.now();
   const timestamp = new Date().toISOString();
+
+  const db = await getDb();
+  const companyEmployees = await db.collection("employees").find({ companyId: cId }).toArray();
+  const isRequesterAdmin = Boolean(authUser?.isAdmin || authUser?.role === "hr_admin");
+
+  // Check if an employee is mentioned in the query
+  let matchedEmpDoc = companyEmployees.find((e) => query.includes((e.fullName as string).toLowerCase()));
+  if (!matchedEmpDoc) {
+    // Check parts of name
+    for (const e of companyEmployees) {
+      const parts = (e.fullName as string).toLowerCase().split(/\s+/).filter((p) => p.length >= 3);
+      if (parts.some((p) => new RegExp(`\\b${p}\\b`, "i").test(query))) {
+        matchedEmpDoc = e;
+        break;
+      }
+    }
+  }
+
+  // Check if a name was asked for that does NOT exist
+  let notFoundName: string | null = null;
+  if (!matchedEmpDoc) {
+    const patterns = [
+      /(?:about|for|employee|check|status of|balance of|leave for|info on)\s+([A-Z][a-zA-Z\s'-]{2,25})/i,
+      /([A-Z][a-zA-Z\s'-]{2,25})'s\s+(?:leave|balance|salary|payslip|data|status|conge)/i,
+    ];
+    for (const pat of patterns) {
+      const m = promptText.match(pat);
+      if (m && m[1]) {
+        const candidate = m[1].trim();
+        const blacklist = ["the", "my", "our", "anops", "leave", "balance", "solde", "unpaid", "sick", "holiday", "policy", "salary", "payroll"];
+        if (!blacklist.includes(candidate.toLowerCase())) {
+          notFoundName = candidate;
+          break;
+        }
+      }
+    }
+  }
+
+  // RBAC: Non-admin inquiring about another person
+  if (!isRequesterAdmin && (matchedEmpDoc && matchedEmpDoc._id.toString() !== authUser?.employeeId || notFoundName !== null)) {
+    return {
+      id: messageId,
+      role: "assistant",
+      content: `⛔ **Access Denied**: In accordance with AnOps security and privacy policies (docs/ROLES_AND_PERMISSIONS.md), you are only authorized to view your own personal HR records, leave balances, and payslips. You do not have permission to view records for other employees. Please contact an HR Administrator if you require assistance.`,
+      timestamp,
+    };
+  }
+
+  // Admin query: Employee Not Found
+  if (isRequesterAdmin && notFoundName && !matchedEmpDoc) {
+    return {
+      id: messageId,
+      role: "assistant",
+      content: `🔍 **Employee Not Found**: Employee **'${notFoundName}'** was not found in company records. Please verify the spelling or check the Employees directory to ensure they are registered in this organization.`,
+      timestamp,
+    };
+  }
+
+  // Target employee resolution
+  const targetId = isRequesterAdmin && matchedEmpDoc ? matchedEmpDoc._id.toString() : (authUser?.employeeId || employeeId);
+  const emp = await getEmployeeById(targetId, cId?.toString());
+  const employeeName = emp?.fullName || "Employee";
+
+  // Check for step-by-step counting derivation query
+  const isCountingQuery =
+    query.includes("how was it counted") ||
+    query.includes("how is it counted") ||
+    query.includes("how it was counted") ||
+    query.includes("counted") ||
+    query.includes("step-by-step") ||
+    query.includes("calculation") ||
+    query.includes("derivation");
+
+  if (isCountingQuery || query.includes("solde")) {
+    const solde = await getSoldeDeConge(targetId, currentYear, companyId);
+    const policy = await getEmployeeLeavePolicy(targetId, companyId);
+    const dailyRate = emp ? Math.round((emp.baseSalary / 22) * 100) / 100 : 150;
+    const unusedDays = Math.max(0, solde.earned - solde.taken);
+    const compVal = Math.round(unusedDays * dailyRate * 100) / 100;
+
+    let responseContent = `### Step-by-Step Leave Balance (Solde de Congé) Derivation for **${employeeName}** (${currentYear})\n\n`;
+    responseContent += `Here is the verified arithmetic calculation based on your personnel ledger and **${policy?.name || "Standard Adult Policy"}** (${policy?.legalReference || "Code du Travail Art. 113-114"}):\n\n`;
+    responseContent += `1. **Step 1 — Monthly Accrual (Acquis)**: **${solde.earned} days**\n`;
+    responseContent += `   - Monthly rate: \`${policy?.accrualRate ?? 1.0} day(s)/month\` of effective work.\n`;
+    responseContent += `   - Formula: \`effective_months × ${policy?.accrualRate ?? 1.0}d/mo = ${solde.earned} days\` (Statutory cap: ${policy?.annualCap ?? 15} days).\n\n`;
+    responseContent += `2. **Step 2 — Consumed Leave (Pris)**: **${solde.taken} days**\n`;
+    responseContent += `   - Approved leave days where dates have already elapsed.\n\n`;
+    responseContent += `3. **Step 3 — Active Reservations (Réservé)**: **${solde.reserved} days**\n`;
+    responseContent += `   - Approved upcoming leave requests currently locking the balance.\n\n`;
+    if (solde.adjustments !== 0) {
+      responseContent += `4. **Step 4 — Discretionary Adjustments**: **${solde.adjustments > 0 ? "+" : ""}${solde.adjustments} days**\n\n`;
+    }
+    responseContent += `5. **Step 5 — Available Balance (Disponible)**: **${solde.available} days**\n`;
+    responseContent += `   - Equation: \`Earned (${solde.earned}) - Taken (${solde.taken}) - Reserved (${solde.reserved}) + Adjustments (${solde.adjustments}) = ${solde.available} days\`\n\n`;
+    responseContent += `6. **Departure Compensation (Indemnité compensatrice Art. 120)**:\n`;
+    responseContent += `   - \`${unusedDays} unused days\` (${solde.earned} - ${solde.taken}) × Daily Rate (${dailyRate.toFixed(2)} TND) = **${compVal.toLocaleString()} TND** (payable upon termination, subject to Art. 120 gross misconduct exceptions).\n`;
+
+    return {
+      id: messageId,
+      role: "assistant",
+      content: responseContent,
+      timestamp,
+      toolData: {
+        type: "leave_balance",
+        data: {
+          employeeName,
+          earned: solde.earned,
+          taken: solde.taken,
+          reserved: solde.reserved,
+          adjustments: solde.adjustments,
+          available: solde.available,
+          unpaidDaysTaken: solde.unpaidDaysTaken,
+          policyName: policy?.name,
+          legalReference: policy?.legalReference,
+        },
+      },
+    };
+  }
 
   // 1. Tool check: Leave balance query
   const isLeaveBalanceQuery =
@@ -2344,9 +2465,8 @@ export async function askHRAssistant(promptText: string, employeeId: string, com
     query.includes("balance");
 
   if (isLeaveBalanceQuery) {
-    const currentYear = new Date().getFullYear();
-    const balance = await getLeaveBalance(employeeId, currentYear, cId?.toString());
-    const myRequests = await getLeaveRequests({ employeeId }, cId?.toString());
+    const balance = await getLeaveBalance(targetId, currentYear, cId?.toString());
+    const myRequests = await getLeaveRequests({ employeeId: targetId }, cId?.toString());
     const pendingCount = myRequests.filter((r) => r.status === "pending").length;
 
     let responseContent = `Hello **${employeeName}**, here is your real-time leave balance for **${currentYear}**:\n\n`;
@@ -2369,6 +2489,7 @@ export async function askHRAssistant(promptText: string, employeeId: string, com
       toolData: {
         type: "leave_balance",
         data: {
+          employeeName,
           allowance: balance.allowance,
           usedPaidDays: balance.usedPaidDays,
           remainingDays: balance.remainingDays,

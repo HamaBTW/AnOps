@@ -17,7 +17,12 @@ export async function askHRAssistantAction(rawData: unknown): Promise<ActionResu
     }
 
     const { prompt, employeeId } = parsed.data;
-    const answer = await askHRAssistant(prompt, employeeId, authUser.companyId);
+    const answer = await askHRAssistant(prompt, employeeId, authUser.companyId, {
+      role: authUser.role,
+      isAdmin: authUser.isAdmin,
+      employeeId: authUser.employee?.id,
+      fullName: authUser.employee?.fullName,
+    });
     return { success: true, data: answer };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "HR Assistant failed to respond.";

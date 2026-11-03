@@ -12,18 +12,27 @@ import { Portal } from "@/shared/components/ui/portal";
 type AIHRAssistantProps = {
   currentEmployee?: Employee | null;
   employees: Employee[];
+  userRole?: "employee" | "manager" | "hr_admin";
   /** Callback to switch tabs in the HR portal */
   onNavigateTab?: (tab: "employees" | "leave" | "attendance" | "payroll" | "ai") => void;
   /** Callback to directly open the new leave request modal */
   onOpenLeaveRequest?: () => void;
 };
 
-const SUGGESTED_PROMPTS = [
+const SUGGESTED_PROMPTS_EMPLOYEE = [
   "How many leave days do I have left in my leave balance?",
-  "How is my leave accrued and calculated (Art. 113-114)?",
+  "Explain how my Solde de Congé is counted step-by-step",
+  "How is unpaid leave deducted from my salary in payroll?",
   "What happens to my unused leave if I leave the company?",
-  "How is unpaid leave deducted from my salary?",
   "What is the sick leave procedure?",
+];
+
+const SUGGESTED_PROMPTS_ADMIN = [
+  "Explain how Solde de Congé is counted step-by-step",
+  "What is Sarah Ben Salem's leave balance and history?",
+  "How is unpaid leave deducted in payroll?",
+  "Check Karim Mansour's unconsumed leave",
+  "What happens to unused leave on employee departure?",
 ];
 
 const WELCOME_MESSAGE = `Hello! I'm your **AnOps HR Assistant** — powered by AI with real-time access to your company policies and **Leave Balance** ledger.
@@ -43,9 +52,11 @@ What would you like to know?`;
 export function AIHRAssistant({
   currentEmployee,
   employees,
+  userRole = "employee",
   onNavigateTab,
   onOpenLeaveRequest,
 }: AIHRAssistantProps) {
+  const isAdmin = userRole === "hr_admin";
   const [activeEmployeeId, setActiveEmployeeId] = useState(
     currentEmployee?.id ?? employees[0]?.id ?? ""
   );
@@ -53,6 +64,7 @@ export function AIHRAssistant({
   const [selectedPolicyId, setSelectedPolicyId] = useState(COMPANY_POLICIES[0]?.id ?? "");
 
   const selectedPolicy = COMPANY_POLICIES.find((p) => p.id === selectedPolicyId);
+  const suggestedPrompts = isAdmin ? SUGGESTED_PROMPTS_ADMIN : SUGGESTED_PROMPTS_EMPLOYEE;
 
   const handleAction = (action: string) => {
     const act = action.toLowerCase();
@@ -104,8 +116,8 @@ export function AIHRAssistant({
 
   const toolbar = (
     <div className="flex items-center gap-2">
-      {/* Employee context switcher */}
-      {employees.length > 1 && (
+      {/* Employee context switcher — HR Admin only */}
+      {isAdmin && employees.length > 1 && (
         <div className="flex items-center gap-1.5">
           <label className="text-[11px] font-bold text-[var(--color-text-secondary)]">
             Context:
@@ -148,9 +160,9 @@ export function AIHRAssistant({
         }
         agentIcon={<Sparkles className="h-4 w-4" />}
         welcomeMessage={WELCOME_MESSAGE}
-        suggestedPrompts={SUGGESTED_PROMPTS}
+        suggestedPrompts={suggestedPrompts}
         inputPlaceholder="Ask about leave balance, salary deductions, working hours…"
-        thinkingText="Checking HR policies and your personnel records…"
+        thinkingText="Checking HR policies and personnel records…"
         toolbar={toolbar}
         onAction={handleAction}
         onSendMessage={handleSend}
@@ -162,6 +174,7 @@ export function AIHRAssistant({
             typeof metadata.data === "object"
           ) {
             const d = metadata.data as Record<string, unknown>;
+            const employeeName = typeof d.employeeName === "string" ? d.employeeName : undefined;
             const earned = Number(d.earned ?? d.allowance ?? 0);
             const taken = Number(d.taken ?? d.usedPaidDays ?? d.used ?? 0);
             const reserved = Number(d.reserved ?? 0);
@@ -172,7 +185,9 @@ export function AIHRAssistant({
             return (
               <div className="mt-2.5 rounded-[var(--radius-control)] bg-[var(--color-bg-surface)] p-3 border border-[var(--color-border-subtle)] space-y-2.5 shadow-xs animate-in fade-in duration-200">
                 <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--color-text-secondary)] border-b border-[var(--color-border-subtle)] pb-1.5">
-                  <span>Real-time Leave Balance</span>
+                  <span className="font-bold text-[var(--color-text-primary)]">
+                    {employeeName ? `${employeeName}'s Leave Balance` : "Real-time Leave Balance"}
+                  </span>
                   {policyName && <span className="text-[10px] truncate max-w-[150px]">{policyName}</span>}
                 </div>
 

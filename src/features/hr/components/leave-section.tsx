@@ -127,7 +127,7 @@ export function LeaveSection({
   };
 
   const handleCancelRequest = (requestId: string) => {
-    const reason = window.prompt("Motif d'annulation de cette demande :", "Changement de planning");
+    const reason = window.prompt("Reason for cancelling this request:", "Schedule change");
     if (!reason) return;
 
     startTransition(async () => {
@@ -141,14 +141,14 @@ export function LeaveSection({
   };
 
   const handleRunAccrual = () => {
-    if (!confirm("Voulez-vous exécuter la mensualisation automatique du Solde de congé pour le mois en cours ?")) return;
+    if (!confirm("Run the monthly leave accrual for the current month?")) return;
 
     startTransition(async () => {
       const res = await runMonthlyAccrualAction();
       if (res.error) {
         alert(res.error);
       } else if (res.data) {
-        setAccrualSuccess(`Mensualisation terminée : ${res.data.accruedEmployees.length} employé(s) crédités.`);
+        setAccrualSuccess(`Monthly accrual complete: ${res.data.accruedEmployees.length} employee(s) credited.`);
         setTimeout(() => setAccrualSuccess(null), 5000);
         onRefresh();
       }
@@ -176,58 +176,58 @@ export function LeaveSection({
         {/* Acquis (Earned) */}
         <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-xs">
           <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-            Acquis (Earned)
+            Earned
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
               {earnedDays}
             </span>
-            <span className="text-xs text-[var(--color-text-secondary)]">jours</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">days</span>
           </div>
-          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Mensualisation N</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Monthly accrual</p>
         </div>
 
         {/* Pris (Taken) */}
         <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-xs">
           <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-            Consommé (Taken)
+            Taken
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
               {takenDays}
             </span>
-            <span className="text-xs text-[var(--color-text-secondary)]">jours pris</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">days taken</span>
           </div>
-          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Congés validés & passés</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Approved & past leave</p>
         </div>
 
         {/* Réservé (Reserved) */}
         <div className="rounded-[var(--radius-card)] border border-amber-500/30 bg-amber-500/10 p-4 shadow-xs">
           <p className="text-xs font-bold text-amber-700">
-            Réservé (Reserved)
+            Reserved
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-amber-800">
               {reservedDays}
             </span>
-            <span className="text-xs text-amber-700">jours bloqués</span>
+            <span className="text-xs text-amber-700">days held</span>
           </div>
-          <p className="mt-1 text-[11px] text-amber-700">Demandes futures approuvées</p>
+          <p className="mt-1 text-[11px] text-amber-700">Future approved requests</p>
         </div>
 
         {/* Disponible (Available) */}
         <div className="rounded-[var(--radius-card)] border border-[var(--color-action-primary)]/40 bg-[var(--color-action-primary)]/10 p-4 shadow-xs">
           <p className="text-xs font-bold text-[var(--color-text-primary)]">
-            Disponible (Available)
+            Available
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
               {availableDays}
             </span>
-            <span className="text-xs font-semibold text-[var(--color-text-primary)]">jours restants</span>
+            <span className="text-xs font-semibold text-[var(--color-text-primary)]">days remaining</span>
           </div>
           <p className="mt-1 text-[11px] text-[var(--color-text-primary)]">
-            {currentEmployee?.fullName ?? "Votre Solde"}
+            {currentEmployee?.fullName ?? "Your Balance"}
           </p>
         </div>
       </div>
@@ -235,10 +235,10 @@ export function LeaveSection({
       {/* Legal Reference & Disclaimer Pill */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] text-[11px] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]">
         <span className="font-medium">
-          Régime de congé : <strong>Code du Travail Tunisien (Art. 113–114)</strong> — Mensualisation & registre immuable
+          Leave accrual regime: <strong>Tunisian Labour Code (Art. 113–114)</strong> — Monthly accrual & append-only ledger
         </span>
         <span className="italic text-[10px]">
-          * Valeurs légales indicatives (à vérifier avec RH/Juridique selon convention collective)
+          * Indicative legal values — verify with HR/Legal per applicable collective agreement
         </span>
       </div>
 
@@ -249,7 +249,7 @@ export function LeaveSection({
           <div>
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-                Gestion des Congés & Solde de Congé
+                Leave Management & Balance
               </h3>
               {pendingApprovalsCount > 0 && (
                 <span className="rounded-full bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] px-2.5 py-0.5 text-xs font-bold text-[var(--color-warning-text)]">
@@ -258,7 +258,7 @@ export function LeaveSection({
               )}
             </div>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Demandes de congé, réservations en temps réel et historique des mouvements
+              Leave requests, real-time reservations and transaction history
             </p>
           </div>
 
@@ -279,7 +279,7 @@ export function LeaveSection({
               className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
             >
               <Clock className="h-3.5 w-3.5" />
-              <span>Historique</span>
+              <span>History</span>
             </button>
 
             {/* Admin Accrual Engine Trigger */}
@@ -289,10 +289,10 @@ export function LeaveSection({
                 onClick={handleRunAccrual}
                 disabled={isPending}
                 className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
-                title="Déclencher la mensualisation automatique pour tous les employés actifs"
+                title="Trigger monthly accrual for all active employees"
               >
                 <CalendarCheck className="h-3.5 w-3.5 text-blue-600" />
-                <span>Mensualisation</span>
+                <span>Monthly Accrual</span>
               </button>
             )}
 
@@ -304,7 +304,7 @@ export function LeaveSection({
                 className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
               >
                 <Sliders className="h-3.5 w-3.5 text-orange-500" />
-                <span>Ajustement</span>
+                <span>Adjust Balance</span>
               </button>
             )}
 
@@ -314,7 +314,7 @@ export function LeaveSection({
               className="flex min-h-[40px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors shadow-xs"
             >
               <Plus className="h-4 w-4" />
-              <span>Demande de congé</span>
+              <span>Request Leave</span>
             </button>
           </div>
         </div>
@@ -682,13 +682,13 @@ export function LeaveSection({
                 {reviewAction === "approve" && (
                   <div>
                     <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
-                      Motif de dérogation en cas de dépassement du Solde (Optionnel)
+                    Override reason if balance is exceeded (Optional)
                     </label>
                     <input
                       type="text"
                       value={overrideReason}
                       onChange={(e) => setOverrideReason(e.target.value)}
-                      placeholder="Obligatoire uniquement si la durée dépasse le Solde disponible..."
+                      placeholder="Required only if duration exceeds available balance..."
                       className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
                     />
                   </div>
@@ -696,12 +696,12 @@ export function LeaveSection({
 
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
-                    Commentaire RH / Note interne
+                    HR Comment / Internal Note
                   </label>
                   <textarea
                     value={adminComment}
                     onChange={(e) => setAdminComment(e.target.value)}
-                    placeholder="Ajouter une note ou justification pour l'employé..."
+                    placeholder="Add a note or justification for the employee..."
                     rows={2}
                     className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-2.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
                   />
@@ -714,7 +714,7 @@ export function LeaveSection({
                     disabled={isPending}
                     className="flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-4 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
                   >
-                    Annuler
+                    Cancel
                   </button>
                   <button
                     type="submit"
@@ -732,7 +732,7 @@ export function LeaveSection({
                     ) : (
                       <X className="h-3.5 w-3.5" />
                     )}
-                    <span>Confirmer {reviewAction === "approve" ? "l'approbation" : "le refus"}</span>
+                    <span>Confirm {reviewAction === "approve" ? "Approval" : "Rejection"}</span>
                   </button>
                 </div>
               </form>

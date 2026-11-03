@@ -53,7 +53,7 @@ export function LeaveHistoryModal({
 
   const handleConfirmReversal = (txId: string) => {
     if (!reversalReason.trim() || reversalReason.trim().length < 3) {
-      setError("Un motif d'annulation (au moins 3 caractères) est requis.");
+      setError("A reversal reason (at least 3 characters) is required.");
       return;
     }
 
@@ -85,18 +85,18 @@ export function LeaveHistoryModal({
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-[var(--color-action-primary)]" />
                 <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                  Historique du Solde de Congé
+                  Leave Balance History
                 </h2>
               </div>
               <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Registre immuable des mouvements de congé de <strong>{employee.fullName}</strong>.
+                Append-only leave ledger for <strong>{employee.fullName}</strong>.
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
               disabled={isPending}
-              aria-label="Fermer"
+              aria-label="Close"
               className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors shrink-0"
             >
               <X className="h-5 w-5" />
@@ -115,11 +115,11 @@ export function LeaveHistoryModal({
             {loading ? (
               <div className="flex flex-col items-center justify-center py-12 text-[var(--color-text-secondary)] text-sm">
                 <RefreshCw className="h-6 w-6 animate-spin mb-2" />
-                <span>Chargement du registre...</span>
+                <span>Loading ledger...</span>
               </div>
             ) : transactions.length === 0 ? (
               <div className="text-center py-12 text-[var(--color-text-secondary)] text-sm">
-                Aucun mouvement de congé enregistré pour le moment.
+                No leave transactions recorded yet.
               </div>
             ) : (
               transactions.map((tx) => {
@@ -164,7 +164,7 @@ export function LeaveHistoryModal({
                               setReversalReason("");
                             }}
                             className="p-1 rounded hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] hover:text-red-500 transition-colors"
-                            title="Annuler/reverser cette transaction"
+                            title="Reverse this transaction"
                           >
                             <RotateCcw className="h-3.5 w-3.5" />
                           </button>
@@ -177,21 +177,21 @@ export function LeaveHistoryModal({
                     </p>
 
                     <div className="flex items-center justify-between text-[10px] text-[var(--color-text-secondary)] pt-1 border-t border-[var(--color-border-subtle)]/50">
-                      <span>Auteur: {tx.createdBy}</span>
+                      <span>Author: {tx.createdBy}</span>
                       <span>{new Date(tx.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
 
                     {/* Inline Reversal Form */}
                     {isReversalTarget && (
                       <div className="mt-2 p-2.5 rounded bg-[var(--color-bg-surface)] border border-red-500/30 space-y-2">
-                        <p className="font-semibold text-red-600 text-[11px]">
-                          Motif d'annulation de cette transaction :
-                        </p>
+                          <span className="font-semibold text-red-600 text-[11px]">
+                          Reason for reversing this transaction:
+                        </span>
                         <input
                           type="text"
                           value={reversalReason}
                           onChange={(e) => setReversalReason(e.target.value)}
-                          placeholder="Ex: Erreur de saisie, rectification planning..."
+                          placeholder="E.g. Data entry error, schedule correction..."
                           className="w-full min-h-[36px] rounded px-2.5 text-xs border border-[var(--color-border-control)] bg-[var(--color-bg-surface)]"
                         />
                         <div className="flex justify-end gap-2">
@@ -200,7 +200,7 @@ export function LeaveHistoryModal({
                             onClick={() => setReversingTxId(null)}
                             className="px-2.5 py-1 text-xs rounded border border-[var(--color-border-subtle)]"
                           >
-                            Annuler
+                            Cancel
                           </button>
                           <button
                             type="button"
@@ -208,7 +208,7 @@ export function LeaveHistoryModal({
                             disabled={isPending}
                             className="px-3 py-1 text-xs rounded bg-red-600 text-white font-bold hover:bg-red-700"
                           >
-                            Confirmer la contre-passation
+                            Confirm Reversal
                           </button>
                         </div>
                       </div>
@@ -223,7 +223,7 @@ export function LeaveHistoryModal({
           <div className="mt-4 pt-3 border-t border-[var(--color-border-subtle)] flex items-center justify-between text-[11px] text-[var(--color-text-secondary)] shrink-0">
             <span className="flex items-center gap-1">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              Registre comptable protégé en écriture seule
+              Append-only protected ledger
             </span>
             <button
               type="button"

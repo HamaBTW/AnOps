@@ -1348,7 +1348,7 @@ export async function runMonthlyAccrual(
         transactionType: "ACCRUAL",
         days: daysToAccrue,
         effectiveDate,
-        description: `Mensualisation Solde de congé — Période ${periodMonth} (+${daysToAccrue}j)`,
+        description: `Monthly leave accrual — Period ${periodMonth} (+${daysToAccrue}d)`,
         createdBy: adminUserId,
       },
       companyId
@@ -1435,7 +1435,7 @@ export async function reverseLeaveTransaction(
       days: reversedDays,
       effectiveDate: formatDateYMD(new Date()),
       referenceId: transactionId,
-      description: `Annulation de la transaction #${transactionId.slice(-6)}: ${reason.trim()}`,
+      description: `Reversal of transaction #${transactionId.slice(-6)}: ${reason.trim()}`,
       createdBy: adminUserId,
     },
     companyId
@@ -1626,7 +1626,7 @@ export async function reviewLeaveRequest(
           days: overdraftDays,
           effectiveDate: formatDateYMD(new Date()),
           referenceId: input.requestId,
-          description: `Autorisation de dépassement exceptionnel: ${input.overrideReason.trim()}`,
+          description: `Exceptional overdraft approval: ${input.overrideReason.trim()}`,
           createdBy: reviewerName,
         },
         companyId
@@ -1644,7 +1644,7 @@ export async function reviewLeaveRequest(
         days,
         effectiveDate: existing.startDate as string,
         referenceId: input.requestId,
-        description: `Réservation pour demande de congé #${input.requestId.slice(-6)} (${existing.startDate} → ${existing.endDate})`,
+        description: `Reservation for leave request #${input.requestId.slice(-6)} (${existing.startDate} → ${existing.endDate})`,
         createdBy: reviewerName,
       },
       companyId
@@ -1718,7 +1718,7 @@ export async function cancelLeaveRequest(
         days,
         effectiveDate: formatDateYMD(new Date()),
         referenceId: requestId,
-        description: `Libération de réservation (demande annulée): ${reason}`,
+        description: `Release reservation (request cancelled): ${reason}`,
         createdBy: actorName,
       },
       companyId
@@ -1792,7 +1792,7 @@ export async function syncTakenLeaveRequests(companyId: string): Promise<number>
             days,
             effectiveDate: req.endDate as string,
             referenceId: reqId,
-            description: `Confirmation congé pris — Libération réservation #${reqId.slice(-6)}`,
+            description: `Confirmed taken leave — Release reservation #${reqId.slice(-6)}`,
             createdBy: "system_scheduler",
           },
           companyId
@@ -1808,7 +1808,7 @@ export async function syncTakenLeaveRequests(companyId: string): Promise<number>
             days,
             effectiveDate: req.endDate as string,
             referenceId: reqId,
-            description: `Congé payé consommé #${reqId.slice(-6)} (${req.startDate} → ${req.endDate})`,
+            description: `Paid leave taken #${reqId.slice(-6)} (${req.startDate} → ${req.endDate})`,
             createdBy: "system_scheduler",
           },
           companyId
@@ -1843,7 +1843,7 @@ export async function calculateDepartureUnusedLeave(employeeId: string, companyI
     taken: solde.taken,
     potentialCompensationDays,
     warning:
-      "Important: L'indemnité compensatrice de congé payé dépend du motif de rupture (ex. faute lourde, Art. 120 du Code du Travail) et des conventions collectives applicables. Vérifier avec le département juridique avant versement.",
+      "Important: Compensation for unused paid leave depends on the termination reason (e.g. gross misconduct exception, Art. 120 of Tunisian Labour Code) and applicable collective agreements. Verify with Legal/HR before payout.",
   };
 }
 
@@ -1865,7 +1865,7 @@ export async function confirmDepartureCompensation(
       transactionType: "COMPENSATION",
       days: -Math.abs(approvedDays), // decreases solde upon settlement
       effectiveDate: formatDateYMD(new Date()),
-      description: `Indemnité compensatrice de congé validée au départ: ${reason.trim()} (${approvedDays}j)`,
+      description: `Unused leave compensation approved at departure: ${reason.trim()} (${approvedDays}d)`,
       createdBy: adminUserId,
     },
     companyId

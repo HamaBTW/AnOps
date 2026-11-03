@@ -35,15 +35,15 @@ export function ManualAdjustmentModal({
     setError(null);
 
     if (!employeeId) {
-      setError("Veuillez sélectionner un employé.");
+      setError("Please select an employee.");
       return;
     }
     if (days === 0) {
-      setError("Le nombre de jours ajustés ne peut pas être zéro.");
+      setError("Adjusted days cannot be zero.");
       return;
     }
     if (!reason.trim() || reason.trim().length < 3) {
-      setError("Un motif obligatoire (minimum 3 caractères) est requis.");
+      setError("A mandatory reason (minimum 3 characters) is required.");
       return;
     }
 
@@ -79,14 +79,14 @@ export function ManualAdjustmentModal({
             <div className="flex items-center gap-2">
               <Sliders className="h-5 w-5 text-orange-500" />
               <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
-                Ajustement Manuel du Solde
+                Manual Balance Adjustment
               </h2>
             </div>
             <button
               type="button"
               onClick={onClose}
               disabled={isPending}
-              aria-label="Fermer"
+              aria-label="Close"
               className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
             >
               <X className="h-5 w-5" />
@@ -104,7 +104,7 @@ export function ManualAdjustmentModal({
             {/* Employee Selector */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Employé concerné
+                Employee
               </label>
               <select
                 value={employeeId}
@@ -123,7 +123,7 @@ export function ManualAdjustmentModal({
             {/* Days (+ or -) */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Nombre de jours (+ créditer, - débiter)
+                Days (+ to credit, − to debit)
               </label>
               <input
                 type="number"
@@ -135,19 +135,19 @@ export function ManualAdjustmentModal({
                 className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm font-bold text-[var(--color-text-primary)]"
               />
               <p className="text-[11px] text-[var(--color-text-secondary)]">
-                Ex: <strong>2</strong> pour ajouter 2 jours, <strong>-1.5</strong> pour déduire 1.5 jour.
+                E.g. <strong>2</strong> to add 2 days, <strong>-1.5</strong> to deduct 1.5 days.
               </p>
             </div>
 
             {/* Reason */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                Motif réglementaire obligatoire
+                Mandatory Reason (required)
               </label>
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Ex: Régularisation reliquat N-1, accord d'entreprise exceptionnel..."
+                placeholder="E.g. Prior-year balance correction, exceptional agreement..."
                 rows={3}
                 required
                 disabled={isPending}
@@ -163,7 +163,7 @@ export function ManualAdjustmentModal({
                 disabled={isPending}
                 className="px-4 py-2 text-sm font-semibold rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]"
               >
-                Annuler
+                Cancel
               </button>
               <button
                 type="submit"
@@ -171,9 +171,9 @@ export function ManualAdjustmentModal({
                 className="flex items-center gap-2 px-5 py-2 text-sm font-bold rounded-[var(--radius-control)] bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50"
               >
                 {isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /><span>Enregistrement...</span></>
+                  <><Loader2 className="h-4 w-4 animate-spin" /><span>Saving...</span></>
                 ) : (
-                  <><CheckCircle2 className="h-4 w-4" /><span>Valider l'ajustement</span></>
+                  <><CheckCircle2 className="h-4 w-4" /><span>Save Adjustment</span></>
                 )}
               </button>
             </div>

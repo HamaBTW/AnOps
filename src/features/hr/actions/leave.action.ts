@@ -124,13 +124,13 @@ export async function getSoldeDeCongeAction(employeeId?: string): Promise<Action
     }
 
     if (!authUser.isAdmin && authUser.employee && targetEmpId !== authUser.employee.id) {
-      return { error: "Forbidden: You may only view your own Solde de congé." };
+      return { error: "Forbidden: You may only view your own leave balance." };
     }
 
     const solde = await getSoldeDeConge(targetEmpId, new Date().getFullYear(), authUser.companyId);
     return { success: true, data: solde };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to fetch Solde de congé.";
+    const message = err instanceof Error ? err.message : "Failed to fetch leave balance.";
     return { error: message };
   }
 }

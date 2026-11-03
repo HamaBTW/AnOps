@@ -53,7 +53,7 @@ export function DepartureReviewModal({
     if (!data) return;
 
     if (!reason.trim()) {
-      setError("Veuillez renseigner le motif de départ / validation.");
+      setError("Please enter a departure / validation reason.");
       return;
     }
 
@@ -87,14 +87,14 @@ export function DepartureReviewModal({
             <div className="flex items-center gap-2">
               <UserMinus className="h-5 w-5 text-amber-500" />
               <h2 className="text-lg font-bold tracking-tight text-[var(--color-text-primary)]">
-                Revue Départ & Solde de Congé Non Pris
+                Departure Review — Unused Leave Balance
               </h2>
             </div>
             <button
               type="button"
               onClick={onClose}
               disabled={isPending}
-              aria-label="Fermer"
+              aria-label="Close"
               className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
             >
               <X className="h-5 w-5" />
@@ -111,25 +111,25 @@ export function DepartureReviewModal({
           {loading ? (
             <div className="flex flex-col items-center justify-center py-10 text-sm text-[var(--color-text-secondary)]">
               <Loader2 className="h-6 w-6 animate-spin mb-2" />
-              <span>Calcul du solde restant au départ...</span>
+              <span>Calculating remaining balance...</span>
             </div>
           ) : data ? (
             <form onSubmit={handleConfirmCompensation} className="mt-4 space-y-4">
               <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-3 text-xs space-y-2">
                 <p className="font-semibold text-sm text-[var(--color-text-primary)]">
-                  Employé : {employee.fullName} ({employee.jobTitle})
+                  Employee: {employee.fullName} ({employee.jobTitle})
                 </p>
                 <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-[var(--color-border-subtle)]">
                   <div>
-                    <span className="text-[10px] text-[var(--color-text-secondary)] block">Jours Acquis</span>
+                    <span className="text-[10px] text-[var(--color-text-secondary)] block">Days Earned</span>
                     <span className="text-sm font-bold text-[var(--color-text-primary)]">{data.earned} j</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[var(--color-text-secondary)] block">Jours Consommés</span>
+                    <span className="text-[10px] text-[var(--color-text-secondary)] block">Days Taken</span>
                     <span className="text-sm font-bold text-[var(--color-text-primary)]">{data.taken} j</span>
                   </div>
                   <div className="bg-amber-500/10 rounded p-1">
-                    <span className="text-[10px] text-amber-700 block font-bold">Reliquat Potentiel</span>
+                    <span className="text-[10px] text-amber-700 block font-bold">Unused Balance</span>
                     <span className="text-sm font-extrabold text-amber-700">{data.potentialCompensationDays} j</span>
                   </div>
                 </div>
@@ -139,20 +139,20 @@ export function DepartureReviewModal({
               <div className="flex items-start gap-2.5 rounded-[var(--radius-control)] border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
                 <p className="leading-relaxed">
-                  <strong>Avertissement Juridique :</strong> L'indemnité compensatrice de congé payé n'est pas automatique.
-                  L'éligibilité dépend du motif de rupture (ex: exclusion en cas de faute lourde, Art. 120 du Code du Travail) et des dispositions conventionnelles.
+                  <strong>Legal Notice:</strong> Paid leave compensation is not automatic.
+                  Eligibility depends on the termination reason (e.g., excluded for gross misconduct, Art. 120 Labour Code) and applicable collective agreement.
                 </p>
               </div>
 
               {/* Reason input */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
-                  Motif de validation RH
+                  HR Validation Reason
                 </label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Ex: Fin de contrat CDD, démission avec préavis validé, solde de tout compte..."
+                  placeholder="E.g. End of fixed-term contract, resignation with served notice, final settlement..."
                   rows={2}
                   required
                   disabled={isPending}
@@ -168,7 +168,7 @@ export function DepartureReviewModal({
                   disabled={isPending}
                   className="px-4 py-2 text-sm font-semibold rounded-[var(--radius-control)] border border-[var(--color-border-subtle)]"
                 >
-                  Fermer sans compensation
+                  Close without compensation
                 </button>
                 <button
                   type="submit"
@@ -176,9 +176,9 @@ export function DepartureReviewModal({
                   className="flex items-center gap-2 px-5 py-2 text-sm font-bold rounded-[var(--radius-control)] bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
                 >
                   {isPending ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /><span>Validation...</span></>
+                    <><Loader2 className="h-4 w-4 animate-spin" /><span>Validating...</span></>
                   ) : (
-                    <><CheckCircle2 className="h-4 w-4" /><span>Confirmer l'indemnité ({data.potentialCompensationDays}j)</span></>
+                    <><CheckCircle2 className="h-4 w-4" /><span>Confirm compensation ({data.potentialCompensationDays}d)</span></>
                   )}
                 </button>
               </div>

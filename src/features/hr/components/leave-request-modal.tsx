@@ -269,7 +269,7 @@ export function LeaveRequestModal({
                     className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)]"
                   />
                   <label htmlFor="halfDayCheckbox" className="font-semibold text-[var(--color-text-primary)] cursor-pointer">
-                    Demande de demi-journée (0.5 jour)
+                    Half-day request (0.5 day)
                   </label>
                 </div>
                 {isHalfDay && (
@@ -283,7 +283,7 @@ export function LeaveRequestModal({
                         onChange={() => setHalfDaySlot("morning")}
                         className="accent-[var(--color-action-primary)]"
                       />
-                      <span>Matin</span>
+                      <span>Morning</span>
                     </label>
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input
@@ -294,7 +294,7 @@ export function LeaveRequestModal({
                         onChange={() => setHalfDaySlot("afternoon")}
                         className="accent-[var(--color-action-primary)]"
                       />
-                      <span>Après-midi</span>
+                      <span>Afternoon</span>
                     </label>
                   </div>
                 )}

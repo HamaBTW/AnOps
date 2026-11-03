@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { Employee, Department, JobTitle } from "@/features/hr/types";
 import { toggleEmployeeStatusAction } from "@/features/hr/actions/employee.action";
+import { DepartureReviewModal } from "./departure-review-modal";
 import { cn } from "@/shared/lib/utils";
 
 type EmployeeTableProps = {
@@ -59,14 +60,21 @@ export function EmployeeTable({
     return matchesSearch && matchesDept && matchesStatus;
   });
 
+  const [departureEmployee, setDepartureEmployee] = useState<Employee | null>(null);
+
   const handleToggleStatus = (id: string, name: string, currentStatus: "active" | "inactive") => {
-    const actionName = currentStatus === "active" ? "deactivate" : "activate";
-    if (!confirm(`Are you sure you want to ${actionName} ${name}?`)) {
+    const actionName = currentStatus === "active" ? "désactiver" : "activer";
+    if (!confirm(`Voulez-vous vraiment ${actionName} ${name} ?`)) {
       return;
     }
 
+    const empObj = employees.find((e) => e.id === id);
+
     startTransition(async () => {
       await toggleEmployeeStatusAction(id);
+      if (currentStatus === "active" && empObj) {
+        setDepartureEmployee(empObj);
+      }
     });
   };
 
@@ -378,6 +386,14 @@ export function EmployeeTable({
           </div>
         )}
       </div>
+
+      {departureEmployee && (
+        <DepartureReviewModal
+          isOpen={Boolean(departureEmployee)}
+          onClose={() => setDepartureEmployee(null)}
+          employee={departureEmployee}
+        />
+      )}
     </div>
   );
 }

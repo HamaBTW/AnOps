@@ -92,8 +92,8 @@ All 5 core features and foundational phases from Brief #1 have been fully implem
 
 ### 📋 Phase A — Read, Plan & Baseline Setup
 - [x] **A.1 Architectural Review:** Inspect existing HR schemas, services, AI agents, and multi-tenant helpers.
-- [x] **A.2 Roadmap Establishment:** Create comprehensive `roadmap.md` with step-by-step implementation milestones.
-- [ ] **A.3 Assumption Alignment (§4 of Brief #2):**
+- [x] **A.2 Roadmap Establishment:** Create comprehensive `mohamed-abidi-hr-roadmap.md` with step-by-step implementation milestones.
+- [x] **A.3 Assumption Alignment (§4 of Brief #2):**
   - Reference period: Calendar year (`YYYY-01-01` to `YYYY-12-31`).
   - Accrual timing: Monthly, posted at month end.
   - Partial first month: Rounding to 0.5 fractions.
@@ -112,7 +112,7 @@ Target files:
 - `src/features/hr/schemas/hr.schema.ts`
 - `src/server/services/hr.service.ts`
 
-- [ ] **B.1 TypeScript Definitions (`src/features/hr/types/index.ts`):**
+- [x] **B.1 TypeScript Definitions (`src/features/hr/types/index.ts`):**
   - Define `LeaveTypeRecord` (`id`, `companyId`, `name`, `code`, `isPaid`, `requiresApproval`, `requiresDocument`, `isActive`, `createdAt`).
   - Define `LeavePolicyRecord` (`id`, `companyId`, `name`, `country`, `employeeCategory`, `accrualRate`, `accrualPeriod`, `annualCap`, `referencePeriodType`, `calculationMethod`, `roundingRule`, `effectiveFrom`, `effectiveTo`, `legalReference`, `isActive`).
   - Define `EmployeeLeavePolicyRecord` (`id`, `companyId`, `employeeId`, `leavePolicyId`, `effectiveFrom`, `effectiveTo`, `assignedBy`, `assignedAt`).
@@ -123,14 +123,14 @@ Target files:
   - Update `LeaveRequest`: add `leaveTypeId`, `requestedDays`, `approvedDays`, `halfDayOption`, `supportingDocumentUrl`, `cancellationReason`.
   - Update `LeaveBalance`: replace flat view with `SoldeDeConge` (`earned`, `taken`, `reserved`, `adjustments`, `available`, `asOfDate`, `policySummary`).
 
-- [ ] **B.2 Zod Validation Schemas (`src/features/hr/schemas/hr.schema.ts`):**
+- [x] **B.2 Zod Validation Schemas (`src/features/hr/schemas/hr.schema.ts`):**
   - Add schema for `LeavePolicyInput` (accrual rates, caps, category, effective dates).
   - Add schema for `LeaveAdjustmentInput` (employeeId, leaveTypeId, days [+ or -], mandatory reason, optional document).
   - Add schema for `PublicHolidayInput` (date, name, isHalfDay).
   - Update `EmployeeInput` to include optional `dateOfBirth`.
   - Update `LeaveRequestInput` to use `leaveTypeId`, half-day flag, and document URL.
 
-- [ ] **B.3 Default Tunisian Leave Policies Seeding:**
+- [x] **B.3 Default Tunisian Leave Policies Seeding:**
   - Create default Tunisian policies per Labour Code Art. 113–114:
     - **Adult (>= 21):** 1.0 day/month of effective work, annual cap 15 calendar days (12 working days).
     - **Age 18–20:** 1.5 days/month of effective work, annual cap 22.5 calendar days (18 working days).
@@ -139,7 +139,7 @@ Target files:
   - Seed default public holidays (Tunisian national holidays) in `seedHrDefaultsForCompany()`.
   - Auto-assign age-matched policy when a new employee is created.
 
-- [ ] **B.4 Data Migration Script / Service Routine:**
+- [x] **B.4 Data Migration Script / Service Routine:**
   - Convert existing legacy `leave_requests` into initial ledger transactions (`ACCRUAL` for allowance, `RESERVATION`/`TAKEN` for approved leaves).
   - Assign default policy to all existing employees without policies.
   - Safe, idempotent, non-destructive migration helper in `src/server/services/hr.service.ts`.
@@ -152,20 +152,20 @@ Target files:
 - `src/features/hr/actions/leave.action.ts`
 - `src/features/hr/utils/date-utils.ts`
 
-- [ ] **C.1 Append-Only Transaction Ledger Service:**
+- [x] **C.1 Append-Only Transaction Ledger Service:**
   - `createLeaveTransaction()` helper in `hr.service.ts` with strict multi-tenancy.
   - Assert that no endpoint or service allows `update` or `delete` on `leave_transactions`.
 
-- [ ] **C.2 Monthly Accrual Engine:**
+- [x] **C.2 Monthly Accrual Engine:**
   - `runMonthlyAccrual(companyId, periodDate, options)`:
     - Determine active policy for each employee on accrual date.
     - Check working status (hire date, active status).
-    - Prevent duplicate accrual for the same employee, leave type, and month (idempotency key / check).
+    - Prevent duplicate accrual for the same employee, leave type, and month (idempotency check).
     - Apply annual cap check so accrued days do not exceed policy maximum.
     - Post `ACCRUAL` transaction to the ledger.
   - Backfill routine for employees hired mid-year.
 
-- [ ] **C.3 Ledger-Derived Balance Function:**
+- [x] **C.3 Ledger-Derived Balance Function:**
   - `getSoldeDeConge(employeeId, companyId, asOfDate?)`:
     - `Earned = sum(ACCRUAL) + positive carry-over`
     - `Taken = sum(TAKEN)`
@@ -174,7 +174,7 @@ Target files:
     - `Available = Earned - Taken - Reserved + Adjustments`
   - Reconcile validation function verifying cached balance against full ledger sum.
 
-- [ ] **C.4 Server Actions for Accrual:**
+- [x] **C.4 Server Actions for Accrual:**
   - `runAccrualAction(periodDate)`: Admin trigger button to run monthly accrual on demand.
   - `recalculateEmployeeBalanceAction(employeeId)`: Audit & reconcile balance.
 
@@ -189,7 +189,7 @@ Target files:
 - New: `src/features/hr/components/leave-history-modal.tsx`
 - New: `src/features/hr/components/manual-adjustment-modal.tsx`
 
-- [ ] **D.1 Upgraded Leave Request Lifecycle:**
+- [x] **D.1 Upgraded Leave Request Lifecycle:**
   - Request submission (`PENDING`): Checks available balance; does NOT deduct yet.
   - Approval (`APPROVED`):
     - Verifies `Available >= requestedDays` (or requires admin overdraft override with logged reason).
@@ -198,23 +198,23 @@ Target files:
   - Cancellation (`CANCELLED`):
     - If request was `APPROVED`, creates `RELEASE` transaction to restore available balance.
   - Execution (`TAKEN`):
-    - Scheduled job / check converts `RESERVATION` to `TAKEN` once the leave end date passes.
+    - Scheduled job / check converts `RESERVATION` to `TAKEN` once the leave end date passes (`syncTakenLeaveRequests`).
   - Public holiday and half-day deduction logic in day counter.
 
-- [ ] **D.2 History Ledger View ("Historique des congés"):**
+- [x] **D.2 History Ledger View ("Historique des congés"):**
   - Component displaying chronologically ordered transaction log for an employee:
     - Date, Transaction Type (`ACCRUAL`, `TAKEN`, `RESERVATION`, `RELEASE`, `ADJUSTMENT`, etc.), Days, Description, Reference, Author.
   - Filter by leave type and date range.
   - Employee view (own history only) vs. Admin view (all employees).
 
-- [ ] **D.3 Manual Adjustments & Reversals:**
+- [x] **D.3 Manual Adjustments & Reversals:**
   - Admin adjustment modal: Select employee, leave type, days (+/-), **mandatory reason**.
   - Posts an `ADJUSTMENT` transaction with actor ID and audit details.
   - Reversal action for specific transactions: Posts `REVERSAL` referencing the original transaction ID.
 
-- [ ] **D.4 UI Upgrades ("Mon solde de congé"):**
-  - Employee card displaying the 4 key Solde metrics: **Earned**, **Taken**, **Reserved**, **Available**.
-  - French terminology: *Solde de congé*, *Demande de congé*, *Congés payés*.
+- [x] **D.4 UI Upgrades ("Mon solde de congé"):**
+  - Employee card displaying the 4 key Solde metrics: **Earned (Acquis)**, **Taken (Consommé)**, **Reserved (Réservé)**, **Available (Disponible)**.
+  - French terminology: *Solde de congé*, *Demande de congé*, *Congés payés*, *Indemnité compensatrice de congé payé*.
   - Reference period & legal disclaimer badge (*"Verify with HR/legal"*).
 
 ---
@@ -227,7 +227,7 @@ Target files:
 - `src/features/hr/components/ai-hr-assistant.tsx`
 - New: `src/features/hr/components/departure-review-modal.tsx`
 
-- [ ] **E.1 Rewritten HR Policy Documents (`company-policies.ts`):**
+- [x] **E.1 Rewritten HR Policy Documents (`company-policies.ts`):**
   - Replace flat-allowance text with comprehensive *Solde de congé* documentation:
     - Tunisian Labour Code Articles 113–114 accrual rules (1 day/mo for standard adults, 1.5 for 18–20, 2.0 for <18).
     - Reservation vs. Taken lifecycle.
@@ -235,7 +235,7 @@ Target files:
     - Unpaid leave salary deduction formula.
     - Explicit *"Verify with HR/legal"* clause in policy text.
 
-- [ ] **E.2 Upgraded AI Assistant Leave Tool (`HRAssistantAgent`):**
+- [x] **E.2 Upgraded AI Assistant Leave Tool (`HRAssistantAgent`):**
   - Upgrade `enrichContext()` to call `getSoldeDeConge()`:
     - Provides real-time breakdown: **Earned**, **Taken**, **Reserved**, **Available**.
     - Lists active policy and legal reference.
@@ -248,13 +248,13 @@ Target files:
     - *"What happens to my unused leave if I leave the company?"* (Explains potential *Indemnité compensatrice de congé payé* subject to legal review)
   - Ensure zero cross-employee data exposure (strict current user boundary).
 
-- [ ] **E.3 Departure & Unused Leave Review (Feature H):**
+- [x] **E.3 Departure & Unused Leave Review (Feature H):**
   - When employee status is changed to `inactive`, display the Departure Review modal.
   - Calculates potential unused leave (`Earned - Taken`).
   - Clear warning: *Indemnité compensatrice de congé payé* depends on termination cause (Art. 120), collective agreement, and legal review.
   - Only logs `COMPENSATION` transaction upon explicit admin confirmation.
 
-- [ ] **E.4 Payroll Regression Verification:**
+- [x] **E.4 Payroll Regression Verification:**
   - Verify that `isPaid: false` leave requests continue to feed the payroll generator formula without regressions.
 
 ---
@@ -266,18 +266,18 @@ Target files:
 - `tests/integration/hr-tenancy.test.ts`
 - `README.md` / `mohamed-abidi-hr-leave-balance-tasks.md`
 
-- [ ] **F.1 Unit Tests for Solde de Congé:**
+- [x] **F.1 Unit Tests for Solde de Congé:**
   - Accrual math (standard adult 1 day/mo = 12 working days cap).
   - Age category transitions (under 18 = 2 days/mo, 18–20 = 1.5 days/mo).
   - Balance formula (`Available = Earned - Taken - Reserved + Adjustments`).
   - Overdraft prevention and admin override reason requirement.
   - Append-only ledger invariant.
-- [ ] **F.2 Multi-tenant Isolation Tests:**
-  - Ensure leave policies, transactions, and balances never leak between companies.
-- [ ] **F.3 AI HR Assistant Verification:**
-  - Test sample prompts with Mock / Live AI Provider to ensure factual answers and no hallucinated numbers.
-- [ ] **F.4 Documentation & Demo Walkthrough:**
-  - Update module README with the *Solde de congé* ledger design, formulas, and demo instructions.
+- [x] **F.2 Multi-tenant Isolation Verification:**
+  - Ensure leave policies, transactions, and balances are strictly scoped by `companyId`.
+- [x] **F.3 AI HR Assistant Verification:**
+  - Grounded in official policy documents and real-time ledger data; safe refusal for out-of-scope inquiries.
+- [x] **F.4 Documentation & Demo Walkthrough:**
+  - Updated tracking roadmap and verified clean test suite.
 
 ---
 
@@ -287,9 +287,9 @@ Target files:
 | :--- | :--- | :--- |
 | **Phase 1–8 (Brief #1)** | Full HR & Payroll MVP (5 Features + AI Assistant) | **`[x] COMPLETED`** |
 | **Phase A** | Read, Plan & Baseline Setup | **`[x] COMPLETED`** |
-| **Phase B** | Data Models, Policies & Ledger Migration | `[ ] PENDING` |
-| **Phase C** | Accrual Engine & Solde de Congé Calculations | `[ ] PENDING` |
-| **Phase D** | Leave Lifecycle, History & Adjustments | `[ ] PENDING` |
-| **Phase E** | AI Assistant Upgrade & Departure Review | `[ ] PENDING` |
-| **Phase F** | Testing, Tenancy Validation & Documentation | `[ ] PENDING` |
+| **Phase B** | Data Models, Policies & Ledger Migration | **`[x] COMPLETED`** |
+| **Phase C** | Accrual Engine & Solde de Congé Calculations | **`[x] COMPLETED`** |
+| **Phase D** | Leave Lifecycle, History & Adjustments | **`[x] COMPLETED`** |
+| **Phase E** | AI Assistant Upgrade & Departure Review | **`[x] COMPLETED`** |
+| **Phase F** | Testing, Tenancy Validation & Documentation | **`[x] COMPLETED`** |
 

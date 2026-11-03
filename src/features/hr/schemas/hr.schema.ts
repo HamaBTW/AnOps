@@ -29,6 +29,10 @@ export const employeeSchema = z.object({
   hireDate: z
     .string()
     .min(1, "Hire date is required"),
+  dateOfBirth: z
+    .string()
+    .optional()
+    .or(z.literal("")),
   baseSalary: z.coerce
     .number({ message: "Base salary must be a valid number" })
     .min(0, "Base salary cannot be negative"),
@@ -73,8 +77,11 @@ export const leaveRequestSchema = z
       "bereavement",
       "other",
     ]),
+    leaveTypeId: z.string().optional(),
     startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().min(1, "End date is required"),
+    halfDayOption: z.enum(["morning", "afternoon"]).optional(),
+    supportingDocumentUrl: z.string().optional(),
     reason: z
       .string()
       .trim()
@@ -98,6 +105,33 @@ export const leaveReviewSchema = z.object({
   requestId: z.string().min(1, "Request ID is required"),
   action: z.enum(["approve", "reject"]),
   adminComment: z.string().trim().max(300, "Comment is too long").optional(),
+  overrideReason: z.string().trim().max(300).optional(),
+});
+
+export const leaveAdjustmentSchema = z.object({
+  employeeId: z.string().min(1, "Employee ID is required"),
+  leaveTypeId: z.string().optional(),
+  days: z.coerce.number().refine((n) => n !== 0, "Days cannot be zero"),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Mandatory reason must be at least 3 characters")
+    .max(300, "Reason must be at most 300 characters"),
+});
+
+export const leavePolicySchema = z.object({
+  name: z.string().trim().min(2, "Policy name is required"),
+  employeeCategory: z.enum(["adult", "young_adult", "under_18"]),
+  accrualRate: z.coerce.number().min(0).max(10),
+  annualCap: z.coerce.number().min(1).max(60),
+  effectiveFrom: z.string().min(1, "Effective date is required"),
+  legalReference: z.string().trim().min(1, "Legal reference is required"),
+});
+
+export const publicHolidaySchema = z.object({
+  name: z.string().trim().min(2, "Holiday name is required"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+  isHalfDay: z.boolean().default(false),
 });
 
 // ========================
@@ -138,6 +172,9 @@ export type JobTitleInput = z.infer<typeof jobTitleSchema>;
 export type DepartmentInput = z.infer<typeof departmentSchema>;
 export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
 export type LeaveReviewInput = z.infer<typeof leaveReviewSchema>;
+export type LeaveAdjustmentInput = z.infer<typeof leaveAdjustmentSchema>;
+export type LeavePolicyInput = z.infer<typeof leavePolicySchema>;
+export type PublicHolidayInput = z.infer<typeof publicHolidaySchema>;
 export type AttendancePunchInput = z.infer<typeof attendancePunchSchema>;
 export type PayrollGenerateInput = z.infer<typeof payrollGenerateSchema>;
 export type AIPromptInput = z.infer<typeof aiPromptSchema>;

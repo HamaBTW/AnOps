@@ -18,15 +18,31 @@ import type {
   PayslipRecord,
   PayrollSummary,
   AIChatMessage,
+  LeaveTypeRecord,
+  LeavePolicyRecord,
+  EmployeeLeavePolicyRecord,
+  LeaveTransactionRecord,
+  PublicHolidayRecord,
+  SoldeDeConge,
+  EmployeeCategory,
 } from "@/features/hr/types";
 import type {
   EmployeeInput,
   LeaveRequestInput,
   LeaveReviewInput,
+  LeaveAdjustmentInput,
+  LeavePolicyInput,
+  PublicHolidayInput,
 } from "@/features/hr/schemas/hr.schema";
 import { COMPANY_POLICIES } from "@/features/hr/policies/company-policies";
 import DEFAULT_STRUCTURE from "@/features/hr/defaults/company-structure.json";
-import { calculateBusinessDays, formatDateYMD } from "@/features/hr/utils/date-utils";
+import {
+  calculateBusinessDays,
+  calculateLeaveDays,
+  calculateAge,
+  getAgeCategory,
+  formatDateYMD,
+} from "@/features/hr/utils/date-utils";
 
 const DEFAULT_DEPARTMENTS = DEFAULT_STRUCTURE.departments;
 
@@ -84,6 +100,127 @@ export async function seedHrDefaultsForCompany(companyId: string): Promise<void>
       createdAt: new Date(),
     }));
     await db.collection("job_titles").insertMany(titleDocs);
+  }
+
+  // 3. Default Tunisian Leave Types (Solde de congé system)
+  const leaveTypesCount = await db.collection("leave_types").countDocuments({ companyId: cId });
+  if (leaveTypesCount === 0) {
+    const defaultTypes = [
+      {
+        name: "Congés Payés (Annual Paid Leave)",
+        code: "CP",
+        isPaid: true,
+        requiresApproval: true,
+        requiresDocument: false,
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+      {
+        name: "Congé Maladie (Sick Leave)",
+        code: "SICK",
+        isPaid: true,
+        requiresApproval: true,
+        requiresDocument: true,
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+      {
+        name: "Congé Événements Familiaux (Exceptional)",
+        code: "EXCEPTIONAL",
+        isPaid: true,
+        requiresApproval: true,
+        requiresDocument: true,
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+      {
+        name: "Congé Sans Solde (Unpaid Leave)",
+        code: "UNPAID",
+        isPaid: false,
+        requiresApproval: true,
+        requiresDocument: false,
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+    ];
+    await db.collection("leave_types").insertMany(defaultTypes);
+  }
+
+  // 4. Default Tunisian Leave Policies (Labour Code Art. 113-114)
+  const policyCount = await db.collection("leave_policies").countDocuments({ companyId: cId });
+  if (policyCount === 0) {
+    const defaultPolicies = [
+      {
+        name: "Standard Adult Policy (Code du Travail Art. 113-114)",
+        country: "TN",
+        employeeCategory: "adult",
+        accrualRate: 1.0, // 1 day per month of effective work
+        accrualPeriod: "monthly",
+        annualCap: 15, // 15 calendar days (12 working days)
+        referencePeriodType: "calendar_year",
+        calculationMethod: "standard_monthly",
+        roundingRule: "half_day",
+        effectiveFrom: "2024-01-01",
+        legalReference: "Code du Travail Art. 113-114 (Vérifier avec RH/Juridique)",
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+      {
+        name: "Young Adult Policy 18-20 ans (Code du Travail Art. 114)",
+        country: "TN",
+        employeeCategory: "young_adult",
+        accrualRate: 1.5, // 1.5 days per month of effective work
+        accrualPeriod: "monthly",
+        annualCap: 22.5, // 22.5 calendar days (18 working days)
+        referencePeriodType: "calendar_year",
+        calculationMethod: "standard_monthly",
+        roundingRule: "half_day",
+        effectiveFrom: "2024-01-01",
+        legalReference: "Code du Travail Art. 114 (Vérifier avec RH/Juridique)",
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+      {
+        name: "Under 18 Policy (Code du Travail Art. 114)",
+        country: "TN",
+        employeeCategory: "under_18",
+        accrualRate: 2.0, // 2.0 days per month of effective work
+        accrualPeriod: "monthly",
+        annualCap: 30, // 30 calendar days (24 working days)
+        referencePeriodType: "calendar_year",
+        calculationMethod: "standard_monthly",
+        roundingRule: "half_day",
+        effectiveFrom: "2024-01-01",
+        legalReference: "Code du Travail Art. 114 (Vérifier avec RH/Juridique)",
+        isActive: true,
+        companyId: cId,
+        createdAt: new Date(),
+      },
+    ];
+    await db.collection("leave_policies").insertMany(defaultPolicies);
+  }
+
+  // 5. Default Tunisian Public Holidays
+  const holidaysCount = await db.collection("public_holidays").countDocuments({ companyId: cId });
+  if (holidaysCount === 0) {
+    const currentYear = new Date().getFullYear();
+    const defaultHolidays = [
+      { name: "Nouvel An (New Year)", date: `${currentYear}-01-01`, isHalfDay: false, companyId: cId },
+      { name: "Fête de la Révolution", date: `${currentYear}-01-14`, isHalfDay: false, companyId: cId },
+      { name: "Fête de l'Indépendance", date: `${currentYear}-03-20`, isHalfDay: false, companyId: cId },
+      { name: "Fête des Martyrs", date: `${currentYear}-04-09`, isHalfDay: false, companyId: cId },
+      { name: "Fête du Travail", date: `${currentYear}-05-01`, isHalfDay: false, companyId: cId },
+      { name: "Fête de la République", date: `${currentYear}-07-25`, isHalfDay: false, companyId: cId },
+      { name: "Fête de la Femme", date: `${currentYear}-08-13`, isHalfDay: false, companyId: cId },
+      { name: "Fête de l'Évacuation", date: `${currentYear}-10-15`, isHalfDay: false, companyId: cId },
+    ];
+    await db.collection("public_holidays").insertMany(defaultHolidays);
   }
 }
 
@@ -222,6 +359,7 @@ export async function getEmployeesByDepartment(departmentId: string, companyId: 
     departmentId: (doc.departmentId as string) || "",
     departmentName: (doc.departmentName as string) || "General",
     hireDate: (doc.hireDate as string) || "2024-01-01",
+    dateOfBirth: (doc.dateOfBirth as string) || undefined,
     baseSalary: Number(doc.baseSalary) || 0,
     status: (doc.status as "active" | "inactive") || "active",
     role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
@@ -395,6 +533,7 @@ export async function getEmployeesByJobTitle(title: string): Promise<Employee[]>
     departmentId: (doc.departmentId as string) || "",
     departmentName: (doc.departmentName as string) || "General",
     hireDate: (doc.hireDate as string) || "2024-01-01",
+    dateOfBirth: (doc.dateOfBirth as string) || undefined,
     baseSalary: Number(doc.baseSalary) || 0,
     status: (doc.status as "active" | "inactive") || "active",
     role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
@@ -441,6 +580,7 @@ export async function getEmployees(filters: EmployeeFilterParams, companyId: str
     departmentId: (doc.departmentId as string) || "",
     departmentName: (doc.departmentName as string) || "General",
     hireDate: (doc.hireDate as string) || "2024-01-01",
+    dateOfBirth: (doc.dateOfBirth as string) || undefined,
     baseSalary: Number(doc.baseSalary) || 0,
     status: (doc.status as "active" | "inactive") || "active",
     role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
@@ -469,6 +609,7 @@ export async function getEmployeeById(id: string, companyId: string): Promise<Em
     departmentId: (doc.departmentId as string) || "",
     departmentName: (doc.departmentName as string) || "General",
     hireDate: (doc.hireDate as string) || "2024-01-01",
+    dateOfBirth: (doc.dateOfBirth as string) || undefined,
     baseSalary: Number(doc.baseSalary) || 0,
     status: (doc.status as "active" | "inactive") || "active",
     role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
@@ -496,6 +637,7 @@ export async function getEmployeeByEmail(email: string, companyId: string): Prom
     departmentId: (doc.departmentId as string) || "",
     departmentName: (doc.departmentName as string) || "General",
     hireDate: (doc.hireDate as string) || "2024-01-01",
+    dateOfBirth: (doc.dateOfBirth as string) || undefined,
     baseSalary: Number(doc.baseSalary) || 0,
     status: (doc.status as "active" | "inactive") || "active",
     role: (doc.role as "employee" | "manager" | "hr_admin") || "employee",
@@ -536,6 +678,7 @@ export async function createEmployee(data: EmployeeInput, companyId: string): Pr
     departmentId: data.departmentId,
     departmentName: deptName,
     hireDate: data.hireDate,
+    dateOfBirth: data.dateOfBirth?.trim() || undefined,
     baseSalary: data.baseSalary,
     role: data.role,
     status: data.status,
@@ -546,6 +689,57 @@ export async function createEmployee(data: EmployeeInput, companyId: string): Pr
   };
 
   const result = await db.collection("employees").insertOne(newDoc);
+  const empId = result.insertedId.toString();
+
+  // Auto-seed defaults (leave types, policies, public holidays) if new company
+  await seedHrDefaultsForCompany(companyId);
+
+  // Auto-assign Tunisian leave policy based on age
+  const category = getAgeCategory(data.dateOfBirth, new Date(data.hireDate || Date.now()));
+  const policy = (await db.collection("leave_policies").findOne({
+    companyId: cId,
+    employeeCategory: category,
+    isActive: true,
+  })) || (await db.collection("leave_policies").findOne({
+    companyId: cId,
+    isActive: true,
+  }));
+
+  if (policy) {
+    await db.collection("employee_leave_policies").insertOne({
+      companyId: cId,
+      employeeId: empId,
+      leavePolicyId: policy._id.toString(),
+      policyName: policy.name,
+      effectiveFrom: data.hireDate,
+      assignedBy: "system_auto_age",
+      assignedAt: new Date(),
+    });
+
+    // Initial accrual upon onboarding for months worked in the current year
+    const hire = new Date(data.hireDate);
+    const now = new Date();
+    if (hire <= now && hire.getFullYear() === now.getFullYear()) {
+      const monthsWorked = Math.max(1, (now.getMonth() - hire.getMonth()) + 1);
+      const accrualRate = Number(policy.accrualRate) || 1.0;
+      const initialDays = Math.min(Number(policy.annualCap) || 15, Math.round(monthsWorked * accrualRate * 2) / 2);
+
+      const cpType = await db.collection("leave_types").findOne({ companyId: cId, code: "CP" });
+      await db.collection("leave_transactions").insertOne({
+        companyId: cId,
+        employeeId: empId,
+        employeeName: newDoc.fullName,
+        leaveTypeId: cpType?._id?.toString(),
+        leaveTypeCode: "CP",
+        transactionType: "ACCRUAL",
+        days: initialDays,
+        effectiveDate: data.hireDate,
+        description: `Initial accrual upon onboarding (${monthsWorked} month(s) effective work @ ${accrualRate}d/mo)`,
+        createdBy: "system",
+        createdAt: new Date(),
+      });
+    }
+  }
 
   // Auto-provision a users account for the new employee
   const tempPassword = crypto.randomBytes(9).toString("base64url").slice(0, 12);
@@ -641,6 +835,7 @@ export async function updateEmployee(id: string, data: EmployeeInput, companyId:
     departmentId: data.departmentId,
     departmentName: deptName,
     hireDate: data.hireDate,
+    dateOfBirth: data.dateOfBirth?.trim() || undefined,
     baseSalary: data.baseSalary,
     role: data.role,
     status: data.status,
@@ -722,50 +917,534 @@ export async function getHRDashboardStats(companyId: string): Promise<HRDashboar
 // Feature 2: Leave & Time-off Service Methods
 // ==========================================
 
-export async function getLeaveBalance(employeeId: string, year = new Date().getFullYear(), companyId: string): Promise<LeaveBalance> {
+// ==========================================
+// Feature 2: Solde de Congé & Leave Service Methods
+// ==========================================
+
+export async function getLeaveTypes(companyId: string): Promise<LeaveTypeRecord[]> {
   const db = await getDb();
   const cId = requireCompanyId(companyId);
-  const emp = await getEmployeeById(employeeId, cId?.toString());
-  const employeeName = emp?.fullName || "Employee";
-  const allowance = emp?.leaveAllowance ?? 25;
+  await seedHrDefaultsForCompany(companyId);
 
+  const docs = await db.collection("leave_types").find({ companyId: cId, isActive: true }).sort({ code: 1 }).toArray();
+  return docs.map((d) => ({
+    id: (d._id as ObjectId).toString(),
+    companyId: companyId,
+    name: d.name as string,
+    code: d.code as string,
+    isPaid: Boolean(d.isPaid),
+    requiresApproval: Boolean(d.requiresApproval),
+    requiresDocument: Boolean(d.requiresDocument),
+    isActive: Boolean(d.isActive),
+    createdAt: d.createdAt ? (d.createdAt as Date).toISOString() : new Date().toISOString(),
+  }));
+}
+
+export async function getLeavePolicies(companyId: string): Promise<LeavePolicyRecord[]> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  await seedHrDefaultsForCompany(companyId);
+
+  const docs = await db.collection("leave_policies").find({ companyId: cId, isActive: true }).sort({ employeeCategory: 1 }).toArray();
+  return docs.map((d) => ({
+    id: (d._id as ObjectId).toString(),
+    companyId: companyId,
+    name: d.name as string,
+    country: (d.country as string) || "TN",
+    employeeCategory: d.employeeCategory as EmployeeCategory,
+    accrualRate: Number(d.accrualRate) || 1.0,
+    accrualPeriod: "monthly",
+    annualCap: Number(d.annualCap) || 15,
+    referencePeriodType: "calendar_year",
+    calculationMethod: "standard_monthly",
+    roundingRule: "half_day",
+    effectiveFrom: (d.effectiveFrom as string) || "2024-01-01",
+    effectiveTo: (d.effectiveTo as string) || undefined,
+    legalReference: (d.legalReference as string) || "Code du Travail Art. 113-114",
+    isActive: Boolean(d.isActive),
+    createdAt: d.createdAt ? (d.createdAt as Date).toISOString() : new Date().toISOString(),
+  }));
+}
+
+export async function getEmployeeLeavePolicy(
+  employeeId: string,
+  companyId: string,
+  asOfDateStr?: string
+): Promise<LeavePolicyRecord | null> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  await seedHrDefaultsForCompany(companyId);
+
+  const asOf = asOfDateStr || formatDateYMD(new Date());
+
+  // Check specific employee policy assignment
+  const assignment = await db.collection("employee_leave_policies").findOne({
+    companyId: cId,
+    employeeId,
+    effectiveFrom: { $lte: asOf },
+    $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: "" }, { effectiveTo: { $gte: asOf } }],
+  });
+
+  if (assignment && ObjectId.isValid(assignment.leavePolicyId)) {
+    const policyDoc = await db.collection("leave_policies").findOne({
+      _id: new ObjectId(assignment.leavePolicyId as string),
+      companyId: cId,
+    });
+    if (policyDoc) {
+      return {
+        id: (policyDoc._id as ObjectId).toString(),
+        companyId,
+        name: policyDoc.name as string,
+        country: (policyDoc.country as string) || "TN",
+        employeeCategory: policyDoc.employeeCategory as EmployeeCategory,
+        accrualRate: Number(policyDoc.accrualRate) || 1.0,
+        accrualPeriod: "monthly",
+        annualCap: Number(policyDoc.annualCap) || 15,
+        referencePeriodType: "calendar_year",
+        calculationMethod: "standard_monthly",
+        roundingRule: "half_day",
+        effectiveFrom: (policyDoc.effectiveFrom as string) || "2024-01-01",
+        effectiveTo: (policyDoc.effectiveTo as string) || undefined,
+        legalReference: (policyDoc.legalReference as string) || "Code du Travail Art. 113-114",
+        isActive: Boolean(policyDoc.isActive),
+        createdAt: policyDoc.createdAt ? (policyDoc.createdAt as Date).toISOString() : new Date().toISOString(),
+      };
+    }
+  }
+
+  // Fallback: auto-match by employee age category
+  const emp = await getEmployeeById(employeeId, companyId);
+  const category = getAgeCategory(emp?.dateOfBirth, new Date(asOf));
+  const defaultPolicy = (await db.collection("leave_policies").findOne({
+    companyId: cId,
+    employeeCategory: category,
+    isActive: true,
+  })) || (await db.collection("leave_policies").findOne({ companyId: cId, isActive: true }));
+
+  if (!defaultPolicy) return null;
+
+  return {
+    id: (defaultPolicy._id as ObjectId).toString(),
+    companyId,
+    name: defaultPolicy.name as string,
+    country: (defaultPolicy.country as string) || "TN",
+    employeeCategory: defaultPolicy.employeeCategory as EmployeeCategory,
+    accrualRate: Number(defaultPolicy.accrualRate) || 1.0,
+    accrualPeriod: "monthly",
+    annualCap: Number(defaultPolicy.annualCap) || 15,
+    referencePeriodType: "calendar_year",
+    calculationMethod: "standard_monthly",
+    roundingRule: "half_day",
+    effectiveFrom: (defaultPolicy.effectiveFrom as string) || "2024-01-01",
+    effectiveTo: (defaultPolicy.effectiveTo as string) || undefined,
+    legalReference: (defaultPolicy.legalReference as string) || "Code du Travail Art. 113-114",
+    isActive: Boolean(defaultPolicy.isActive),
+    createdAt: defaultPolicy.createdAt ? (defaultPolicy.createdAt as Date).toISOString() : new Date().toISOString(),
+  };
+}
+
+export async function getPublicHolidays(companyId: string): Promise<PublicHolidayRecord[]> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  await seedHrDefaultsForCompany(companyId);
+
+  const docs = await db.collection("public_holidays").find({ companyId: cId }).sort({ date: 1 }).toArray();
+  return docs.map((d) => ({
+    id: (d._id as ObjectId).toString(),
+    companyId,
+    name: d.name as string,
+    date: d.date as string,
+    isHalfDay: Boolean(d.isHalfDay),
+  }));
+}
+
+// ==========================================
+// Append-Only Leave Transaction Ledger
+// ==========================================
+
+export async function createLeaveTransaction(
+  data: Omit<LeaveTransactionRecord, "id" | "createdAt">,
+  companyId: string
+): Promise<LeaveTransactionRecord> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+
+  const doc = {
+    ...data,
+    companyId: cId,
+    createdAt: new Date(),
+  };
+
+  const res = await db.collection("leave_transactions").insertOne(doc);
+
+  return {
+    id: res.insertedId.toString(),
+    companyId,
+    employeeId: data.employeeId,
+    employeeName: data.employeeName,
+    leaveTypeId: data.leaveTypeId,
+    leaveTypeCode: data.leaveTypeCode,
+    transactionType: data.transactionType,
+    days: data.days,
+    effectiveDate: data.effectiveDate,
+    referenceId: data.referenceId,
+    description: data.description,
+    createdBy: data.createdBy,
+    createdAt: doc.createdAt.toISOString(),
+  };
+}
+
+export async function getLeaveTransactions(
+  filter: { employeeId?: string; leaveTypeId?: string } = {},
+  companyId: string
+): Promise<LeaveTransactionRecord[]> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+
+  const query: Record<string, unknown> = { companyId: cId };
+  if (filter.employeeId) query.employeeId = filter.employeeId;
+  if (filter.leaveTypeId) query.leaveTypeId = filter.leaveTypeId;
+
+  const docs = await db.collection("leave_transactions").find(query).sort({ effectiveDate: -1, createdAt: -1 }).toArray();
+
+  return docs.map((d) => ({
+    id: (d._id as ObjectId).toString(),
+    companyId,
+    employeeId: d.employeeId as string,
+    employeeName: d.employeeName as string | undefined,
+    leaveTypeId: d.leaveTypeId as string | undefined,
+    leaveTypeCode: d.leaveTypeCode as string | undefined,
+    transactionType: d.transactionType as LeaveTransactionRecord["transactionType"],
+    days: Number(d.days) || 0,
+    effectiveDate: d.effectiveDate as string,
+    referenceId: d.referenceId as string | undefined,
+    description: d.description as string,
+    createdBy: d.createdBy as string,
+    createdAt: d.createdAt ? (d.createdAt as Date).toISOString() : new Date().toISOString(),
+  }));
+}
+
+// ==========================================
+// Solde de Congé Derived Balance Calculation
+// ==========================================
+
+export async function getSoldeDeConge(
+  employeeId: string,
+  year = new Date().getFullYear(),
+  companyId: string,
+  asOfDateStr?: string
+): Promise<SoldeDeConge> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  const emp = await getEmployeeById(employeeId, companyId);
+  const employeeName = emp?.fullName || "Employee";
+
+  // Ensure defaults are available
+  await seedHrDefaultsForCompany(companyId);
+
+  // Sync any approved leaves whose end date passed into confirmed TAKEN transactions
+  await syncTakenLeaveRequests(companyId);
+
+  const asOf = asOfDateStr || formatDateYMD(new Date());
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year}-12-31`;
 
-  const approvedLeaves = await db
-    .collection("leave_requests")
-    .find({
+  // Fetch transactions for employee
+  const txDocs = await db.collection("leave_transactions").find({
+    companyId: cId,
+    employeeId,
+    effectiveDate: { $lte: asOf },
+  }).toArray();
+
+  // If no transactions exist, auto-bootstrap initial accrual from hire date
+  if (txDocs.length === 0 && emp) {
+    const hire = new Date(emp.hireDate);
+    const now = new Date(asOf);
+    const monthsWorked = hire.getFullYear() === year ? Math.max(1, (now.getMonth() - hire.getMonth()) + 1) : 12;
+    const policy = await getEmployeeLeavePolicy(employeeId, companyId, asOf);
+    const rate = policy?.accrualRate ?? 1.0;
+    const cap = policy?.annualCap ?? 15;
+    const initialDays = Math.min(cap, Math.round(monthsWorked * rate * 2) / 2);
+
+    const cpType = await db.collection("leave_types").findOne({ companyId: cId, code: "CP" });
+    const bootTx = {
+      _id: new ObjectId(),
+      companyId: cId,
       employeeId,
-      status: "approved",
-      startDate: { $gte: yearStart, $lte: yearEnd },
-      ...({ companyId: cId }),
-    })
-    .toArray();
+      employeeName,
+      leaveTypeId: cpType?._id?.toString(),
+      leaveTypeCode: "CP",
+      transactionType: "ACCRUAL" as const,
+      days: initialDays,
+      effectiveDate: emp.hireDate,
+      description: `Opening accrual (${monthsWorked} month(s) effective work @ ${rate}d/mo)`,
+      createdBy: "system_bootstrap",
+      createdAt: new Date(),
+    };
+    await db.collection("leave_transactions").insertOne(bootTx);
+    txDocs.push(bootTx);
+  }
 
-  let usedPaidDays = 0;
-  let unpaidDaysTaken = 0;
+  let earned = 0;
+  let taken = 0;
+  let reserved = 0;
+  let adjustments = 0;
 
-  approvedLeaves.forEach((leave) => {
-    const days = Number(leave.days) || 0;
-    if (leave.isPaid) {
-      usedPaidDays += days;
-    } else {
-      unpaidDaysTaken += days;
+  for (const tx of txDocs) {
+    const days = Number(tx.days) || 0;
+    switch (tx.transactionType) {
+      case "ACCRUAL":
+        earned += days;
+        break;
+      case "TAKEN":
+        taken += days;
+        break;
+      case "RESERVATION":
+        reserved += days;
+        break;
+      case "RELEASE":
+        reserved -= days; // reduces active reservation
+        break;
+      case "ADJUSTMENT":
+      case "REVERSAL":
+      case "COMPENSATION":
+        adjustments += days;
+        break;
+      default:
+        break;
     }
+  }
+
+  // Ensure active reservations do not fall below zero
+  reserved = Math.max(0, Math.round(reserved * 100) / 100);
+  earned = Math.round(earned * 100) / 100;
+  taken = Math.round(taken * 100) / 100;
+  adjustments = Math.round(adjustments * 100) / 100;
+
+  const available = Math.max(0, Math.round((earned - taken - reserved + adjustments) * 100) / 100);
+
+  // Compute unpaid days taken for payroll deduction
+  const unpaidRequests = await db.collection("leave_requests").find({
+    companyId: cId,
+    employeeId,
+    status: { $in: ["approved", "taken"] },
+    isPaid: false,
+    startDate: { $gte: yearStart, $lte: yearEnd },
+  }).toArray();
+
+  let unpaidDaysTaken = 0;
+  unpaidRequests.forEach((r) => {
+    unpaidDaysTaken += Number(r.days) || 0;
   });
 
-  const remainingDays = Math.max(0, allowance - usedPaidDays);
+  const activePolicy = await getEmployeeLeavePolicy(employeeId, companyId, asOf);
 
   return {
     employeeId,
     employeeName,
     year,
-    allowance,
-    usedPaidDays,
-    remainingDays,
+    earned,
+    taken,
+    reserved,
+    adjustments,
+    available,
     unpaidDaysTaken,
+    asOfDate: asOf,
+    policySummary: activePolicy
+      ? {
+          name: activePolicy.name,
+          accrualRate: activePolicy.accrualRate,
+          annualCap: activePolicy.annualCap,
+          legalReference: activePolicy.legalReference,
+        }
+      : undefined,
   };
 }
+
+/**
+ * Backwards-compatible leave balance lookup, backed by the Solde de Congé ledger
+ */
+export async function getLeaveBalance(
+  employeeId: string,
+  year = new Date().getFullYear(),
+  companyId: string
+): Promise<LeaveBalance> {
+  const solde = await getSoldeDeConge(employeeId, year, companyId);
+
+  return {
+    employeeId,
+    employeeName: solde.employeeName,
+    year,
+    allowance: solde.earned,
+    usedPaidDays: solde.taken,
+    remainingDays: solde.available,
+    unpaidDaysTaken: solde.unpaidDaysTaken,
+    earned: solde.earned,
+    taken: solde.taken,
+    reserved: solde.reserved,
+    adjustments: solde.adjustments,
+    available: solde.available,
+    policySummary: solde.policySummary,
+  };
+}
+
+// ==========================================
+// Monthly Accrual Engine (Idempotent)
+// ==========================================
+
+export async function runMonthlyAccrual(
+  companyId: string,
+  periodDateStr?: string,
+  adminUserId = "admin"
+): Promise<{ processed: number; accruedEmployees: string[] }> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  await seedHrDefaultsForCompany(companyId);
+
+  const date = periodDateStr ? new Date(periodDateStr) : new Date();
+  const periodMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const effectiveDate = periodDateStr || formatDateYMD(date);
+
+  const activeEmployees = await db.collection("employees").find({
+    companyId: cId,
+    status: "active",
+  }).toArray();
+
+  const cpType = await db.collection("leave_types").findOne({ companyId: cId, code: "CP" });
+  const accruedEmployees: string[] = [];
+
+  for (const empDoc of activeEmployees) {
+    const empId = (empDoc._id as ObjectId).toString();
+    const empName = (empDoc.fullName as string) || "Staff";
+
+    // Check idempotency: avoid double-posting for same month and employee
+    const alreadyAccrued = await db.collection("leave_transactions").findOne({
+      companyId: cId,
+      employeeId: empId,
+      transactionType: "ACCRUAL",
+      description: { $regex: new RegExp(`Période ${periodMonth}`, "i") },
+    });
+
+    if (alreadyAccrued) continue;
+
+    const policy = await getEmployeeLeavePolicy(empId, companyId, effectiveDate);
+    if (!policy) continue;
+
+    // Check annual cap
+    const solde = await getSoldeDeConge(empId, date.getFullYear(), companyId, effectiveDate);
+    const rate = policy.accrualRate;
+    const remainingToCap = Math.max(0, policy.annualCap - solde.earned);
+    const daysToAccrue = Math.min(rate, remainingToCap);
+
+    if (daysToAccrue <= 0) continue;
+
+    await createLeaveTransaction(
+      {
+        companyId,
+        employeeId: empId,
+        employeeName: empName,
+        leaveTypeId: cpType?._id?.toString(),
+        leaveTypeCode: "CP",
+        transactionType: "ACCRUAL",
+        days: daysToAccrue,
+        effectiveDate,
+        description: `Mensualisation Solde de congé — Période ${periodMonth} (+${daysToAccrue}j)`,
+        createdBy: adminUserId,
+      },
+      companyId
+    );
+
+    accruedEmployees.push(empName);
+  }
+
+  return {
+    processed: activeEmployees.length,
+    accruedEmployees,
+  };
+}
+
+// ==========================================
+// Manual Adjustments & Reversals
+// ==========================================
+
+export async function createManualAdjustment(
+  input: LeaveAdjustmentInput,
+  adminUserId: string,
+  adminName: string,
+  companyId: string
+): Promise<LeaveTransactionRecord> {
+  const cId = requireCompanyId(companyId);
+  const emp = await getEmployeeById(input.employeeId, companyId);
+  if (!emp) throw new Error("Employee not found.");
+
+  if (!input.reason || input.reason.trim().length < 3) {
+    throw new Error("A mandatory reason (at least 3 characters) is required for any manual balance adjustment.");
+  }
+
+  const db = await getDb();
+  let leaveTypeCode = "CP";
+  if (input.leaveTypeId && ObjectId.isValid(input.leaveTypeId)) {
+    const lt = await db.collection("leave_types").findOne({ _id: new ObjectId(input.leaveTypeId), companyId: cId });
+    if (lt) leaveTypeCode = lt.code as string;
+  }
+
+  return await createLeaveTransaction(
+    {
+      companyId,
+      employeeId: input.employeeId,
+      employeeName: emp.fullName,
+      leaveTypeId: input.leaveTypeId,
+      leaveTypeCode,
+      transactionType: "ADJUSTMENT",
+      days: Number(input.days),
+      effectiveDate: formatDateYMD(new Date()),
+      description: `Ajustement manuel: ${input.reason.trim()} (par ${adminName})`,
+      createdBy: adminUserId,
+    },
+    companyId
+  );
+}
+
+export async function reverseLeaveTransaction(
+  transactionId: string,
+  reason: string,
+  adminUserId: string,
+  companyId: string
+): Promise<LeaveTransactionRecord> {
+  const db = await getDb();
+  if (!ObjectId.isValid(transactionId)) throw new Error("Invalid transaction ID.");
+  const cId = requireCompanyId(companyId);
+
+  const tx = await db.collection("leave_transactions").findOne({
+    _id: new ObjectId(transactionId),
+    companyId: cId,
+  });
+
+  if (!tx) throw new Error("Transaction not found.");
+
+  const reversedDays = -Number(tx.days);
+
+  return await createLeaveTransaction(
+    {
+      companyId,
+      employeeId: tx.employeeId as string,
+      employeeName: tx.employeeName as string | undefined,
+      leaveTypeId: tx.leaveTypeId as string | undefined,
+      leaveTypeCode: tx.leaveTypeCode as string | undefined,
+      transactionType: "REVERSAL",
+      days: reversedDays,
+      effectiveDate: formatDateYMD(new Date()),
+      referenceId: transactionId,
+      description: `Annulation de la transaction #${transactionId.slice(-6)}: ${reason.trim()}`,
+      createdBy: adminUserId,
+    },
+    companyId
+  );
+}
+
+// ==========================================
+// Leave Request Lifecycle & Sync
+// ==========================================
 
 export async function getLeaveRequests(
   filter: { employeeId?: string; status?: string } = {},
@@ -773,7 +1452,6 @@ export async function getLeaveRequests(
 ): Promise<LeaveRequest[]> {
   const db = await getDb();
   const cId = requireCompanyId(companyId);
-
 
   const query: Record<string, unknown> = { companyId: cId };
   if (filter.employeeId) {
@@ -791,10 +1469,16 @@ export async function getLeaveRequests(
     employeeName: (doc.employeeName as string) || "Staff",
     departmentName: (doc.departmentName as string) || "General",
     leaveType: doc.leaveType as LeaveType,
+    leaveTypeId: doc.leaveTypeId as string | undefined,
     isPaid: Boolean(doc.isPaid),
     startDate: doc.startDate as string,
     endDate: doc.endDate as string,
     days: Number(doc.days) || 1,
+    requestedDays: Number(doc.requestedDays) || Number(doc.days) || 1,
+    approvedDays: doc.approvedDays ? Number(doc.approvedDays) : undefined,
+    halfDayOption: doc.halfDayOption as "morning" | "afternoon" | undefined,
+    supportingDocumentUrl: doc.supportingDocumentUrl as string | undefined,
+    cancellationReason: doc.cancellationReason as string | undefined,
     reason: doc.reason as string,
     status: doc.status as LeaveStatus,
     adminComment: doc.adminComment as string | undefined,
@@ -808,12 +1492,16 @@ export async function getLeaveRequests(
 export async function createLeaveRequest(data: LeaveRequestInput, companyId: string): Promise<LeaveRequest> {
   const db = await getDb();
   const cId = requireCompanyId(companyId);
-  const emp = await getEmployeeById(data.employeeId, cId?.toString());
+  const emp = await getEmployeeById(data.employeeId, companyId);
   if (!emp) {
     throw new Error("Employee not found.");
   }
 
-  const days = calculateBusinessDays(data.startDate, data.endDate);
+  // Public holidays exclusion
+  const holidays = await getPublicHolidays(companyId);
+  const holidayDates = holidays.map((h) => h.date);
+
+  const days = calculateLeaveDays(data.startDate, data.endDate, holidayDates, data.halfDayOption);
   if (days <= 0) {
     throw new Error("Calculated duration cannot be zero working days.");
   }
@@ -821,11 +1509,9 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
   // Check overlapping requests
   const overlap = await db.collection("leave_requests").findOne({
     employeeId: data.employeeId,
-    status: { $in: ["approved", "pending"] },
-    ...({ companyId: cId }),
-    $or: [
-      { startDate: { $lte: data.endDate }, endDate: { $gte: data.startDate } },
-    ],
+    status: { $in: ["approved", "pending", "taken"] },
+    companyId: cId,
+    $or: [{ startDate: { $lte: data.endDate }, endDate: { $gte: data.startDate } }],
   });
 
   if (overlap) {
@@ -834,15 +1520,19 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
     );
   }
 
-  // Determine if paid or unpaid based on leaveType
-  const isPaid = data.leaveType === "unpaid" ? false : (data.isPaid ?? true);
+  // Determine if paid or unpaid based on leaveType or selected leaveTypeId
+  let isPaid = data.leaveType === "unpaid" ? false : (data.isPaid ?? true);
+  if (data.leaveTypeId && ObjectId.isValid(data.leaveTypeId)) {
+    const lt = await db.collection("leave_types").findOne({ _id: new ObjectId(data.leaveTypeId), companyId: cId });
+    if (lt) isPaid = Boolean(lt.isPaid);
+  }
 
   if (isPaid) {
     const currentYear = new Date(data.startDate).getFullYear();
-    const balance = await getLeaveBalance(data.employeeId, currentYear, cId?.toString());
-    if (days > balance.remainingDays) {
+    const solde = await getSoldeDeConge(data.employeeId, currentYear, companyId);
+    if (days > solde.available) {
       throw new Error(
-        `Requested duration (${days} days) exceeds available annual leave balance (${balance.remainingDays} days remaining of ${balance.allowance}). Submit as unpaid leave or reduce duration.`
+        `Requested duration (${days} days) exceeds available Solde de congé (${solde.available} days available of ${solde.earned} earned). Submit as unpaid leave or reduce duration.`
       );
     }
   }
@@ -852,13 +1542,17 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
     employeeName: emp.fullName,
     departmentName: emp.departmentName,
     leaveType: data.leaveType,
+    leaveTypeId: data.leaveTypeId,
     isPaid,
     startDate: data.startDate,
     endDate: data.endDate,
     days,
+    requestedDays: days,
+    halfDayOption: data.halfDayOption,
+    supportingDocumentUrl: data.supportingDocumentUrl,
     reason: data.reason.trim(),
     status: "pending" as LeaveStatus,
-    ...({ companyId: cId }),
+    companyId: cId,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -871,10 +1565,14 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
     employeeName: doc.employeeName,
     departmentName: doc.departmentName,
     leaveType: doc.leaveType as LeaveType,
+    leaveTypeId: doc.leaveTypeId,
     isPaid: doc.isPaid,
     startDate: doc.startDate,
     endDate: doc.endDate,
     days: doc.days,
+    requestedDays: doc.days,
+    halfDayOption: doc.halfDayOption,
+    supportingDocumentUrl: doc.supportingDocumentUrl,
     reason: doc.reason,
     status: doc.status,
     createdAt: doc.createdAt.toISOString(),
@@ -901,6 +1599,57 @@ export async function reviewLeaveRequest(
   }
 
   const newStatus: LeaveStatus = input.action === "approve" ? "approved" : "rejected";
+  const days = Number(existing.days) || 1;
+  const isPaid = Boolean(existing.isPaid);
+
+  if (input.action === "approve" && isPaid) {
+    const currentYear = new Date(existing.startDate as string).getFullYear();
+    const solde = await getSoldeDeConge(existing.employeeId as string, currentYear, companyId);
+
+    // Overdraft check
+    if (days > solde.available) {
+      if (!input.overrideReason || input.overrideReason.trim().length < 3) {
+        throw new Error(
+          `Insufficient Solde de congé: Requested ${days} days but only ${solde.available} days are available. An admin override reason is mandatory to approve an overdraft.`
+        );
+      }
+
+      // Log overdraft adjustment
+      const overdraftDays = days - solde.available;
+      await createLeaveTransaction(
+        {
+          companyId,
+          employeeId: existing.employeeId as string,
+          employeeName: existing.employeeName as string,
+          leaveTypeId: existing.leaveTypeId as string | undefined,
+          transactionType: "ADJUSTMENT",
+          days: overdraftDays,
+          effectiveDate: formatDateYMD(new Date()),
+          referenceId: input.requestId,
+          description: `Autorisation de dépassement exceptionnel: ${input.overrideReason.trim()}`,
+          createdBy: reviewerName,
+        },
+        companyId
+      );
+    }
+
+    // Post RESERVATION transaction to lock the balance
+    await createLeaveTransaction(
+      {
+        companyId,
+        employeeId: existing.employeeId as string,
+        employeeName: existing.employeeName as string,
+        leaveTypeId: existing.leaveTypeId as string | undefined,
+        transactionType: "RESERVATION",
+        days,
+        effectiveDate: existing.startDate as string,
+        referenceId: input.requestId,
+        description: `Réservation pour demande de congé #${input.requestId.slice(-6)} (${existing.startDate} → ${existing.endDate})`,
+        createdBy: reviewerName,
+      },
+      companyId
+    );
+  }
 
   await db.collection("leave_requests").updateOne(
     filter,
@@ -924,6 +1673,7 @@ export async function reviewLeaveRequest(
     employeeName: updated.employeeName as string,
     departmentName: updated.departmentName as string,
     leaveType: updated.leaveType as LeaveType,
+    leaveTypeId: updated.leaveTypeId as string | undefined,
     isPaid: Boolean(updated.isPaid),
     startDate: updated.startDate as string,
     endDate: updated.endDate as string,
@@ -936,6 +1686,190 @@ export async function reviewLeaveRequest(
     createdAt: (updated.createdAt as Date).toISOString(),
     updatedAt: (updated.updatedAt as Date).toISOString(),
   };
+}
+
+export async function cancelLeaveRequest(
+  requestId: string,
+  reason: string,
+  actorName = "Employee",
+  companyId: string
+): Promise<LeaveRequest> {
+  const db = await getDb();
+  if (!ObjectId.isValid(requestId)) throw new Error("Invalid leave request ID.");
+  const objId = new ObjectId(requestId);
+  const cId = requireCompanyId(companyId);
+  const filter = { _id: objId, companyId: cId };
+
+  const existing = await db.collection("leave_requests").findOne(filter);
+  if (!existing) throw new Error("Leave request not found.");
+
+  if (existing.status === "cancelled") throw new Error("Request is already cancelled.");
+
+  // If request was approved and paid, release the reservation transaction
+  if (existing.status === "approved" && existing.isPaid) {
+    const days = Number(existing.days) || 1;
+    await createLeaveTransaction(
+      {
+        companyId,
+        employeeId: existing.employeeId as string,
+        employeeName: existing.employeeName as string,
+        leaveTypeId: existing.leaveTypeId as string | undefined,
+        transactionType: "RELEASE",
+        days,
+        effectiveDate: formatDateYMD(new Date()),
+        referenceId: requestId,
+        description: `Libération de réservation (demande annulée): ${reason}`,
+        createdBy: actorName,
+      },
+      companyId
+    );
+  }
+
+  await db.collection("leave_requests").updateOne(filter, {
+    $set: {
+      status: "cancelled",
+      cancellationReason: reason,
+      updatedAt: new Date(),
+    },
+  });
+
+  const updated = await db.collection("leave_requests").findOne(filter);
+  return {
+    id: updated!._id.toString(),
+    employeeId: updated!.employeeId as string,
+    employeeName: updated!.employeeName as string,
+    departmentName: updated!.departmentName as string,
+    leaveType: updated!.leaveType as LeaveType,
+    isPaid: Boolean(updated!.isPaid),
+    startDate: updated!.startDate as string,
+    endDate: updated!.endDate as string,
+    days: Number(updated!.days) || 1,
+    reason: updated!.reason as string,
+    status: "cancelled",
+    cancellationReason: reason,
+    createdAt: (updated!.createdAt as Date).toISOString(),
+    updatedAt: (updated!.updatedAt as Date).toISOString(),
+  };
+}
+
+/**
+ * Converts passed approved reservations into TAKEN ledger records
+ */
+export async function syncTakenLeaveRequests(companyId: string): Promise<number> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  const todayYMD = formatDateYMD(new Date());
+
+  const pastApproved = await db.collection("leave_requests").find({
+    companyId: cId,
+    status: "approved",
+    endDate: { $lt: todayYMD },
+  }).toArray();
+
+  let count = 0;
+
+  for (const req of pastApproved) {
+    const reqId = req._id.toString();
+    const days = Number(req.days) || 1;
+
+    if (req.isPaid) {
+      // Check if TAKEN is already posted
+      const alreadyTaken = await db.collection("leave_transactions").findOne({
+        companyId: cId,
+        referenceId: reqId,
+        transactionType: "TAKEN",
+      });
+
+      if (!alreadyTaken) {
+        // Release reservation and post confirmed TAKEN
+        await createLeaveTransaction(
+          {
+            companyId,
+            employeeId: req.employeeId as string,
+            employeeName: req.employeeName as string,
+            leaveTypeId: req.leaveTypeId as string | undefined,
+            transactionType: "RELEASE",
+            days,
+            effectiveDate: req.endDate as string,
+            referenceId: reqId,
+            description: `Confirmation congé pris — Libération réservation #${reqId.slice(-6)}`,
+            createdBy: "system_scheduler",
+          },
+          companyId
+        );
+
+        await createLeaveTransaction(
+          {
+            companyId,
+            employeeId: req.employeeId as string,
+            employeeName: req.employeeName as string,
+            leaveTypeId: req.leaveTypeId as string | undefined,
+            transactionType: "TAKEN",
+            days,
+            effectiveDate: req.endDate as string,
+            referenceId: reqId,
+            description: `Congé payé consommé #${reqId.slice(-6)} (${req.startDate} → ${req.endDate})`,
+            createdBy: "system_scheduler",
+          },
+          companyId
+        );
+      }
+    }
+
+    await db.collection("leave_requests").updateOne(
+      { _id: req._id, companyId: cId },
+      { $set: { status: "taken", updatedAt: new Date() } }
+    );
+    count++;
+  }
+
+  return count;
+}
+
+// ==========================================
+// Departure / Unused Leave Review (Feature H)
+// ==========================================
+
+export async function calculateDepartureUnusedLeave(employeeId: string, companyId: string) {
+  const emp = await getEmployeeById(employeeId, companyId);
+  if (!emp) throw new Error("Employee not found.");
+
+  const solde = await getSoldeDeConge(employeeId, new Date().getFullYear(), companyId);
+  const potentialCompensationDays = Math.max(0, solde.earned - solde.taken);
+
+  return {
+    employee: emp,
+    earned: solde.earned,
+    taken: solde.taken,
+    potentialCompensationDays,
+    warning:
+      "Important: L'indemnité compensatrice de congé payé dépend du motif de rupture (ex. faute lourde, Art. 120 du Code du Travail) et des conventions collectives applicables. Vérifier avec le département juridique avant versement.",
+  };
+}
+
+export async function confirmDepartureCompensation(
+  employeeId: string,
+  approvedDays: number,
+  reason: string,
+  adminUserId: string,
+  companyId: string
+): Promise<LeaveTransactionRecord> {
+  const emp = await getEmployeeById(employeeId, companyId);
+  if (!emp) throw new Error("Employee not found.");
+
+  return await createLeaveTransaction(
+    {
+      companyId,
+      employeeId,
+      employeeName: emp.fullName,
+      transactionType: "COMPENSATION",
+      days: -Math.abs(approvedDays), // decreases solde upon settlement
+      effectiveDate: formatDateYMD(new Date()),
+      description: `Indemnité compensatrice de congé validée au départ: ${reason.trim()} (${approvedDays}j)`,
+      createdBy: adminUserId,
+    },
+    companyId
+  );
 }
 
 // ==========================================

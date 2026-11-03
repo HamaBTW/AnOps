@@ -3,26 +3,42 @@ import type { HRPolicyDocument } from "@/features/hr/types";
 export const COMPANY_POLICIES: HRPolicyDocument[] = [
   {
     id: "policy-leave-annual",
-    title: "Annual Leave & Time-Off Policy",
+    title: "Solde de Congé & Annual Paid Leave Policy",
     category: "leave",
-    summary: "Annual paid leave entitlement, calculation, carry-over, and request procedures.",
+    summary: "Tunisian Labour Code (Art. 113-114) Solde de congé ledger system, monthly accrual, reservations, and departure rules.",
     content: `
-# AnOps Annual Leave & Time-Off Policy
+# AnOps Solde de Congé Policy (Code du Travail Tunisien Art. 113–114)
 
-1. **Annual Leave Entitlement**:
-   - Every full-time employee is entitled to **25 paid annual leave days** per calendar year (accrued at 2.08 days per full month worked).
-   - Part-time and temporary employees receive pro-rata leave based on their contractual hours.
+> **Important Notice:** The legal values below represent statutory baseline standards per the Tunisian Labour Code. Specific collective agreements (Conventions Collectives) or enterprise agreements may grant more favorable terms. Always verify with HR and legal counsel.
 
-2. **Submission & Advance Notice**:
-   - Leave requests must be submitted through the AnOps HR Portal at least **3 business days in advance** for short leaves (1-3 days), and **2 weeks in advance** for leaves of 5 consecutive days or more.
-   - Weekends (Saturday and Sunday) and recognized national holidays are **excluded** from leave day counts.
+1. **Monthly Accrual Rules (Mensualisation)**:
+   - **Standard Adults (Age 21 and above)**: Accrue **1.0 day of paid leave per month of effective work** (Art. 113), subject to a standard annual cap of **15 calendar days (including 12 working days)**.
+   - **Young Workers (Age 18 to 20)**: Accrue **1.5 days of paid leave per month of effective work** (Art. 114), with an annual cap of **22.5 calendar days (18 working days)**.
+   - **Workers Under 18**: Accrue **2.0 days of paid leave per month of effective work** (Art. 114), with an annual cap of **30 calendar days (24 working days)**.
+   - The reference period corresponds to the **calendar year** (January 1st to December 31st).
 
-3. **Approval Hierarchy**:
-   - Leave requests must be reviewed and approved by the department manager or HR Administrator.
-   - You will receive a system notification and email confirmation once your request is Approved or Rejected with reason comments.
+2. **Ledger-Based Balance Formula (Solde de Congé)**:
+   - Your real-time available leave balance is derived strictly from an append-only transaction ledger:
+     \`Earned    = Sum of monthly ACCRUAL transactions (+ positive carry-over)\`
+     \`Taken     = Sum of confirmed TAKEN leaves whose dates have elapsed\`
+     \`Reserved  = Sum of active RESERVATION for approved future leaves\`
+     \`Available = Earned - Taken - Reserved + Adjustments\`
+   - Approved leaves immediately create a **RESERVATION**, protecting against double booking.
+   - When the leave dates elapse, reservations transition to **TAKEN**.
+   - If an approved leave is cancelled prior to start, a **RELEASE** transaction restores the available balance.
 
-4. **Carry-over Rules**:
-   - A maximum of 5 unused annual leave days may be carried forward into the subsequent calendar year, expiring on March 31st.
+3. **Advance Notice & Public Holidays**:
+   - Leave requests must be submitted through the HR Portal at least **3 business days in advance** for short leaves (1–3 days), and **2 weeks in advance** for leaves of 5 days or more.
+   - Standard working week is Monday through Friday. Weekends and official Tunisian national public holidays are **automatically excluded** from leave day deductions.
+   - Half-day leaves (0.5 day) are supported for morning or afternoon absence.
+
+4. **Overdraft & Discretionary Adjustments**:
+   - Submitting leave beyond your available balance is blocked by default.
+   - An administrator may approve an exceptional overdraft only with a mandatory, recorded business reason, logged as an **ADJUSTMENT** transaction.
+
+5. **Departure & Unused Leave (Indemnité Compensatrice de Congé Payé)**:
+   - When an employment contract terminates, the employee is potentially entitled to an *Indemnité compensatrice de congé payé* for accrued, unconsumed leave (\`Earned - Taken\`).
+   - Eligibility depends on the reason for termination (e.g. gross misconduct exceptions under Article 120 of the Labour Code) and applicable collective agreements.
     `.trim(),
   },
   {

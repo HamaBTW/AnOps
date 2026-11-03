@@ -40,6 +40,8 @@ export function LeaveRequestModal({
   const [leaveType, setLeaveType] = useState<LeaveType>("annual");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [isHalfDay, setIsHalfDay] = useState<boolean>(false);
+  const [halfDaySlot, setHalfDaySlot] = useState<"morning" | "afternoon">("morning");
   const [reason, setReason] = useState<string>("");
   const [isPaid, setIsPaid] = useState<boolean>(true);
 
@@ -62,6 +64,10 @@ export function LeaveRequestModal({
     const e = new Date(endDate);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
 
+    if (startDate === endDate && isHalfDay) {
+      return 0.5;
+    }
+
     let count = 0;
     const cur = new Date(s);
     while (cur <= e) {
@@ -72,7 +78,7 @@ export function LeaveRequestModal({
       cur.setDate(cur.getDate() + 1);
     }
     return Math.max(1, count);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, isHalfDay]);
 
   const activeTargetEmployee = useMemo(() => {
     return employees.find((e) => e.id === selectedEmployeeId) || currentEmployee || employees[0];
@@ -109,7 +115,7 @@ export function LeaveRequestModal({
         leaveType,
         startDate,
         endDate,
-        days: calculatedDays,
+        halfDayOption: isHalfDay && startDate === endDate ? halfDaySlot : undefined,
         reason: reason.trim(),
         isPaid,
       });
@@ -122,6 +128,7 @@ export function LeaveRequestModal({
         setReason("");
         setStartDate("");
         setEndDate("");
+        setIsHalfDay(false);
       }
     });
   };
@@ -249,6 +256,50 @@ export function LeaveRequestModal({
                 />
               </div>
             </div>
+
+            {/* Half-day selector if single day */}
+            {startDate && endDate && startDate === endDate && (
+              <div className="flex items-center justify-between rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)]/60 p-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="halfDayCheckbox"
+                    checked={isHalfDay}
+                    onChange={(e) => setIsHalfDay(e.target.checked)}
+                    className="h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)]"
+                  />
+                  <label htmlFor="halfDayCheckbox" className="font-semibold text-[var(--color-text-primary)] cursor-pointer">
+                    Demande de demi-journée (0.5 jour)
+                  </label>
+                </div>
+                {isHalfDay && (
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="halfDaySlot"
+                        value="morning"
+                        checked={halfDaySlot === "morning"}
+                        onChange={() => setHalfDaySlot("morning")}
+                        className="accent-[var(--color-action-primary)]"
+                      />
+                      <span>Matin</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="halfDaySlot"
+                        value="afternoon"
+                        checked={halfDaySlot === "afternoon"}
+                        onChange={() => setHalfDaySlot("afternoon")}
+                        className="accent-[var(--color-action-primary)]"
+                      />
+                      <span>Après-midi</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Live Day Computation Banner */}
             {calculatedDays > 0 && (

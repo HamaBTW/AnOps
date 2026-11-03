@@ -27,6 +27,7 @@ export type Employee = {
   departmentId: string;
   departmentName: string;
   hireDate: string;
+  dateOfBirth?: string;
   baseSalary: number;
   status: EmployeeStatus;
   role: EmployeeRole;
@@ -63,7 +64,7 @@ export type LeaveType =
   | "bereavement"
   | "other";
 
-export type LeaveStatus = "pending" | "approved" | "rejected";
+export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled" | "taken";
 
 export type LeaveRequest = {
   id: string;
@@ -71,10 +72,16 @@ export type LeaveRequest = {
   employeeName: string;
   departmentName: string;
   leaveType: LeaveType;
+  leaveTypeId?: string;
   isPaid: boolean;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
   days: number;
+  requestedDays?: number;
+  approvedDays?: number;
+  halfDayOption?: "morning" | "afternoon";
+  supportingDocumentUrl?: string;
+  cancellationReason?: string;
   reason: string;
   status: LeaveStatus;
   adminComment?: string;
@@ -88,10 +95,123 @@ export type LeaveBalance = {
   employeeId: string;
   employeeName: string;
   year: number;
-  allowance: number;       // e.g. 25
-  usedPaidDays: number;    // approved paid leave days this year
-  remainingDays: number;   // allowance - usedPaidDays
+  allowance: number;       // e.g. 25 or Earned
+  usedPaidDays: number;    // approved/taken paid leave days this year
+  remainingDays: number;   // available days
   unpaidDaysTaken: number; // unpaid days taken (feeds payroll)
+  // Extended Solde de congé fields:
+  earned?: number;
+  taken?: number;
+  reserved?: number;
+  adjustments?: number;
+  available?: number;
+  policySummary?: {
+    name: string;
+    accrualRate: number;
+    annualCap: number;
+    legalReference: string;
+  };
+};
+
+// ==========================================
+// Solde de Congé (Ledger & Policy Types)
+// ==========================================
+
+export type LeaveTypeRecord = {
+  id: string;
+  companyId: string;
+  name: string;
+  code: string; // e.g. "CP", "SICK", "EXCEPTIONAL", "UNPAID"
+  isPaid: boolean;
+  requiresApproval: boolean;
+  requiresDocument: boolean;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type EmployeeCategory = "adult" | "young_adult" | "under_18";
+
+export type LeavePolicyRecord = {
+  id: string;
+  companyId: string;
+  name: string;
+  country: string; // "TN"
+  employeeCategory: EmployeeCategory;
+  accrualRate: number; // e.g. 1.0, 1.5, 2.0 days per month
+  accrualPeriod: "monthly";
+  annualCap: number; // e.g. 15 calendar days (12 working days)
+  referencePeriodType: "calendar_year";
+  calculationMethod: "standard_monthly";
+  roundingRule: "half_day";
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo?: string; // YYYY-MM-DD
+  legalReference: string; // "Code du Travail Art. 113-114"
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type EmployeeLeavePolicyRecord = {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  leavePolicyId: string;
+  policyName?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  assignedBy?: string;
+  assignedAt: string;
+};
+
+export type LeaveTransactionType =
+  | "ACCRUAL"
+  | "TAKEN"
+  | "RESERVATION"
+  | "RELEASE"
+  | "ADJUSTMENT"
+  | "COMPENSATION"
+  | "REVERSAL";
+
+export type LeaveTransactionRecord = {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  employeeName?: string;
+  leaveTypeId?: string;
+  leaveTypeCode?: string;
+  transactionType: LeaveTransactionType;
+  days: number; // positive or negative
+  effectiveDate: string; // YYYY-MM-DD
+  referenceId?: string; // e.g. leave requestId or original transactionId for reversal
+  description: string;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type PublicHolidayRecord = {
+  id: string;
+  companyId: string;
+  name: string;
+  date: string; // YYYY-MM-DD
+  isHalfDay: boolean;
+};
+
+export type SoldeDeConge = {
+  employeeId: string;
+  employeeName: string;
+  year: number;
+  earned: number;
+  taken: number;
+  reserved: number;
+  adjustments: number;
+  available: number;
+  unpaidDaysTaken: number;
+  asOfDate?: string;
+  policySummary?: {
+    name: string;
+    accrualRate: number;
+    annualCap: number;
+    legalReference: string;
+  };
 };
 
 // ========================

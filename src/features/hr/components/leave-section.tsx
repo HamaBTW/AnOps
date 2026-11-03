@@ -13,10 +13,20 @@ import {
   RefreshCw,
   AlertCircle,
   FileText,
+  Sliders,
+  CalendarCheck,
+  RotateCcw,
+  Ban,
 } from "lucide-react";
 import type { Employee, LeaveRequest, LeaveBalance, LeaveStatus } from "@/features/hr/types";
 import { LeaveRequestModal } from "./leave-request-modal";
-import { reviewLeaveRequestAction } from "@/features/hr/actions/leave.action";
+import { LeaveHistoryModal } from "./leave-history-modal";
+import { ManualAdjustmentModal } from "./manual-adjustment-modal";
+import {
+  reviewLeaveRequestAction,
+  cancelLeaveRequestAction,
+  runMonthlyAccrualAction,
+} from "@/features/hr/actions/leave.action";
 import { Portal } from "@/shared/components/ui/portal";
 
 type LeaveSectionProps = {
@@ -52,11 +62,17 @@ export function LeaveSection({
   const isAdmin = userRole === "hr_admin";
   const [activeTab, setActiveTab] = useState<"all" | "my">(isAdmin ? "all" : "my");
 
+  // Modals state
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
+  const [accrualSuccess, setAccrualSuccess] = useState<string | null>(null);
+
   // Review modal state
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [requestToReview, setRequestToReview] = useState<LeaveRequest | null>(null);
   const [reviewAction, setReviewAction] = useState<"approve" | "reject">("approve");
   const [adminComment, setAdminComment] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
   const [reviewError, setReviewError] = useState<string | null>(null);
 
   const filteredRequests = useMemo(() => {
@@ -79,6 +95,7 @@ export function LeaveSection({
     setRequestToReview(request);
     setReviewAction(action);
     setAdminComment("");
+    setOverrideReason("");
     setReviewError(null);
     setReviewModalOpen(true);
   };
@@ -94,6 +111,7 @@ export function LeaveSection({
           requestId: requestToReview.id,
           action: reviewAction,
           adminComment: adminComment.trim() || undefined,
+          overrideReason: overrideReason.trim() || undefined,
         },
         reviewerName
       );
@@ -108,67 +126,120 @@ export function LeaveSection({
     });
   };
 
+  const handleCancelRequest = (requestId: string) => {
+    const reason = window.prompt("Motif d'annulation de cette demande :", "Changement de planning");
+    if (!reason) return;
+
+    startTransition(async () => {
+      const res = await cancelLeaveRequestAction(requestId, reason);
+      if (res.error) {
+        alert(res.error);
+      } else {
+        onRefresh();
+      }
+    });
+  };
+
+  const handleRunAccrual = () => {
+    if (!confirm("Voulez-vous exécuter la mensualisation automatique du Solde de congé pour le mois en cours ?")) return;
+
+    startTransition(async () => {
+      const res = await runMonthlyAccrualAction();
+      if (res.error) {
+        alert(res.error);
+      } else if (res.data) {
+        setAccrualSuccess(`Mensualisation terminée : ${res.data.accruedEmployees.length} employé(s) crédités.`);
+        setTimeout(() => setAccrualSuccess(null), 5000);
+        onRefresh();
+      }
+    });
+  };
+
+  // Solde metrics breakdown
+  const earnedDays = leaveBalance.earned ?? leaveBalance.allowance;
+  const takenDays = leaveBalance.taken ?? leaveBalance.usedPaidDays;
+  const reservedDays = leaveBalance.reserved ?? 0;
+  const availableDays = leaveBalance.available ?? leaveBalance.remainingDays;
+
   return (
     <div className="space-y-6">
-      {/* KPI Cards: Leave Balance & Approvals */}
+      {/* Notification banner if accrual executed */}
+      {accrualSuccess && (
+        <div className="flex items-center gap-2 p-3 rounded-[var(--radius-control)] bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 text-xs font-semibold">
+          <CheckCircle className="h-4 w-4" />
+          <span>{accrualSuccess}</span>
+        </div>
+      )}
+
+      {/* KPI Cards: Solde de Congé Breakdown */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        {/* Allowance */}
+        {/* Acquis (Earned) */}
         <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-xs">
           <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-            Annual Allowance
+            Acquis (Earned)
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
-              {leaveBalance.allowance}
+              {earnedDays}
             </span>
-            <span className="text-xs text-[var(--color-text-secondary)]">days / yr</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">jours</span>
           </div>
-          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Standard paid quota</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Mensualisation N</p>
         </div>
 
-        {/* Used */}
+        {/* Pris (Taken) */}
         <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-xs">
           <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-            Used Paid Days
+            Consommé (Taken)
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
-              {leaveBalance.usedPaidDays}
+              {takenDays}
             </span>
-            <span className="text-xs text-[var(--color-text-secondary)]">days taken</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">jours pris</span>
           </div>
-          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Approved this year</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Congés validés & passés</p>
         </div>
 
-        {/* Remaining */}
+        {/* Réservé (Reserved) */}
+        <div className="rounded-[var(--radius-card)] border border-amber-500/30 bg-amber-500/10 p-4 shadow-xs">
+          <p className="text-xs font-bold text-amber-700">
+            Réservé (Reserved)
+          </p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold tracking-tight text-amber-800">
+              {reservedDays}
+            </span>
+            <span className="text-xs text-amber-700">jours bloqués</span>
+          </div>
+          <p className="mt-1 text-[11px] text-amber-700">Demandes futures approuvées</p>
+        </div>
+
+        {/* Disponible (Available) */}
         <div className="rounded-[var(--radius-card)] border border-[var(--color-action-primary)]/40 bg-[var(--color-action-primary)]/10 p-4 shadow-xs">
           <p className="text-xs font-bold text-[var(--color-text-primary)]">
-            Remaining Available
+            Disponible (Available)
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
-              {leaveBalance.remainingDays}
+              {availableDays}
             </span>
-            <span className="text-xs font-semibold text-[var(--color-text-primary)]">days left</span>
+            <span className="text-xs font-semibold text-[var(--color-text-primary)]">jours restants</span>
           </div>
           <p className="mt-1 text-[11px] text-[var(--color-text-primary)]">
-            {currentEmployee?.fullName ?? "Your Balance"}
+            {currentEmployee?.fullName ?? "Votre Solde"}
           </p>
         </div>
+      </div>
 
-        {/* Pending Approvals */}
-        <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 shadow-xs">
-          <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-            Pending Approvals
-          </p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-[var(--color-status-warning)]">
-              {pendingApprovalsCount}
-            </span>
-            <span className="text-xs text-[var(--color-text-secondary)]">requests</span>
-          </div>
-          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Awaiting HR decision</p>
-        </div>
+      {/* Legal Reference & Disclaimer Pill */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] text-[11px] text-[var(--color-text-secondary)] border border-[var(--color-border-subtle)]">
+        <span className="font-medium">
+          Régime de congé : <strong>Code du Travail Tunisien (Art. 113–114)</strong> — Mensualisation & registre immuable
+        </span>
+        <span className="italic text-[10px]">
+          * Valeurs légales indicatives (à vérifier avec RH/Juridique selon convention collective)
+        </span>
       </div>
 
       {/* Main Container Card */}
@@ -178,28 +249,64 @@ export function LeaveSection({
           <div>
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-                Time-off & Leave Management
+                Gestion des Congés & Solde de Congé
               </h3>
               {pendingApprovalsCount > 0 && (
                 <span className="rounded-full bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] px-2.5 py-0.5 text-xs font-bold text-[var(--color-warning-text)]">
-                  {pendingApprovalsCount} Pending
+                  {pendingApprovalsCount} En attente
                 </span>
               )}
             </div>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Review employee requests, balances, and approve time-off workflows
+              Demandes de congé, réservations en temps réel et historique des mouvements
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onRefresh}
               className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              <span>Refresh</span>
+              <span>Actualiser</span>
             </button>
+
+            {/* History Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setHistoryModalOpen(true)}
+              className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              <span>Historique</span>
+            </button>
+
+            {/* Admin Accrual Engine Trigger */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleRunAccrual}
+                disabled={isPending}
+                className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                title="Déclencher la mensualisation automatique pour tous les employés actifs"
+              >
+                <CalendarCheck className="h-3.5 w-3.5 text-blue-600" />
+                <span>Mensualisation</span>
+              </button>
+            )}
+
+            {/* Admin Manual Adjustment Trigger */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setAdjustmentModalOpen(true)}
+                className="flex min-h-[40px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+              >
+                <Sliders className="h-3.5 w-3.5 text-orange-500" />
+                <span>Ajustement</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -207,7 +314,7 @@ export function LeaveSection({
               className="flex min-h-[40px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-4 text-xs font-bold text-[var(--color-action-on-primary)] hover:bg-[var(--color-action-hover)] transition-colors shadow-xs"
             >
               <Plus className="h-4 w-4" />
-              <span>Request Leave</span>
+              <span>Demande de congé</span>
             </button>
           </div>
         </div>
@@ -572,14 +679,29 @@ export function LeaveSection({
                   )}
                 </div>
 
+                {reviewAction === "approve" && (
+                  <div>
+                    <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
+                      Motif de dérogation en cas de dépassement du Solde (Optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      placeholder="Obligatoire uniquement si la durée dépasse le Solde disponible..."
+                      className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-primary)] mb-1">
-                    Admin Comment (Optional)
+                    Commentaire RH / Note interne
                   </label>
                   <textarea
                     value={adminComment}
                     onChange={(e) => setAdminComment(e.target.value)}
-                    placeholder="Add an internal note or reason for the employee..."
+                    placeholder="Ajouter une note ou justification pour l'employé..."
                     rows={2}
                     className="w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] p-2.5 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
                   />
@@ -592,7 +714,7 @@ export function LeaveSection({
                     disabled={isPending}
                     className="flex min-h-[44px] w-full sm:w-auto items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-4 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] transition-colors"
                   >
-                    Cancel
+                    Annuler
                   </button>
                   <button
                     type="submit"
@@ -610,13 +732,35 @@ export function LeaveSection({
                     ) : (
                       <X className="h-3.5 w-3.5" />
                     )}
-                    <span>Confirm {reviewAction === "approve" ? "Approval" : "Rejection"}</span>
+                    <span>Confirmer {reviewAction === "approve" ? "l'approbation" : "le refus"}</span>
                   </button>
                 </div>
               </form>
             </div>
           </div>
         </Portal>
+      )}
+
+      {/* Leave History Modal */}
+      {currentEmployee && (
+        <LeaveHistoryModal
+          isOpen={historyModalOpen}
+          onClose={() => setHistoryModalOpen(false)}
+          employee={currentEmployee}
+          isAdmin={isAdmin}
+          onRefresh={onRefresh}
+        />
+      )}
+
+      {/* Manual Adjustment Modal (Admin only) */}
+      {isAdmin && (
+        <ManualAdjustmentModal
+          isOpen={adjustmentModalOpen}
+          onClose={() => setAdjustmentModalOpen(false)}
+          employees={employees}
+          selectedEmployeeId={currentEmployee?.id}
+          onSuccess={onRefresh}
+        />
       )}
     </div>
   );

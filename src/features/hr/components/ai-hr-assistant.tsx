@@ -19,20 +19,20 @@ type AIHRAssistantProps = {
 };
 
 const SUGGESTED_PROMPTS = [
-  "How many leave days do I have left?",
+  "How many leave days do I have left in my Solde de congé?",
+  "How is my leave accrued and calculated (Art. 113-114)?",
+  "What happens to my unused leave if I leave the company?",
   "How is unpaid leave deducted from my salary?",
   "What is the sick leave procedure?",
-  "What are our official working hours?",
-  "What is our maternity & paternity leave policy?",
 ];
 
-const WELCOME_MESSAGE = `Hello! I'm your **AnOps HR Assistant** — powered by AI with access to your real-time HR data.
+const WELCOME_MESSAGE = `Hello! I'm your **AnOps HR Assistant** — powered by AI with real-time access to your company policies and **Solde de congé** ledger.
 
 I can help you with:
-- 🌴 **Leave balances** — your remaining annual leave and pending requests
-- 💰 **Payroll & deductions** — how unpaid leave affects your salary
-- ⏱️ **Working hours & attendance** — check-in rules and flexible arrival
-- 📋 **HR policies** — sick leave, maternity, bereavement, and more
+- 🌴 **Solde de congé** — your real-time breakdown (Acquis, Pris, Réservé, Disponible) & Tunisian Code du Travail (Art. 113-114)
+- 💰 **Payroll & Deductions** — net salary formula & unpaid leave calculations
+- ⏱️ **Attendance & Punch** — working hours, flex arrival (8:30-9:30 AM), and punctuality
+- 📋 **Policies & Departures** — sick leave, family events, and *Indemnité compensatrice de congé payé*
 
 What would you like to know?`;
 
@@ -161,23 +161,45 @@ export function AIHRAssistant({
             metadata.data &&
             typeof metadata.data === "object"
           ) {
-            const d = metadata.data as Record<string, number>;
+            const d = metadata.data as Record<string, unknown>;
+            const earned = Number(d.earned ?? d.allowance ?? 0);
+            const taken = Number(d.taken ?? d.usedPaidDays ?? d.used ?? 0);
+            const reserved = Number(d.reserved ?? 0);
+            const available = Number(d.available ?? d.remainingDays ?? d.remaining ?? 0);
+            const policyName = typeof d.policyName === "string" ? d.policyName : undefined;
+            const legalRef = typeof d.legalReference === "string" ? d.legalReference : undefined;
+
             return (
               <div className="mt-2.5 rounded-[var(--radius-control)] bg-[var(--color-bg-surface)] p-3 border border-[var(--color-border-subtle)] space-y-2.5 shadow-xs animate-in fade-in duration-200">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center p-2 rounded-md bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">
-                    <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Allowance</span>
-                    <div className="font-bold text-sm text-[var(--color-text-primary)]">{d.allowance}d</div>
+                <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--color-text-secondary)] border-b border-[var(--color-border-subtle)] pb-1.5">
+                  <span>Solde de Congé en temps réel</span>
+                  {policyName && <span className="text-[10px] truncate max-w-[150px]">{policyName}</span>}
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5 text-center">
+                  <div className="p-1.5 rounded-md bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">
+                    <span className="text-[9px] text-[var(--color-text-secondary)] font-medium block">Acquis</span>
+                    <div className="font-bold text-xs text-[var(--color-text-primary)]">{earned}j</div>
                   </div>
-                  <div className="text-center p-2 rounded-md bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">
-                    <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Used</span>
-                    <div className="font-bold text-sm text-[var(--color-text-secondary)]">{d.usedPaidDays ?? d.used ?? 0}d</div>
+                  <div className="p-1.5 rounded-md bg-[var(--color-bg-subtle)] border border-[var(--color-border-subtle)]">
+                    <span className="text-[9px] text-[var(--color-text-secondary)] font-medium block">Consommé</span>
+                    <div className="font-bold text-xs text-[var(--color-text-secondary)]">{taken}j</div>
                   </div>
-                  <div className="text-center p-2 rounded-md bg-[var(--color-status-success)]/10 border border-[var(--color-status-success)]/20">
-                    <span className="text-[10px] font-bold text-[var(--color-status-success)]">Remaining</span>
-                    <div className="font-black text-sm text-[var(--color-status-success)]">{d.remainingDays ?? d.remaining ?? 0}d</div>
+                  <div className="p-1.5 rounded-md bg-amber-500/10 border border-amber-500/20">
+                    <span className="text-[9px] text-amber-700 font-bold block">Réservé</span>
+                    <div className="font-bold text-xs text-amber-800">{reserved}j</div>
+                  </div>
+                  <div className="p-1.5 rounded-md bg-[var(--color-status-success)]/10 border border-[var(--color-status-success)]/20">
+                    <span className="text-[9px] font-bold text-[var(--color-status-success)] block">Disponible</span>
+                    <div className="font-black text-xs text-[var(--color-status-success)]">{available}j</div>
                   </div>
                 </div>
+
+                {legalRef && (
+                  <p className="text-[9px] italic text-[var(--color-text-secondary)]">
+                    * Réf: {legalRef}
+                  </p>
+                )}
 
                 {/* Direct Action Buttons */}
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--color-border-subtle)]">
@@ -187,7 +209,7 @@ export function AIHRAssistant({
                     className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] hover:bg-[var(--color-border-subtle)] text-[11px] font-bold text-[var(--color-text-primary)] transition-all border border-[var(--color-border-subtle)] hover:shadow-xs cursor-pointer"
                   >
                     <Calendar className="h-3.5 w-3.5 text-[var(--color-action-primary)]" />
-                    <span>View Leave Balance</span>
+                    <span>Consulter le Solde</span>
                   </button>
                   <button
                     type="button"
@@ -195,7 +217,7 @@ export function AIHRAssistant({
                     className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] hover:bg-[var(--color-action-hover)] text-[11px] font-bold text-[var(--color-action-on-primary)] transition-all shadow-xs cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>Submit Leave Request</span>
+                    <span>Demande de congé</span>
                   </button>
                 </div>
               </div>

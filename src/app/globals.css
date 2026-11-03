@@ -323,3 +323,80 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .anops-toast-in, .anops-toast-out { animation-duration: 1ms; }
 }
+
+
+/* Print styles for clean, professional PDF export and printing */
+@media print {
+  /* Hide application shell elements, navigation, headers, footers, toolbars, buttons */
+  header,
+  aside,
+  nav,
+  .print\:hidden,
+  [data-print-hidden] {
+    display: none !important;
+  }
+
+  /* Reset html, body, and all tokens to clean white print layout */
+  html,
+  html.dark,
+  body,
+  :root,
+  :root.dark {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    font-size: 11pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+
+    /* Light theme tokens for high-contrast, paper-optimized print output */
+    --color-bg-canvas: #ffffff !important;
+    --color-bg-surface: #ffffff !important;
+    --color-bg-subtle: #f8fafc !important;
+    --color-text-primary: #111827 !important;
+    --color-text-secondary: #4b5563 !important;
+    --color-border-subtle: #e5e7eb !important;
+    --color-border-control: #9ca3af !important;
+    --color-action-primary: #111827 !important;
+    --color-action-on-primary: #ffffff !important;
+    --color-status-success: #15803d !important;
+    --color-status-success-bg: #f0fdf4 !important;
+    --color-status-error: #b91c1c !important;
+    --color-status-error-bg: #fef2f2 !important;
+    --color-status-warning: #b45309 !important;
+    --color-status-warning-bg: #fffbeb !important;
+  }
+
+  /* Remove all shadows, transforms, fixed viewport heights */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  body,
+  main,
+  section,
+  div {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Keep table rows intact across page breaks */
+  tr,
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Standard print page settings */
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm 15mm 15mm;
+  }
+}

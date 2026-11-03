@@ -90,6 +90,13 @@ class AiMaster {
       }
     }
 
+    // 3. If attachments (images/PDFs) are present, prioritize multimodal/vision providers
+    if (options.attachments && options.attachments.length > 0 && !options.provider) {
+      const visionProviders = candidates.filter((p) => p.name === "Gemini" || p.name === "OpenRouter");
+      const otherProviders = candidates.filter((p) => p.name !== "Gemini" && p.name !== "OpenRouter");
+      candidates = [...visionProviders, ...otherProviders];
+    }
+
     const errors: string[] = [];
     let currentOptions = { ...options };
 
@@ -143,6 +150,20 @@ class AiMaster {
    * Returns a summary of which providers are ready to use.
    * Useful for health checks / admin dashboards.
    */
+  async askWithAttachments(
+    userPrompt: string,
+    attachments: import("@/server/ai/types").AiAttachment[],
+    systemPrompt?: string,
+    options?: Omit<AiCompletionOptions, "messages" | "attachments">
+  ): Promise<string> {
+    const messages: AiCompletionOptions["messages"] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    messages.push({ role: "user", content: userPrompt });
+
+    const result = await this.complete({ ...options, messages, attachments });
+    return result.text;
+  }
+
   status(): Array<{ name: string; available: boolean; models: string[] }> {
     return this.providers.map((p) => ({
       name: p.name,
@@ -156,4 +177,4 @@ class AiMaster {
 export const ai = new AiMaster();
 
 // Re-export types for convenience
-export type { AiCompletionOptions, AiCompletionResult, AiMessage } from "@/server/ai/types";
+export type { AiCompletionOptions, AiCompletionResult, AiMessage, AiAttachment } from "@/server/ai/types";

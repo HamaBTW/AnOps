@@ -67,6 +67,7 @@ export class GeminiProvider implements AiProvider {
           generationConfig: {
             maxOutputTokens: options.maxTokens ?? 1024,
             temperature: options.temperature ?? 0.7,
+            ...(options.jsonObject ? { responseMimeType: "application/json" } : {}),
           },
         });
 
@@ -94,7 +95,29 @@ export class GeminiProvider implements AiProvider {
         });
 
         const lastUserMsg = conversationMsgs[conversationMsgs.length - 1]?.content ?? "";
-        const result = await chat.sendMessage(lastUserMsg);
+        const userParts: any[] = [];
+        if (options.attachments && options.attachments.length > 0) {
+          for (const att of options.attachments) {
+            userParts.push({
+              inlineData: {
+                mimeType: att.mimeType,
+                data: att.base64,
+              },
+            });
+          }
+        }
+        if (lastUserMsg) {
+          userParts.push({ text: lastUserMsg });
+        }
+
+        const result = userParts.length > 0 && userParts.some((p: any) => p.inlineData) && history.length === 0
+          ? await gemModel.generateContent({
+              contents: [
+                ...(systemMsg ? [{ role: "user", parts: [{ text: systemMsg.content }] }] : []),
+                { role: "user", parts: userParts },
+              ],
+            })
+          : await chat.sendMessage(userParts.length > 0 ? userParts : lastUserMsg);
         const text = result.response.text();
 
         return {

@@ -10,6 +10,7 @@ import {
   IconCheck,
 } from "@/shared/components/ui/brand-icons";
 import { FinancialChart } from "@/features/finance/components/financial-chart";
+import { FinancialBriefingModal } from "@/features/finance/components/financial-briefing-modal";
 
 export const metadata: Metadata = {
   title: "Finance & Invoicing Dashboard | AnOps ERP",
@@ -86,6 +87,7 @@ export default async function FinancePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <FinancialBriefingModal />
           <Link
             href="/finance/invoices/new"
             className="px-3.5 py-2 text-xs font-semibold rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-white hover:opacity-95 shadow-sm transition-all"

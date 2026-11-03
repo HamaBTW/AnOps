@@ -4,18 +4,21 @@ import { IconSearch, IconNotification, IconMenu } from "@/shared/components/ui/b
 import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { CompanySwitcher } from "@/features/company/components/company-switcher";
 import type { Company } from "@/features/company/types";
+import { cn } from "@/shared/lib/utils";
 
 export function Topbar({
+  className,
   onMenuClick,
   companies = [],
   activeCompanyId = "",
 }: {
+  className?: string;
   onMenuClick?: () => void;
   companies?: Company[];
   activeCompanyId?: string;
 }) {
   return (
-    <header className="sticky top-0 z-20 flex h-[72px] items-center gap-2 sm:gap-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/95 backdrop-blur px-3 sm:px-4 md:px-6">
+    <header className={cn("sticky top-0 z-20 flex h-[72px] items-center gap-2 sm:gap-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/95 backdrop-blur px-3 sm:px-4 md:px-6 print:hidden", className)}>
       {onMenuClick && (
         <button
           type="button"

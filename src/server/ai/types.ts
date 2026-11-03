@@ -10,6 +10,11 @@ export type AiMessage = {
   content: string;
 };
 
+export type AiAttachment = {
+  mimeType: string;
+  base64: string;
+};
+
 export type AiCompletionOptions = {
   /** Conversation history / prompt messages */
   messages: AiMessage[];
@@ -32,6 +37,10 @@ export type AiCompletionOptions = {
    * other adapters ignore it, so callers that need JSON must pin `provider: "groq"`.
    */
   jsonObject?: boolean;
+  /**
+   * Optional multimodal attachments (e.g. receipt photos, PDF invoices).
+   */
+  attachments?: AiAttachment[];
 };
 
 export type AiCompletionResult = {

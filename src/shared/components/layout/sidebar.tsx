@@ -81,7 +81,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex h-[100dvh] w-[280px] shrink-0 flex-col overflow-hidden border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static lg:z-auto lg:w-[240px] lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-40 flex h-[100dvh] w-[280px] shrink-0 flex-col overflow-hidden border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:static lg:z-auto lg:w-[240px] lg:translate-x-0 print:hidden",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         className
       )}

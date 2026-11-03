@@ -13,6 +13,7 @@ import {
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
 import { FormMessage } from "@/shared/components/ui/form-message";
+import { ExpenseAuditModal } from "@/features/finance/components/expense-audit-modal";
 
 type ExpenseItem = {
   id: string;
@@ -65,9 +66,10 @@ export function ExpenseManager({
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Rejection modal
+  // Modals state
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [auditingExpense, setAuditingExpense] = useState<ExpenseItem | null>(null);
 
   const filtered = expenses.filter((e) => {
     if (filter !== "all" && e.status !== filter) return false;
@@ -281,6 +283,17 @@ export function ExpenseManager({
                     </td>
                     <td className="py-3 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* AI Policy Audit Button */}
+                        <button
+                          type="button"
+                          onClick={() => setAuditingExpense(e)}
+                          title="Audit against company expense policy & duplicate detection"
+                          className="px-2 py-1 rounded text-xs font-semibold border border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] inline-flex items-center gap-1"
+                        >
+                          <span className="text-[11px]">🛡️</span>
+                          <span>AI Audit</span>
+                        </button>
+
                         {/* Draft -> Submit */}
                         {canManage && e.status === "draft" && (
                           <button
@@ -355,6 +368,25 @@ export function ExpenseManager({
           </table>
         </div>
       </div>
+
+      {/* AI Expense Audit Modal */}
+      {auditingExpense && (
+        <ExpenseAuditModal
+          isOpen={!!auditingExpense}
+          onClose={() => setAuditingExpense(null)}
+          expenseId={auditingExpense.id}
+          vendor={auditingExpense.vendor}
+          amount={auditingExpense.total}
+          currency={auditingExpense.currency}
+          canApprove={canApprove && auditingExpense.status === "submitted"}
+          onApprove={(id) =>
+            handleAction(
+              () => approveExpenseAction(id),
+              "Expense approved after AI policy audit."
+            )
+          }
+        />
+      )}
 
       {/* Rejection Modal */}
       {rejectingId && (

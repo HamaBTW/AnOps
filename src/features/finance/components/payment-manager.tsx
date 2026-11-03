@@ -7,6 +7,7 @@ import { allocatePaymentAction, exportPaymentsCsvAction } from "@/features/finan
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { FormMessage } from "@/shared/components/ui/form-message";
+import { BankReconciliationModal } from "@/features/finance/components/bank-reconciliation-modal";
 
 type PaymentItem = {
   id: string;
@@ -185,6 +186,7 @@ export function PaymentManager({
               ⬇ Export CSV
             </Button>
           )}
+          <BankReconciliationModal openInvoicesCount={unpaidInvoices.length} />
           <Link
             href="/finance/payments/new"
             className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] px-4 text-xs font-semibold hover:bg-[var(--color-action-hover)]"

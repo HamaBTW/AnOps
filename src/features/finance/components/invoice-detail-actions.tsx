@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { postInvoiceAction, voidInvoiceAction } from "@/features/finance/actions/finance.actions";
+import { InvoiceCollectionModal } from "@/features/finance/components/invoice-collection-modal";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
 
@@ -12,20 +13,35 @@ export function InvoiceDetailActions({
   invoiceNumber,
   status,
   canPost,
+  customerEmail,
+  balance = 0,
 }: {
   invoiceId: string;
   invoiceNumber: string;
   status: string;
   canPost: boolean;
+  customerEmail?: string;
+  balance?: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showVoidModal, setShowVoidModal] = useState(false);
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [voidReason, setVoidReason] = useState("");
 
   function handlePrint() {
+    const originalTitle = document.title;
+    document.title = `Invoice_${invoiceNumber}`;
     window.print();
+    const handleAfterPrint = () => {
+      document.title = originalTitle;
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+    window.addEventListener("afterprint", handleAfterPrint);
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 2000);
   }
 
   function handlePost() {
@@ -61,6 +77,8 @@ export function InvoiceDetailActions({
     });
   }
 
+  const canRemind = balance > 0 && status !== "draft" && status !== "voided" && status !== "cancelled";
+
   return (
     <div className="space-y-3">
       {/* Action buttons (hidden when printing) */}
@@ -73,13 +91,25 @@ export function InvoiceDetailActions({
         </Link>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* AI Collection Notice */}
+          {canRemind && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowNoticeModal(true)}
+              className="flex items-center gap-1.5 border-[var(--color-action-primary)]/40 hover:bg-[var(--color-action-primary)]/10 text-xs"
+            >
+              <span>✨</span>
+              <span>AI Reminder Letter</span>
+            </Button>
+          )}
+
           {/* Print / Download PDF */}
           <Button variant="secondary" onClick={handlePrint} className="flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
               <path d="M6 14h12v8H6z" />
             </svg>
-            Print / Save as PDF
+            Export PDF / Print
           </Button>
 
           {/* Post Invoice Button */}
@@ -107,6 +137,16 @@ export function InvoiceDetailActions({
           <FormMessage kind="error">{error}</FormMessage>
         </div>
       )}
+
+      {/* AI Collection Notice Modal */}
+      <InvoiceCollectionModal
+        isOpen={showNoticeModal}
+        onClose={() => setShowNoticeModal(false)}
+        invoiceId={invoiceId}
+        invoiceNumber={invoiceNumber}
+        customerEmail={customerEmail}
+        balance={balance}
+      />
 
       {/* Void Reason Modal */}
       {showVoidModal && (

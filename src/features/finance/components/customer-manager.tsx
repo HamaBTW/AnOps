@@ -17,6 +17,7 @@ import { TextField } from "@/shared/components/ui/text-field";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { IconUsers, IconReceipt } from "@/shared/components/ui/brand-icons";
 import type { Customer } from "@/features/finance/types";
+import { CustomerCreditRiskModal } from "@/features/finance/components/customer-credit-risk-modal";
 
 type CustomerFormData = {
   name: string;
@@ -390,6 +391,7 @@ export function CustomerManager({
                     </td>
                     <td className="py-3 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
+                        <CustomerCreditRiskModal customerId={c.id} customerName={c.name} />
                         <Link
                           href={`/finance/invoices/new?customerId=${c.id}`}
                           className="inline-flex items-center gap-1 text-xs text-[var(--color-action-primary)] hover:underline font-medium px-2 py-1 rounded hover:bg-[var(--color-action-primary)]/10"

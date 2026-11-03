@@ -55,6 +55,10 @@ export class GroqProvider implements AiProvider {
       throw new AiProviderError(this.name, `Model ${options.model} is not supported by Groq`, false);
     }
 
+    if (options.attachments && options.attachments.length > 0) {
+      throw new AiProviderError(this.name, "Groq does not support multimodal attachments", false);
+    }
+
     const model = options.model ?? FREE_MODELS[0];
     let lastFailure = "no attempt made";
 

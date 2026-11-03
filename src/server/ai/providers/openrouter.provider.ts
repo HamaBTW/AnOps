@@ -53,7 +53,23 @@ export class OpenRouterProvider implements AiProvider {
 
     const body = {
       model,
-      messages: options.messages,
+      messages: options.attachments && options.attachments.length > 0
+        ? options.messages.map((m, idx) => {
+            if (idx === options.messages.length - 1) {
+              return {
+                role: m.role,
+                content: [
+                  { type: "text", text: m.content },
+                  ...options.attachments!.map((att) => ({
+                    type: "image_url",
+                    image_url: { url: `data:${att.mimeType};base64,${att.base64}` },
+                  })),
+                ],
+              };
+            }
+            return m;
+          })
+        : options.messages,
       max_tokens: options.maxTokens ?? 1024,
       temperature: options.temperature ?? 0.7,
     };

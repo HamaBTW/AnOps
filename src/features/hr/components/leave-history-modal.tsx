@@ -154,7 +154,7 @@ export function LeaveHistoryModal({
                             isPositive ? "text-emerald-600" : "text-amber-600"
                           }`}
                         >
-                          {isPositive ? `+${tx.days}` : tx.days} j
+                          {isPositive ? `+${tx.days}` : tx.days} d
                         </span>
                         {isAdmin && tx.transactionType !== "REVERSAL" && (
                           <button
@@ -230,7 +230,7 @@ export function LeaveHistoryModal({
               onClick={onClose}
               className="px-4 py-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-subtle)] text-xs font-semibold"
             >
-              Fermer
+              Close
             </button>
           </div>
         </div>

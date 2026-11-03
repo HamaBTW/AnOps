@@ -148,7 +148,11 @@ export function LeaveSection({
       if (res.error) {
         alert(res.error);
       } else if (res.data) {
-        setAccrualSuccess(`Monthly accrual complete: ${res.data.accruedEmployees.length} employee(s) credited.`);
+        if (res.data.accruedEmployees.length > 0) {
+          setAccrualSuccess(`Monthly accrual complete: ${res.data.accruedEmployees.length} employee(s) credited.`);
+        } else {
+          setAccrualSuccess(`All active employees have already received their accrual for this period (${res.data.processed} checked).`);
+        }
         setTimeout(() => setAccrualSuccess(null), 5000);
         onRefresh();
       }

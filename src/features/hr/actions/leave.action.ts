@@ -219,7 +219,8 @@ export async function runMonthlyAccrualAction(periodDateStr?: string): Promise<A
       return { error: "Forbidden: Only HR administrators can run leave accruals." };
     }
 
-    const result = await runMonthlyAccrual(authUser.companyId, periodDateStr, authUser.userId);
+    const actorName = authUser.employee?.fullName || "HR Administrator";
+    const result = await runMonthlyAccrual(authUser.companyId, periodDateStr, actorName);
     revalidatePath("/hr");
     return { success: true, data: result };
   } catch (err: unknown) {

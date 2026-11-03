@@ -1322,7 +1322,10 @@ export async function runMonthlyAccrual(
       companyId: cId,
       employeeId: empId,
       transactionType: "ACCRUAL",
-      description: { $regex: new RegExp(`Période ${periodMonth}`, "i") },
+      $or: [
+        { referenceId: `ACCRUAL_${periodMonth}` },
+        { description: { $regex: new RegExp(`P[eé]riod(e)? ${periodMonth}`, "i") } },
+      ],
     });
 
     if (alreadyAccrued) continue;
@@ -1348,6 +1351,7 @@ export async function runMonthlyAccrual(
         transactionType: "ACCRUAL",
         days: daysToAccrue,
         effectiveDate,
+        referenceId: `ACCRUAL_${periodMonth}`,
         description: `Monthly leave accrual — Period ${periodMonth} (+${daysToAccrue}d)`,
         createdBy: adminUserId,
       },

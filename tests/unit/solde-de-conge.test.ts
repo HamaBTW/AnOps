@@ -53,7 +53,21 @@ describe("Solde de Congé - Age Categories (Code du Travail Art. 113-114)", () =
   });
 });
 
+describe("Solde de Congé - Monthly Accrual Idempotency Regex", () => {
+  it("matches period string across languages (Period / Période)", () => {
+    const period = "2026-11";
+    const regex = new RegExp(`P[eé]riod(e)? ${period}`, "i");
+
+    expect(regex.test("Monthly leave accrual — Period 2026-11 (+1d)")).toBe(true);
+    expect(regex.test("Mensualisation Solde de congé — Période 2026-11 (+1j)")).toBe(true);
+    expect(regex.test("Mensualisation Solde de congé — Periode 2026-11 (+1j)")).toBe(true);
+    // Should NOT match a different month
+    expect(regex.test("Monthly leave accrual — Period 2026-12 (+1d)")).toBe(false);
+  });
+});
+
 describe("Solde de Congé - Ledger Balance Invariants", () => {
+
   it("calculates Available accurately: Earned - Taken - Reserved + Adjustments", () => {
     // Scenario from spec: Earned 12, Taken 5, Reserved 2 => Available 5
     const earned = 12;

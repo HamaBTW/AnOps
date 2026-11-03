@@ -127,7 +127,7 @@ export function BankReconciliationModal({
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[var(--radius-card)] bg-[var(--color-bg-surface)] border border-[var(--color-border-subtle)] p-6 shadow-2xl space-y-5">
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[var(--color-border-subtle)] pb-4">

@@ -246,7 +246,7 @@ export function AIHRAssistant({
       {policyOpen && (
         <Portal>
           <div
-            className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+            className="fixed inset-0 z-[9999] flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
             onClick={() => setPolicyOpen(false)}
           >
             <div

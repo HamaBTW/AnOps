@@ -54,7 +54,7 @@ export function ExpenseAuditModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
       <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-2xl space-y-5">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3">

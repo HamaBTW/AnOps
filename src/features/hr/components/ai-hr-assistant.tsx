@@ -14,7 +14,7 @@ type AIHRAssistantProps = {
   employees: Employee[];
   userRole?: "employee" | "manager" | "hr_admin";
   /** Callback to switch tabs in the HR portal */
-  onNavigateTab?: (tab: "employees" | "leave" | "attendance" | "payroll" | "ai") => void;
+  onNavigateTab?: (tab: "employees" | "leave" | "attendance" | "payroll" | "ai" | "rentals") => void;
   /** Callback to directly open the new leave request modal */
   onOpenLeaveRequest?: () => void;
 };

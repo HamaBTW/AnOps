@@ -13,6 +13,10 @@ import {
   getPayslips,
   getPayrollSummary,
 } from "@/server/services/hr.service";
+import {
+  getWorkerRentalAgreements,
+  getWorkerRentalStats,
+} from "@/server/services/worker-rental.service";
 import { HRDashboardClient } from "@/features/hr/components/hr-dashboard-client";
 
 export const metadata: Metadata = {
@@ -45,22 +49,25 @@ export default async function HRPage() {
   // Backend restriction: non-admin employees only get their own data
   const employeeIdFilter = userRole === "hr_admin" ? undefined : currentEmployee?.id;
 
-  const [leaveRequests, todayAttendance, attendanceHistory, payslips, payrollSummary] = await Promise.all([
-    getLeaveRequests(employeeIdFilter ? { employeeId: employeeIdFilter } : {}, activeCompanyId),
-    getTodayAttendance(activeCompanyId),
-    getAttendanceHistory(employeeIdFilter ? { employeeId: employeeIdFilter } : {}, activeCompanyId),
-    getPayslips({ period: currentPeriod, ...(employeeIdFilter ? { employeeId: employeeIdFilter } : {}) }, activeCompanyId),
-    userRole === "hr_admin"
-      ? getPayrollSummary(currentPeriod, activeCompanyId)
-      : Promise.resolve({
-          period: currentPeriod,
-          totalGross: 0,
-          totalDeductions: 0,
-          totalNet: 0,
-          totalEmployees: 1,
-          payslipsGenerated: 0,
-        }),
-  ]);
+  const [leaveRequests, todayAttendance, attendanceHistory, payslips, payrollSummary, rentalAgreements, rentalStats] =
+    await Promise.all([
+      getLeaveRequests(employeeIdFilter ? { employeeId: employeeIdFilter } : {}, activeCompanyId),
+      getTodayAttendance(activeCompanyId),
+      getAttendanceHistory(employeeIdFilter ? { employeeId: employeeIdFilter } : {}, activeCompanyId),
+      getPayslips({ period: currentPeriod, ...(employeeIdFilter ? { employeeId: employeeIdFilter } : {}) }, activeCompanyId),
+      userRole === "hr_admin"
+        ? getPayrollSummary(currentPeriod, activeCompanyId)
+        : Promise.resolve({
+            period: currentPeriod,
+            totalGross: 0,
+            totalDeductions: 0,
+            totalNet: 0,
+            totalEmployees: 1,
+            payslipsGenerated: 0,
+          }),
+      getWorkerRentalAgreements(activeCompanyId, {}),
+      getWorkerRentalStats(activeCompanyId),
+    ]);
 
   const leaveBalance = currentEmployee
     ? await getLeaveBalance(currentEmployee.id, 2026, activeCompanyId)
@@ -88,6 +95,8 @@ export default async function HRPage() {
       initialPayrollSummary={payrollSummary}
       currentEmployee={currentEmployee}
       userRole={userRole}
+      initialRentalAgreements={rentalAgreements}
+      rentalStats={rentalStats}
     />
   );
 }

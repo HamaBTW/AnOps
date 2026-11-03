@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   MessageSquare,
+  ArrowLeftRight,
 } from "lucide-react";
 import type {
   Employee,
@@ -25,6 +26,10 @@ import type {
   PayslipRecord,
   PayrollSummary,
 } from "@/features/hr/types";
+import type {
+  WorkerRentalAgreement,
+  WorkerRentalStats,
+} from "@/features/hr/types/worker-rental.types";
 import { HRStatsCards } from "./hr-stats-cards";
 import { EmployeeTable } from "./employee-table";
 import { EmployeeModal } from "./employee-modal";
@@ -34,9 +39,10 @@ import { LeaveSection } from "./leave-section";
 import { AttendanceSection } from "./attendance-section";
 import { PayrollSection } from "./payroll-section";
 import { AIHRAssistant } from "./ai-hr-assistant";
+import { WorkerRentalManager } from "./worker-rental/worker-rental-manager";
 import { useRouter } from "next/navigation";
 
-export type HRTab = "employees" | "leave" | "attendance" | "payroll" | "ai";
+export type HRTab = "employees" | "leave" | "attendance" | "payroll" | "ai" | "rentals";
 
 type HRDashboardClientProps = {
   initialEmployees: Employee[];
@@ -51,6 +57,8 @@ type HRDashboardClientProps = {
   initialPayrollSummary: PayrollSummary;
   currentEmployee?: Employee | null;
   userRole?: "employee" | "manager" | "hr_admin";
+  initialRentalAgreements: WorkerRentalAgreement[];
+  rentalStats: WorkerRentalStats;
 };
 
 export function HRDashboardClient({
@@ -66,6 +74,8 @@ export function HRDashboardClient({
   initialPayrollSummary,
   currentEmployee,
   userRole = "employee",
+  initialRentalAgreements,
+  rentalStats,
 }: HRDashboardClientProps) {
   const router = useRouter();
   const isAdmin = userRole === "hr_admin";
@@ -104,14 +114,14 @@ export function HRDashboardClient({
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-primary)]">
-              HR & Payroll
+              HR &amp; Payroll
             </h1>
             <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-action-primary)]/20 px-2.5 py-0.5 text-xs font-bold text-[var(--color-text-primary)]">
               <Sparkles className="h-3 w-3" /> Core Module
             </span>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-[var(--color-text-secondary)]">
-            Employee Directory, Time-off Approvals, Live Attendance, Payroll Generator & AI Policy Assistant
+            Employee Directory, Time-off Approvals, Live Attendance, Payroll Generator &amp; AI Policy Assistant
           </p>
         </div>
 
@@ -161,7 +171,7 @@ export function HRDashboardClient({
         </div>
       </div>
 
-      {/* Modern Navigation Tabs for the 5 Deliverables */}
+      {/* Modern Navigation Tabs for the 6 Deliverables */}
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[var(--color-border-subtle)] pb-2 no-scrollbar">
         {/* Tab 1: Employees — admin only */}
         {isAdmin && (
@@ -190,7 +200,7 @@ export function HRDashboardClient({
           }`}
         >
           <Calendar className="h-4 w-4" />
-          <span>Time-Off & Leave</span>
+          <span>Time-Off &amp; Leave</span>
           {pendingLeaveCount > 0 && (
             <span
               className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
@@ -249,6 +259,33 @@ export function HRDashboardClient({
             AI
           </span>
         </button>
+
+        {/* Tab 6: Worker Rentals — admin only */}
+        {isAdmin && (
+        <button
+          type="button"
+          onClick={() => setActiveTab("rentals")}
+          className={`flex min-h-[42px] shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-4 text-xs font-bold transition-all ${
+            activeTab === "rentals"
+              ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] shadow-xs"
+              : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          <ArrowLeftRight className="h-4 w-4" />
+          <span>Worker Rentals</span>
+          {rentalStats.activeAgreements > 0 && (
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                activeTab === "rentals"
+                  ? "bg-[var(--color-action-on-primary)] text-[var(--color-action-primary)]"
+                  : "bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
+              }`}
+            >
+              {rentalStats.activeAgreements}
+            </span>
+          )}
+        </button>
+        )}
       </div>
 
       {/* Tab Content Display */}
@@ -336,6 +373,13 @@ export function HRDashboardClient({
             setActiveTab("leave");
             setLeaveRequestModalOpen(true);
           }}
+        />
+      )}
+
+      {activeTab === "rentals" && (
+        <WorkerRentalManager
+          initialAgreements={initialRentalAgreements}
+          stats={rentalStats}
         />
       )}
 

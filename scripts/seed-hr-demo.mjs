@@ -1,21 +1,19 @@
 #!/usr/bin/env node
 /**
- * AnOps HR Demo Data Seeder
+ * AnOps Full-Year HR & Leave Demo Data Seeder
  * 
- * Injects a complete set of realistic HR & Leave Balance (Solde de Congé) demo records
- * to test every feature in manual-test.md:
- * 
- * 1. Sarah Ben Salem  -> Tests KPI cards (Earned, Taken, Reserved, Available)
- * 2. Youssef Trabelsi -> Tests Young Adult policy (1.5d/mo) & Pending Approval
- * 3. Amira Gharbi     -> Tests Single-day Half-day leave request (0.5d)
- * 4. Karim Mansour    -> Tests Offboarding / Departure Review modal
- * 5. Nour Khemir      -> Tests Payroll unpaid deduction regression (4,400 TND base)
+ * Generates an enterprise-scale full-year dataset (2026):
+ * - 8 Diverse employees across Engineering, Design, QA, Sales, and HR
+ * - Full 11 months of Leave Accruals (Jan 2026 -> Nov 2026)
+ * - Seasonal leave requests across Spring, Summer, Autumn, and Winter (Taken, Reserved, Pending)
+ * - 5 Full Months of Generated Payslips (July, August, September, October, November 2026)
+ * - Recent daily Attendance punch-in/out logs
  * 
  * Usage:
  *   node scripts/seed-hr-demo.mjs
  *   node scripts/seed-hr-demo.mjs --clean
  *   node scripts/seed-hr-demo.mjs --company <company_id>
- *   MONGODB_URI="mongodb+srv://..." node scripts/seed-hr-demo.mjs
+ *   MONGODB_URI="..." node scripts/seed-hr-demo.mjs --company <company_id>
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -43,19 +41,14 @@ if (!process.env.MONGODB_URI && existsSync(".env")) {
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {
-  console.error("❌ MONGODB_URI is not set. Please provide it in .env or as an environment variable.");
+  console.error("❌ MONGODB_URI is not set.");
   process.exit(1);
 }
 
-// 2. Parse CLI Arguments
 const args = process.argv.slice(2);
 const isClean = args.includes("--clean");
 const companyArgIdx = args.indexOf("--company");
 const targetCompanyId = companyArgIdx !== -1 ? args[companyArgIdx + 1] : null;
-
-function formatDateYMD(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 async function run() {
   const client = new MongoClient(uri);
@@ -63,7 +56,6 @@ async function run() {
   const db = client.db(client.options.dbName && client.options.dbName !== "test" ? client.options.dbName : "anops");
   console.log(`🔌 Connected to database: ${db.databaseName}`);
 
-  // Find target company
   let company;
   if (targetCompanyId) {
     company = await db.collection("companies").findOne({ _id: new ObjectId(targetCompanyId) });
@@ -73,10 +65,9 @@ async function run() {
       process.exit(1);
     }
   } else {
-    // Pick first company found
     company = await db.collection("companies").findOne();
     if (!company) {
-      console.error("❌ No company found in the database. Please create a company first or run onboarding.");
+      console.error("❌ No company found.");
       await client.close();
       process.exit(1);
     }
@@ -85,9 +76,8 @@ async function run() {
   const cId = company._id;
   console.log(`🏢 Target Company: "${company.name}" (ID: ${cId.toString()})`);
 
-  // Handle --clean mode
   if (isClean) {
-    console.log("🧹 Cleaning demo HR data...");
+    console.log("🧹 Cleaning demo HR records...");
     const demoEmps = await db.collection("employees").find({ companyId: cId, isDemo: true }).toArray();
     const demoEmpIds = demoEmps.map((e) => e._id.toString());
 
@@ -95,39 +85,42 @@ async function run() {
       await db.collection("leave_requests").deleteMany({ companyId: cId, employeeId: { $in: demoEmpIds } });
       await db.collection("leave_transactions").deleteMany({ companyId: cId, employeeId: { $in: demoEmpIds } });
       await db.collection("employee_leave_policies").deleteMany({ companyId: cId, employeeId: { $in: demoEmpIds } });
+      await db.collection("payslips").deleteMany({ companyId: cId, employeeId: { $in: demoEmpIds } });
+      await db.collection("attendance").deleteMany({ companyId: cId, employeeId: { $in: demoEmpIds } });
       await db.collection("employees").deleteMany({ companyId: cId, isDemo: true });
     }
-    console.log(`✅ Cleaned ${demoEmpIds.length} demo employee(s) and their associated records.`);
+    console.log(`✅ Cleaned ${demoEmpIds.length} demo employee(s) and all their associated records.`);
     await client.close();
     return;
   }
 
-  // 1. Ensure Standard Departments
+  // 1. Departments
   console.log("\n📁 1. Ensuring Departments...");
   const deptDefs = [
-    { name: "Engineering", description: "Software development and infrastructure" },
-    { name: "Product & Design", description: "UI/UX design and product strategy" },
-    { name: "Quality Assurance", description: "Automated testing and QA" },
-    { name: "Sales & Marketing", description: "Revenue generation and growth" },
+    { name: "Engineering", description: "Software development and cloud infrastructure" },
+    { name: "Product & Design", description: "UI/UX design, UX research, and product strategy" },
+    { name: "Quality Assurance", description: "Automated QA and integration testing" },
+    { name: "Sales & Marketing", description: "Enterprise sales, client success, and growth" },
+    { name: "Human Resources", description: "People operations, talent, and compliance" },
   ];
 
   const deptMap = {};
   for (const def of deptDefs) {
     let dept = await db.collection("departments").findOne({ companyId: cId, name: def.name });
     if (!dept) {
-      const inserted = await db.collection("departments").insertOne({
+      const ins = await db.collection("departments").insertOne({
         ...def,
         companyId: cId,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      dept = { _id: inserted.insertedId, name: def.name };
-      console.log(`   + Created department: ${def.name}`);
+      dept = { _id: ins.insertedId, name: def.name };
+      console.log(`   + Created: ${def.name}`);
     }
     deptMap[def.name] = dept._id.toString();
   }
 
-  // 2. Ensure Leave Types
+  // 2. Leave Types
   console.log("\n🏖️ 2. Ensuring Leave Types...");
   const typeDefs = [
     { name: "Annual Paid Leave", code: "CP", isPaid: true, requiresApproval: true, requiresDocument: false },
@@ -147,12 +140,12 @@ async function run() {
         createdAt: new Date(),
       });
       t = { _id: ins.insertedId, code: def.code };
-      console.log(`   + Created leave type: ${def.name} (${def.code})`);
+      console.log(`   + Created: ${def.name} (${def.code})`);
     }
     typeMap[def.code] = t._id.toString();
   }
 
-  // 3. Ensure Leave Policies (Tunisian Labour Code Art. 113-114)
+  // 3. Leave Policies
   console.log("\n⚖️ 3. Ensuring Leave Policies...");
   const policyDefs = [
     {
@@ -199,14 +192,14 @@ async function run() {
         createdAt: new Date(),
       });
       p = { _id: ins.insertedId, name: def.name };
-      console.log(`   + Created leave policy: ${def.name}`);
+      console.log(`   + Created policy: ${def.name}`);
     }
     policyMap[def.employeeCategory] = p._id.toString();
   }
 
-  // 4. Ensure Tunisian Public Holidays
+  // 4. Public Holidays 2026
   console.log("\n🇹🇳 4. Ensuring Public Holidays...");
-  const currentYear = new Date().getFullYear();
+  const currentYear = 2026;
   const holidays = [
     { name: "New Year's Day", date: `${currentYear}-01-01` },
     { name: "Revolution Day", date: `${currentYear}-01-14` },
@@ -221,20 +214,13 @@ async function run() {
   for (const h of holidays) {
     const exists = await db.collection("public_holidays").findOne({ companyId: cId, date: h.date });
     if (!exists) {
-      await db.collection("public_holidays").insertOne({
-        ...h,
-        isHalfDay: false,
-        companyId: cId,
-      });
+      await db.collection("public_holidays").insertOne({ ...h, isHalfDay: false, companyId: cId });
     }
   }
   console.log(`   ✓ 8 Tunisian public holidays verified for ${currentYear}.`);
 
-  // 5. Inject 5 Targeted Demo Employees
-  console.log("\n👥 5. Injecting Demo Employees & Leave Records...");
-
-  const now = new Date();
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // 5. Eight Realistic Demo Employees
+  console.log("\n👥 5. Injecting 8 Demo Employees across the Year...");
 
   const demoEmployees = [
     {
@@ -244,14 +230,14 @@ async function run() {
       jobTitle: "Senior Software Engineer",
       departmentId: deptMap["Engineering"],
       departmentName: "Engineering",
-      hireDate: "2026-05-01",
-      dateOfBirth: "1994-06-15", // Adult (32 yo)
-      baseSalary: 3800,
+      hireDate: "2026-01-05",
+      dateOfBirth: "1994-06-15",
+      baseSalary: 4200,
       role: "employee",
       status: "active",
       leaveAllowance: 12,
       category: "adult",
-      scenario: "Full KPI showcase: Earned 7d, Taken 3d, Reserved 2d -> Available 2d",
+      accrualRate: 1.0,
     },
     {
       fullName: "Youssef Trabelsi",
@@ -260,46 +246,46 @@ async function run() {
       jobTitle: "Junior UI Designer",
       departmentId: deptMap["Product & Design"],
       departmentName: "Product & Design",
-      hireDate: "2026-08-01",
-      dateOfBirth: "2007-02-10", // 19 yo -> young_adult (1.5d/mo)
-      baseSalary: 2200,
+      hireDate: "2026-02-01",
+      dateOfBirth: "2007-03-10", // 19 yo -> Young Adult (1.5d/mo)
+      baseSalary: 2300,
       role: "employee",
       status: "active",
       leaveAllowance: 18,
       category: "young_adult",
-      scenario: "Young Adult (1.5d/mo) + 1 pending leave request to test Approval",
+      accrualRate: 1.5,
     },
     {
       fullName: "Amira Gharbi",
       email: "amira.gharbi@demo.anops.tn",
       phone: "+216 71 100 203",
-      jobTitle: "QA Engineer",
+      jobTitle: "QA Lead",
       departmentId: deptMap["Quality Assurance"],
       departmentName: "Quality Assurance",
-      hireDate: "2026-04-01",
-      dateOfBirth: "1998-11-20", // Adult
-      baseSalary: 2800,
+      hireDate: "2026-01-10",
+      dateOfBirth: "1997-11-20",
+      baseSalary: 3400,
       role: "employee",
       status: "active",
       leaveAllowance: 12,
       category: "adult",
-      scenario: "Has 1 pending single-day half-day request (0.5d)",
+      accrualRate: 1.0,
     },
     {
       fullName: "Karim Mansour",
       email: "karim.mansour@demo.anops.tn",
       phone: "+216 71 100 204",
-      jobTitle: "Account Executive",
+      jobTitle: "Senior Account Executive",
       departmentId: deptMap["Sales & Marketing"],
       departmentName: "Sales & Marketing",
-      hireDate: "2025-11-01",
-      dateOfBirth: "1991-04-12", // Adult
-      baseSalary: 3200,
+      hireDate: "2025-06-01",
+      dateOfBirth: "1991-04-12",
+      baseSalary: 3800,
       role: "employee",
       status: "active",
       leaveAllowance: 12,
       category: "adult",
-      scenario: "Ready for offboarding -> Click 'Deactivate' to test Departure Review modal",
+      accrualRate: 1.0,
     },
     {
       fullName: "Nour Khemir",
@@ -309,41 +295,87 @@ async function run() {
       departmentId: deptMap["Engineering"],
       departmentName: "Engineering",
       hireDate: "2026-01-15",
-      dateOfBirth: "1993-09-08", // Adult
+      dateOfBirth: "1993-09-08",
       baseSalary: 4400,
       role: "employee",
       status: "active",
       leaveAllowance: 12,
       category: "adult",
-      scenario: "Has approved UNPAID leave (2d) -> Tests Payroll deduction (4400 - 400 = 4000 TND)",
+      accrualRate: 1.0,
+    },
+    {
+      fullName: "Hedi Bouazizi",
+      email: "hedi.bouazizi@demo.anops.tn",
+      phone: "+216 71 100 206",
+      jobTitle: "Lead Product Manager",
+      departmentId: deptMap["Product & Design"],
+      departmentName: "Product & Design",
+      hireDate: "2026-01-05",
+      dateOfBirth: "1989-12-04",
+      baseSalary: 4900,
+      role: "manager",
+      status: "active",
+      leaveAllowance: 12,
+      category: "adult",
+      accrualRate: 1.0,
+    },
+    {
+      fullName: "Ines Ben Amor",
+      email: "ines.benamor@demo.anops.tn",
+      phone: "+216 71 100 207",
+      jobTitle: "HR Specialist",
+      departmentId: deptMap["Human Resources"],
+      departmentName: "Human Resources",
+      hireDate: "2026-02-15",
+      dateOfBirth: "1996-07-22",
+      baseSalary: 2900,
+      role: "hr_admin",
+      status: "active",
+      leaveAllowance: 12,
+      category: "adult",
+      accrualRate: 1.0,
+    },
+    {
+      fullName: "Tarek Ayari",
+      email: "tarek.ayari@demo.anops.tn",
+      phone: "+216 71 100 208",
+      jobTitle: "Frontend Developer",
+      departmentId: deptMap["Engineering"],
+      departmentName: "Engineering",
+      hireDate: "2026-03-01",
+      dateOfBirth: "1999-05-18",
+      baseSalary: 3100,
+      role: "employee",
+      status: "active",
+      leaveAllowance: 12,
+      category: "adult",
+      accrualRate: 1.0,
     },
   ];
 
+  const empMap = {};
   for (const empData of demoEmployees) {
-    const { category, scenario, ...empFields } = empData;
+    const { category, accrualRate, ...empFields } = empData;
 
-    // Upsert employee
     let emp = await db.collection("employees").findOne({ companyId: cId, email: empFields.email });
     if (!emp) {
       const ins = await db.collection("employees").insertOne({
         ...empFields,
         companyId: cId,
         isDemo: true,
-        createdAt: new Date(),
+        createdAt: new Date(empFields.hireDate),
         updatedAt: new Date(),
       });
       emp = { _id: ins.insertedId, ...empFields };
-      console.log(`\n   👤 Created: ${emp.fullName} (${emp.jobTitle})`);
     } else {
       await db.collection("employees").updateOne(
         { _id: emp._id },
         { $set: { ...empFields, isDemo: true, status: "active", updatedAt: new Date() } }
       );
-      console.log(`\n   👤 Updated: ${emp.fullName} (${emp.jobTitle})`);
     }
-
     const empId = emp._id.toString();
-    console.log(`      🎯 Scenario: ${scenario}`);
+    empMap[empFields.email] = { ...emp, id: empId, accrualRate, category };
+    console.log(`   👤 Employee: ${emp.fullName} — ${emp.jobTitle} (${empFields.departmentName})`);
 
     // Assign policy
     await db.collection("employee_leave_policies").deleteMany({ companyId: cId, employeeId: empId });
@@ -353,291 +385,288 @@ async function run() {
       leavePolicyId: policyMap[category] || policyMap["adult"],
       policyName: category === "young_adult" ? "Young Adult Policy 18-20 ans (Art. 114)" : "Standard Adult Policy (Art. 113-114)",
       effectiveFrom: emp.hireDate,
-      assignedBy: "system_demo_seeder",
-      assignedAt: new Date(),
+      assignedBy: "system_seeder",
+      assignedAt: new Date(emp.hireDate),
     });
 
-    // Clean existing leave records for this demo employee to make script idempotent
+    // Clean previous leave records for fresh full-year injection
     await db.collection("leave_requests").deleteMany({ companyId: cId, employeeId: empId });
     await db.collection("leave_transactions").deleteMany({ companyId: cId, employeeId: empId });
+  }
 
-    // Seed specific transactions & requests based on employee
-    if (emp.fullName === "Sarah Ben Salem") {
-      // 1. Initial Onboarding Accrual
+  // 6. Inject Full-Year Monthly Accruals (Jan -> Nov 2026)
+  console.log("\n📈 6. Generating Full-Year Monthly Accruals (Jan 2026 -> Nov 2026)...");
+  const months = [
+    { period: "2026-01", date: "2026-01-31" },
+    { period: "2026-02", date: "2026-02-28" },
+    { period: "2026-03", date: "2026-03-31" },
+    { period: "2026-04", date: "2026-04-30" },
+    { period: "2026-05", date: "2026-05-31" },
+    { period: "2026-06", date: "2026-06-30" },
+    { period: "2026-07", date: "2026-07-31" },
+    { period: "2026-08", date: "2026-08-31" },
+    { period: "2026-09", date: "2026-09-30" },
+    { period: "2026-10", date: "2026-10-31" },
+    { period: "2026-11", date: "2026-11-01" },
+  ];
+
+  for (const emp of Object.values(empMap)) {
+    for (const m of months) {
+      if (emp.hireDate <= m.date) {
+        await db.collection("leave_transactions").insertOne({
+          companyId: cId,
+          employeeId: emp.id,
+          employeeName: emp.fullName,
+          leaveTypeId: typeMap["CP"],
+          leaveTypeCode: "CP",
+          transactionType: "ACCRUAL",
+          days: emp.accrualRate,
+          effectiveDate: m.date,
+          referenceId: `ACCRUAL_${m.period}`,
+          description: `Monthly leave accrual — Period ${m.period} (+${emp.accrualRate}d)`,
+          createdBy: "HR Administrator",
+          createdAt: new Date(`${m.date}T08:00:00Z`),
+        });
+      }
+    }
+  }
+  console.log("   ✓ Generated monthly accrual ledgers for all 8 employees across 11 months.");
+
+  // 7. Inject Year-Long Leave Requests (Taken, Reserved, Pending)
+  console.log("\n🏖️ 7. Generating Year-Long Leave Requests across all Seasons...");
+
+  const sarah = empMap["sarah.bensalem@demo.anops.tn"];
+  const youssef = empMap["youssef.trabelsi@demo.anops.tn"];
+  const amira = empMap["amira.gharbi@demo.anops.tn"];
+  const karim = empMap["karim.mansour@demo.anops.tn"];
+  const nour = empMap["nour.khemir@demo.anops.tn"];
+  const hedi = empMap["hedi.bouazizi@demo.anops.tn"];
+
+  // Helper to record an approved + taken leave with both request and transaction
+  async function recordTakenLeave(emp, typeCode, start, end, days, reason) {
+    const reqId = new ObjectId();
+    await db.collection("leave_requests").insertOne({
+      _id: reqId,
+      companyId: cId,
+      employeeId: emp.id,
+      employeeName: emp.fullName,
+      departmentName: emp.departmentName,
+      leaveType: typeCode === "CP" ? "annual" : typeCode === "SICK" ? "sick" : "unpaid",
+      leaveTypeId: typeMap[typeCode],
+      isPaid: typeCode !== "UNPAID",
+      startDate: start,
+      endDate: end,
+      days,
+      reason,
+      status: "taken",
+      reviewedBy: "HR Administrator",
+      createdAt: new Date(`${start}T08:00:00Z`),
+      updatedAt: new Date(`${end}T18:00:00Z`),
+    });
+
+    if (typeCode === "CP") {
       await db.collection("leave_transactions").insertOne({
         companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "ACCRUAL",
-        days: 5,
-        effectiveDate: "2026-05-01",
-        description: "Initial accrual upon onboarding (5 month(s) effective work @ 1d/mo)",
-        createdBy: "system",
-        createdAt: new Date("2026-05-01T08:00:00Z"),
-      });
-
-      // 2. Monthly Accrual for October
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "ACCRUAL",
-        days: 1,
-        effectiveDate: "2026-10-01",
-        referenceId: "ACCRUAL_2026-10",
-        description: "Monthly leave accrual — Period 2026-10 (+1d)",
-        createdBy: "HR Administrator",
-        createdAt: new Date("2026-10-01T08:00:00Z"),
-      });
-
-      // 3. Manual Adjustment (+1d carryover bonus)
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        transactionType: "ADJUSTMENT",
-        days: 1,
-        effectiveDate: "2026-10-15",
-        description: "Annual carryover balance correction (+1d)",
-        createdBy: "HR Administrator",
-        createdAt: new Date("2026-10-15T09:30:00Z"),
-      });
-
-      // 4. Past Leave: 3 days TAKEN
-      const pastReqId = new ObjectId();
-      await db.collection("leave_requests").insertOne({
-        _id: pastReqId,
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        departmentName: emp.departmentName,
-        leaveType: "annual",
-        leaveTypeId: typeMap["CP"],
-        isPaid: true,
-        startDate: "2026-09-14",
-        endDate: "2026-09-16",
-        days: 3,
-        reason: "Late summer vacation",
-        status: "taken",
-        reviewedBy: "HR Administrator",
-        createdAt: new Date("2026-09-01T10:00:00Z"),
-        updatedAt: new Date("2026-09-17T00:00:00Z"),
-      });
-
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
+        employeeId: emp.id,
         employeeName: emp.fullName,
         leaveTypeId: typeMap["CP"],
         leaveTypeCode: "CP",
         transactionType: "TAKEN",
-        days: 3,
-        effectiveDate: "2026-09-16",
-        referenceId: pastReqId.toString(),
-        description: "Paid leave taken #0916 (2026-09-14 → 2026-09-16)",
+        days,
+        effectiveDate: end,
+        referenceId: reqId.toString(),
+        description: `Paid leave taken #${reqId.toString().slice(-6)} (${start} → ${end})`,
         createdBy: "system_scheduler",
-        createdAt: new Date("2026-09-16T18:00:00Z"),
+        createdAt: new Date(`${end}T18:00:00Z`),
       });
-
-      // 5. Future Leave: 2 days RESERVATION
-      const futureReqId = new ObjectId();
-      await db.collection("leave_requests").insertOne({
-        _id: futureReqId,
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        departmentName: emp.departmentName,
-        leaveType: "annual",
-        leaveTypeId: typeMap["CP"],
-        isPaid: true,
-        startDate: "2026-12-21",
-        endDate: "2026-12-22",
-        days: 2,
-        reason: "Family trip",
-        status: "approved",
-        reviewedBy: "HR Administrator",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "RESERVATION",
-        days: 2,
-        effectiveDate: "2026-12-21",
-        referenceId: futureReqId.toString(),
-        description: `Reservation for leave request #${futureReqId.toString().slice(-6)} (2026-12-21 → 2026-12-22)`,
-        createdBy: "HR Administrator",
-        createdAt: new Date(),
-      });
-      console.log(`      📊 Solde Breakdown -> Earned: 7d | Taken: 3d | Reserved: 2d | Available: 2d`);
-    }
-
-    if (emp.fullName === "Youssef Trabelsi") {
-      // Accrual at 1.5d/month rate
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "ACCRUAL",
-        days: 4.5,
-        effectiveDate: "2026-08-01",
-        description: "Initial accrual upon onboarding (3 month(s) effective work @ 1.5d/mo)",
-        createdBy: "system",
-        createdAt: new Date("2026-08-01T08:00:00Z"),
-      });
-
-      // Pending Request for 2 days
-      await db.collection("leave_requests").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        departmentName: emp.departmentName,
-        leaveType: "annual",
-        leaveTypeId: typeMap["CP"],
-        isPaid: true,
-        startDate: "2026-11-20",
-        endDate: "2026-11-23",
-        days: 2,
-        reason: "Extended weekend trip",
-        status: "pending",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      console.log(`      ⏳ 1 Pending Request created (Ready for Approve/Reject test)`);
-    }
-
-    if (emp.fullName === "Amira Gharbi") {
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "ACCRUAL",
-        days: 7,
-        effectiveDate: "2026-04-01",
-        description: "Initial accrual upon onboarding (7 month(s) effective work @ 1d/mo)",
-        createdBy: "system",
-        createdAt: new Date("2026-04-01T08:00:00Z"),
-      });
-
-      // Pending Half-Day Request (Morning)
-      await db.collection("leave_requests").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        departmentName: emp.departmentName,
-        leaveType: "annual",
-        leaveTypeId: typeMap["CP"],
-        isPaid: true,
-        startDate: "2026-11-18",
-        endDate: "2026-11-18",
-        days: 0.5,
-        halfDayOption: "morning",
-        reason: "Administrative appointment (morning only)",
-        status: "pending",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      console.log(`      🌓 1 Half-Day Pending Request created (0.5d Morning)`);
-    }
-
-    if (emp.fullName === "Karim Mansour") {
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "ACCRUAL",
-        days: 12,
-        effectiveDate: "2025-11-01",
-        description: "Opening leave balance (12 months effective work)",
-        createdBy: "system",
-        createdAt: new Date("2025-11-01T08:00:00Z"),
-      });
-
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "TAKEN",
-        days: 2,
-        effectiveDate: "2026-03-15",
-        description: "Paid leave taken #0315",
-        createdBy: "system_scheduler",
-        createdAt: new Date("2026-03-15T08:00:00Z"),
-      });
-      console.log(`      🚪 Ready for Departure Test: Earned: 12d, Taken: 2d -> 10d Unused Balance`);
-    }
-
-    if (emp.fullName === "Nour Khemir") {
-      await db.collection("leave_transactions").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        leaveTypeId: typeMap["CP"],
-        leaveTypeCode: "CP",
-        transactionType: "ACCRUAL",
-        days: 10,
-        effectiveDate: "2026-01-15",
-        description: "Initial accrual upon onboarding",
-        createdBy: "system",
-        createdAt: new Date("2026-01-15T08:00:00Z"),
-      });
-
-      // Approved UNPAID leave in current month (2 working days)
-      const currentYear = now.getFullYear();
-      const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
-      const unpaidStart = `${currentYear}-${currentMonth}-05`;
-      const unpaidEnd = `${currentYear}-${currentMonth}-06`;
-
-      await db.collection("leave_requests").insertOne({
-        companyId: cId,
-        employeeId: empId,
-        employeeName: emp.fullName,
-        departmentName: emp.departmentName,
-        leaveType: "unpaid",
-        leaveTypeId: typeMap["UNPAID"],
-        isPaid: false,
-        startDate: unpaidStart,
-        endDate: unpaidEnd,
-        days: 2,
-        reason: "Personal urgent leave (unpaid)",
-        status: "approved",
-        reviewedBy: "HR Administrator",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      console.log(`      💰 Unpaid Leave Created (2 days in ${currentMonthStr}) -> Base: 4,400 TND`);
     }
   }
 
+  // Sarah: Spring vacation (April, 2d), Summer vacation (August, 3d), Future December trip (2d reserved)
+  await recordTakenLeave(sarah, "CP", "2026-04-13", "2026-04-14", 2, "Spring break family trip");
+  await recordTakenLeave(sarah, "CP", "2026-08-10", "2026-08-12", 3, "Annual summer holiday");
+
+  const sarahFutureReqId = new ObjectId();
+  await db.collection("leave_requests").insertOne({
+    _id: sarahFutureReqId,
+    companyId: cId,
+    employeeId: sarah.id,
+    employeeName: sarah.fullName,
+    departmentName: sarah.departmentName,
+    leaveType: "annual",
+    leaveTypeId: typeMap["CP"],
+    isPaid: true,
+    startDate: "2026-12-24",
+    endDate: "2026-12-25",
+    days: 2,
+    reason: "End-of-year holiday",
+    status: "approved",
+    reviewedBy: "HR Administrator",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await db.collection("leave_transactions").insertOne({
+    companyId: cId,
+    employeeId: sarah.id,
+    employeeName: sarah.fullName,
+    leaveTypeId: typeMap["CP"],
+    leaveTypeCode: "CP",
+    transactionType: "RESERVATION",
+    days: 2,
+    effectiveDate: "2026-12-24",
+    referenceId: sarahFutureReqId.toString(),
+    description: `Reservation for leave request #${sarahFutureReqId.toString().slice(-6)} (2026-12-24 → 2026-12-25)`,
+    createdBy: "HR Administrator",
+    createdAt: new Date(),
+  });
+
+  // Youssef: Summer break (July, 3d) + Pending request in November (2d)
+  await recordTakenLeave(youssef, "CP", "2026-07-20", "2026-07-22", 3, "Summer festival break");
+  await db.collection("leave_requests").insertOne({
+    companyId: cId,
+    employeeId: youssef.id,
+    employeeName: youssef.fullName,
+    departmentName: youssef.departmentName,
+    leaveType: "annual",
+    leaveTypeId: typeMap["CP"],
+    isPaid: true,
+    startDate: "2026-11-20",
+    endDate: "2026-11-23",
+    days: 2,
+    reason: "Extended weekend trip",
+    status: "pending",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // Amira: Medical leave (September, 2d) + Pending Single-Day Half-Day in November (0.5d)
+  await recordTakenLeave(amira, "SICK", "2026-09-08", "2026-09-09", 2, "Flu recovery with medical certificate");
+  await db.collection("leave_requests").insertOne({
+    companyId: cId,
+    employeeId: amira.id,
+    employeeName: amira.fullName,
+    departmentName: amira.departmentName,
+    leaveType: "annual",
+    leaveTypeId: typeMap["CP"],
+    isPaid: true,
+    startDate: "2026-11-18",
+    endDate: "2026-11-18",
+    days: 0.5,
+    halfDayOption: "morning",
+    reason: "Administrative appointment (morning only)",
+    status: "pending",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // Karim: Spring leave (March, 2d) -> leaves 10d unconsumed ready for offboarding demo
+  await recordTakenLeave(karim, "CP", "2026-03-12", "2026-03-13", 2, "Personal time off");
+
+  // Nour: Unpaid Leaves in BOTH October and November (2 days each)
+  await recordTakenLeave(nour, "UNPAID", "2026-10-15", "2026-10-16", 2, "Family emergency (unpaid leave)");
+  await db.collection("leave_requests").insertOne({
+    companyId: cId,
+    employeeId: nour.id,
+    employeeName: nour.fullName,
+    departmentName: nour.departmentName,
+    leaveType: "unpaid",
+    leaveTypeId: typeMap["UNPAID"],
+    isPaid: false,
+    startDate: "2026-11-05",
+    endDate: "2026-11-06",
+    days: 2,
+    reason: "Personal leave (unpaid)",
+    status: "approved",
+    reviewedBy: "HR Administrator",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // Hedi: Summer leave (August, 4d)
+  await recordTakenLeave(hedi, "CP", "2026-08-17", "2026-08-20", 4, "Summer family vacation");
+
+  console.log("   ✓ Injected seasonal leave requests (Spring, Summer, Autumn, Winter).");
+
+  // 8. Inject 5 Months of Complete Company Payslips (July -> November 2026)
+  console.log("\n💰 8. Generating 5 Months of Historical Payslips (July, August, September, October, November)...");
+  const payrollMonths = ["2026-07", "2026-08", "2026-09", "2026-10", "2026-11"];
+
+  await db.collection("payslips").deleteMany({
+    companyId: cId,
+    employeeId: { $in: Object.values(empMap).map((e) => e.id) },
+  });
+
+  for (const pMonth of payrollMonths) {
+    for (const emp of Object.values(empMap)) {
+      if (emp.hireDate > `${pMonth}-28`) continue;
+
+      let unpaidDays = 0;
+      // Check if Nour took unpaid leave in Oct or Nov
+      if (emp.fullName === "Nour Khemir" && (pMonth === "2026-10" || pMonth === "2026-11")) {
+        unpaidDays = 2;
+      }
+
+      const dailyRate = Math.round((emp.baseSalary / 22) * 100) / 100;
+      const deduction = Math.round((dailyRate * unpaidDays) * 100) / 100;
+      const netSalary = Math.round((emp.baseSalary - deduction) * 100) / 100;
+
+      await db.collection("payslips").insertOne({
+        companyId: cId,
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        jobTitle: emp.jobTitle,
+        departmentName: emp.departmentName,
+        period: pMonth,
+        baseSalary: emp.baseSalary,
+        workingDaysInMonth: 22,
+        dailyRate,
+        unpaidLeaveDays: unpaidDays,
+        deduction,
+        netSalary,
+        currency: "TND",
+        status: "generated",
+        generatedAt: new Date(`${pMonth}-28T16:00:00Z`),
+      });
+    }
+  }
+  console.log("   ✓ Generated payslips for all staff across 5 periods (July -> November 2026).");
+
+  // 9. Inject Recent Attendance Records
+  console.log("\n⏱️ 9. Generating Attendance History...");
+  await db.collection("attendance").deleteMany({
+    companyId: cId,
+    employeeId: { $in: Object.values(empMap).map((e) => e.id) },
+  });
+
+  const recentDates = ["2026-11-02", "2026-11-03"];
+  for (const rDate of recentDates) {
+    for (const emp of Object.values(empMap)) {
+      await db.collection("attendance").insertOne({
+        companyId: cId,
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        departmentName: emp.departmentName,
+        date: rDate,
+        checkIn: new Date(`${rDate}T08:30:00Z`),
+        checkOut: new Date(`${rDate}T17:30:00Z`),
+        hoursWorked: 8.5,
+        status: "checked_out",
+        createdAt: new Date(`${rDate}T08:30:00Z`),
+        updatedAt: new Date(`${rDate}T17:30:00Z`),
+      });
+    }
+  }
+  console.log("   ✓ Generated attendance check-in/out logs for all active staff.");
+
   console.log("\n========================================================");
-  console.log("🎉 HR Demo Data Successfully Injected!");
+  console.log("🎉 FULL-YEAR HR DEMO DATASET INJECTED SUCCESSFULLY!");
   console.log("========================================================");
-  console.log("You can now open the app at http://localhost:3000/hr and test:");
-  console.log("  1. Select 'Sarah Ben Salem'   -> See KPI Cards (Earned: 7d, Taken: 3d, Reserved: 2d, Available: 2d)");
-  console.log("  2. Select 'Youssef Trabelsi'  -> Approve/Reject pending request & check Young Adult (1.5d/mo)");
-  console.log("  3. Select 'Amira Gharbi'      -> View & review 0.5-day half-day request");
-  console.log("  4. Employees tab: 'Karim Mansour' -> Click 'Deactivate' to review 10d unused departure compensation");
-  console.log("  5. Payroll tab: 'Nour Khemir' -> Generate payslip and verify 400 TND unpaid deduction");
-  console.log("  6. Leave tab: Click 'Monthly Accrual' -> Tests idempotency & blocks duplicate monthly credit");
-  console.log("\n🧹 To clean up this demo data later, simply run:");
-  console.log("   node scripts/seed-hr-demo.mjs --clean");
+  console.log("Summary of available demo data across the year:");
+  console.log("  • 8 Employees across Engineering, Design, QA, Sales, and HR");
+  console.log("  • Full 11 months of Monthly Accruals (Jan 2026 -> Nov 2026)");
+  console.log("  • Seasonal leave requests (Spring, Summer, Autumn, Winter)");
+  console.log("  • 5 Complete Monthly Payroll Periods (2026-07, 2026-08, 2026-09, 2026-10, 2026-11)");
+  console.log("  • Nour Khemir has 400 TND deduction in both 2026-10 and 2026-11 (Net 4,000 TND)");
   console.log("========================================================\n");
 
   await client.close();
@@ -647,4 +676,3 @@ run().catch((err) => {
   console.error("❌ Error running seed script:", err);
   process.exit(1);
 });
-

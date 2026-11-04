@@ -3,9 +3,8 @@ import clientPromise from "@/server/db/client";
 import { ObjectId } from "mongodb";
 import { AppError } from "@/shared/lib/errors";
 import { assertPermission, permissionsForRole, workspaceRoleFor } from "@/server/security/permissions";
-import { getActiveTenant } from "@/server/tenant/context";
 import type { CompanyRole } from "@/features/company/types";
-import { computeTotals } from "@/features/finance/utils/money";
+import { addAmounts, computeLineTotal, computeTotals, fromCents, toCents } from "@/features/finance/utils/money";
 
 export type FinanceServiceContext = {
   companyId: string;
@@ -456,7 +455,7 @@ export class FinanceService {
         quantity: l.quantity,
         unitPrice: l.unitPrice,
         taxRate: l.taxRate || 0,
-        lineTotal: (l.quantity * l.unitPrice) + ((l.quantity * l.unitPrice) * ((l.taxRate || 0) / 100)),
+        lineTotal: computeLineTotal(l.quantity, l.unitPrice, l.taxRate),
       })),
       createdAt: now,
       updatedAt: now,
@@ -756,7 +755,7 @@ export class FinanceService {
     const now = new Date();
     const amount = Number(input.amount) || 0;
     const tax = Number(input.tax) || 0;
-    const total = amount + tax;
+    const total = addAmounts(amount, tax);
 
     const doc = {
       companyId: this.companyId,
@@ -884,20 +883,22 @@ export class FinanceService {
     const payment = await db.collection("finance_payments").findOne({ _id: new ObjectId(paymentId), companyId: this.companyId });
     if (!payment) throw new AppError("NOT_FOUND", "Payment not found");
 
-    let totalAlloc = 0;
+    // Money is compared in whole cents: summing floats leaves residue (0.3 - 0.1 is not 0.2) that
+    // would reject a legitimate allocation or leave a fraction of a cent on a balance.
+    let totalAllocCents = 0;
     for (const a of allocations) {
       if (!ObjectId.isValid(a.invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
-      totalAlloc += Number(a.amount) || 0;
+      totalAllocCents += toCents(Number(a.amount) || 0);
     }
 
-    if (totalAlloc <= 0) throw new AppError("VALIDATION_ERROR", "Allocation amount must be positive");
-    if (totalAlloc > (payment.unallocatedAmount || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds unallocated amount");
+    if (totalAllocCents <= 0) throw new AppError("VALIDATION_ERROR", "Allocation amount must be positive");
+    if (totalAllocCents > toCents(payment.unallocatedAmount || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds unallocated amount");
 
     // Check invoices exist and balances
     for (const a of allocations) {
       const inv = await db.collection("finance_invoices").findOne({ _id: new ObjectId(a.invoiceId), companyId: this.companyId });
       if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
-      if ((inv.balance || 0) < (Number(a.amount) || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds invoice balance");
+      if (toCents(inv.balance || 0) < toCents(Number(a.amount) || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds invoice balance");
     }
 
     // Insert allocations and update
@@ -921,18 +922,20 @@ export class FinanceService {
     // Update payment
     await db.collection("finance_payments").updateOne(
       { _id: new ObjectId(paymentId), companyId: this.companyId },
-      { $set: { unallocatedAmount: (payment.unallocatedAmount || 0) - totalAlloc, updatedAt: now } }
+      { $set: { unallocatedAmount: fromCents(toCents(payment.unallocatedAmount || 0) - totalAllocCents), updatedAt: now } }
     );
 
     // Update each invoice
     for (const a of allocations) {
       const inv = await db.collection("finance_invoices").findOne({ _id: new ObjectId(a.invoiceId), companyId: this.companyId });
       if (!inv) continue;
-      const newPaid = (inv.amountPaid || 0) + Number(a.amount);
-      const newBalance = (inv.total || 0) - newPaid;
+      const newPaidCents = toCents(inv.amountPaid || 0) + toCents(Number(a.amount));
+      const newBalanceCents = toCents(inv.total || 0) - newPaidCents;
+      const newPaid = fromCents(newPaidCents);
+      const newBalance = fromCents(newBalanceCents);
       let newStatus = inv.status;
-      if (newBalance <= 0) newStatus = "paid";
-      else if (newPaid > 0) newStatus = "partially_paid";
+      if (newBalanceCents <= 0) newStatus = "paid";
+      else if (newPaidCents > 0) newStatus = "partially_paid";
       await db.collection("finance_invoices").updateOne(
         { _id: new ObjectId(a.invoiceId), companyId: this.companyId },
         { $set: { amountPaid: newPaid, balance: newBalance, status: newStatus, updatedAt: now, updatedBy: userId } }
@@ -1059,6 +1062,8 @@ export class FinanceService {
 }
 
 export async function getFinanceService() {
+  // Loaded on demand: only the request-cookie entry point needs the session machinery, so the AI tools can use the class without it.
+  const { getActiveTenant } = await import("@/server/tenant/context");
   const tenant = await getActiveTenant();
   if (!tenant) throw new AppError("UNAUTHENTICATED", "No active company");
   return new FinanceService({

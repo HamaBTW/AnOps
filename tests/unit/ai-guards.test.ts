@@ -7,6 +7,7 @@ import { defineTool } from "@/server/ai/tools/define-tool";
 import { CORE_TOOLS } from "@/server/ai/tools/core.tools";
 import { createToolRegistry } from "@/server/ai/tools/registry";
 import { aiToolRegistry } from "@/server/ai/tools";
+import { commandRegistry } from "@/server/ai/commands";
 import { PERMISSIONS, permissionsForRole } from "@/server/security/permissions";
 import { AI_PRESETS } from "@/shared/domain/ai";
 
@@ -85,11 +86,35 @@ describe("tool registry guards", () => {
     expect(() => createToolRegistry([defineTool({ ...base, name: "Bad Name", input: z.object({}) })])).toThrow(/Invalid/);
   });
 
-  it("the production registry passes its own checks and exposes only Core and Inventory tools", () => {
+  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing and Finance tools", () => {
     const names = aiToolRegistry.all().map((t) => t.name);
     expect(names.slice(0, CORE_TOOLS.length)).toEqual(CORE_TOOLS.map((t) => t.name));
-    expect(aiToolRegistry.all().every((t) => t.module === "core" || t.module === "inventory")).toBe(true);
-    expect(names.every((n) => n === "show_my_access" || n.startsWith("inventory_"))).toBe(true);
+    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance"].includes(t.module))).toBe(true);
+    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance)_/.test(n))).toBe(true);
+    // Marketing, HR, CRM and the rest have no AI tools yet: nothing may claim them.
+    expect(names.some((n) => /marketing|hr_|crm|sales|community|company/.test(n))).toBe(false);
+  });
+
+  it("every Purchasing and Manufacturing write names its record in the confirmation, and money or stock movers are typed or sensitive", () => {
+    const risk = (n: string) => aiToolRegistry.get(n)?.risk;
+    expect(risk("purchasing_approve_order")).toBe("financial");
+    expect(risk("purchasing_cancel_order")).toBe("destructive");
+    expect(risk("manufacturing_complete_work_order")).toBe("financial");
+    expect(risk("manufacturing_cancel_work_order")).toBe("destructive");
+    expect(risk("purchasing_post_receipt")).toBe("sensitive");
+    for (const tool of aiToolRegistry.all().filter((t) => (t.module === "purchasing" || t.module === "manufacturing") && t.kind === "write")) {
+      expect(tool.prepare, tool.name).toBeTypeOf("function"); // every write previews its real effect from current records
+    }
+  });
+
+  it("Finance: every write previews its real effect, money-changing writes are financial with a typed phrase, and nothing can pay out or delete", () => {
+    const writes = aiToolRegistry.all().filter((t) => t.module === "finance" && t.kind === "write");
+    for (const tool of writes) expect(tool.prepare, tool.name).toBeTypeOf("function");
+    const risk = (n: string) => aiToolRegistry.get(n)?.risk;
+    for (const n of ["finance_post_invoice", "finance_record_payment", "finance_allocate_payment", "finance_approve_expense"]) expect(risk(n), n).toBe("financial");
+    for (const n of ["finance_void_invoice", "finance_reject_expense"]) expect(risk(n), n).toBe("destructive");
+    expect(aiToolRegistry.all().filter((t) => t.module === "finance" && t.kind === "read").every((t) => t.risk === "low")).toBe(true);
+    expect(writes.map((t) => t.name).filter((n) => /pay_expense|mark_paid|delete|transfer|refund|ocr|scan/.test(n))).toEqual([]);
   });
 
   it("every Inventory write needs confirmation metadata and every read is low risk", () => {
@@ -100,6 +125,39 @@ describe("tool registry guards", () => {
     const risk = (name: string) => aiToolRegistry.get(name)?.risk;
     expect(risk("inventory_delete_product")).toBe("destructive");
     expect(risk("inventory_adjust_stock")).toBe("financial");
+  });
+});
+
+describe("AI-assisted entry declarations", () => {
+  it("every draft-capable command ends in a registered write tool of the same module, keeps a manual step, and marks its critical fields", () => {
+    const drafts = commandRegistry.all().filter((c) => c.draft);
+    expect(drafts.map((c) => c.name).sort()).toEqual([
+      "adjust", "allocate", "editbom", "editcategory", "editcustomer", "editorder", "editproduct", "editsupplier", "editwarehouse", "genreplenishment", "issue", "newbom", "newcategory",
+      "newcustomer", "newexpense", "newexpensecategory", "newinvoice", "neworder", "newproduct", "newsupplier", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "transfer",
+    ]);
+    for (const def of drafts) {
+      const tool = aiToolRegistry.get(def.draft!.tool);
+      expect(tool?.kind, def.name).toBe("write");
+      expect(tool?.module, def.name).toBe(def.module);
+      expect(def.manual, def.name).toBeTypeOf("function");
+      expect(def.submit, def.name).toBeTypeOf("function");
+      // Anything that moves stock or sets a price must never be taken on the model's word.
+      if (def.draft!.tool.includes("stock")) expect(def.draft!.criticalFields).toContain(def.name === "adjust" ? "delta" : "quantity");
+    }
+    expect(commandRegistry.byDraftTool("inventory_create_product")?.name).toBe("newproduct");
+    expect(commandRegistry.byDraftTool("inventory_delete_product")).toBeUndefined();
+    // Posting, voiding, approving and rejecting are decisions on existing records, never described in words.
+    for (const tool of ["finance_post_invoice", "finance_void_invoice", "finance_approve_expense", "finance_reject_expense", "finance_submit_expense"]) expect(commandRegistry.byDraftTool(tool), tool).toBeUndefined();
+    // Money is never taken on the model's word.
+    expect(commandRegistry.get("recordpayment")!.draft!.criticalFields).toEqual(expect.arrayContaining(["amount", "method"]));
+    expect(commandRegistry.get("newexpense")!.draft!.criticalFields).toEqual(expect.arrayContaining(["amount", "expenseDate"]));
+    expect(commandRegistry.get("newinvoice")!.draft!.lines!.criticalColumns).toEqual(expect.arrayContaining(["quantity", "unitPrice", "taxRate"]));
+  });
+
+  it("destructive and archive tools have no AI draft form: they keep the picker and typed confirmation", () => {
+    for (const name of ["deleteproduct", "archiveproduct", "restoreproduct", "approveorder", "cancelorder", "postreceipt", "cancelreceipt", "convertproposal", "activatebom", "archivebom", "startworkorder", "completeworkorder", "cancelworkorder"]) {
+      expect(commandRegistry.get(name)?.draft, name).toBeUndefined();
+    }
   });
 });
 

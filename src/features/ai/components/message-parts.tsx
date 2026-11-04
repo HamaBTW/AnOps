@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { AlertTriangle, Check, CircleSlash, Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { cancelAiActionAction, confirmAiActionAction } from "@/features/ai/actions/ai.action";
 import { Button } from "@/shared/components/ui/button";
-import { DiffList, GuidedForm, RecordCard, RecordTable } from "@/features/ai/components/result-parts";
+import { DiffList, DraftPrompt, EntryChoice, GuidedForm, RecordCard, RecordTable } from "@/features/ai/components/result-parts";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
 import { errorCopy } from "@/shared/lib/action-error-copy";
 import { cn } from "@/shared/lib/utils";
@@ -216,6 +216,10 @@ export function MessagePart({ part }: { part: AiMessagePart }) {
       return <RecordCard part={part} />;
     case "form":
       return <GuidedForm part={part} />;
+    case "entry_choice":
+      return <EntryChoice part={part} />;
+    case "draft_prompt":
+      return <DraftPrompt part={part} />;
     case "error":
       return (
         <p role="alert" className="flex items-start gap-2 rounded-[var(--radius-control)] bg-[var(--color-status-error-bg)] px-3 py-2 text-sm text-[var(--color-status-error)]">

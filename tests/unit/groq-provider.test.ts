@@ -158,3 +158,25 @@ describe("GroqProvider.complete", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 });
+
+describe("GroqProvider reasoning budget and rejection logging", () => {
+  it("asks gpt-oss models for low reasoning effort, so thinking cannot use up the reply budget", async () => {
+    vi.stubEnv("GROQ_API_KEYS", "gsk_test_one");
+    createMock.mockResolvedValueOnce(completion("{}"));
+    await new GroqProvider().complete({ messages, jsonObject: true });
+    expect(createMock.mock.calls[0][0]).toMatchObject({ model: "openai/gpt-oss-120b", reasoning_effort: "low", response_format: { type: "json_object" } });
+    createMock.mockResolvedValueOnce(completion("{}"));
+    await new GroqProvider().complete({ messages, model: "allam-2-7b" });
+    expect(createMock.mock.calls[1][0]).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("logs only the short machine code of a rejection, never the provider's message or the request", async () => {
+    vi.stubEnv("GROQ_API_KEYS", "gsk_test_one");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    createMock.mockRejectedValueOnce(Object.assign(apiError(400, "echoed secret request text"), { error: { error: { code: "json_validate_failed", message: "echoed secret request text" } } }));
+    await expect(new GroqProvider().complete({ messages })).rejects.toBeInstanceOf(AiProviderError);
+    const logged = warn.mock.calls.flat().join(" ");
+    expect(logged).toContain("HTTP 400, json_validate_failed");
+    expect(logged).not.toContain("echoed secret");
+  });
+});

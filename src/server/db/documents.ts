@@ -396,6 +396,8 @@ export type AiMessagePart =
   | AiRecordTablePart
   | AiRecordCardPart
   | AiFormPart
+  | AiEntryChoicePart
+  | AiDraftPromptPart
   | { type: "error"; code: string; message: string }
   | {
       type: "access_summary";
@@ -411,7 +413,7 @@ export type AiDiffRow = { label: string; before?: string; after: string };
 export type AiBadge = { label: string; tone: "success" | "warning" | "error" | "neutral" | "info" };
 
 /** A button on a row or card. The command and args are sent back to the server, which validates and re-authorises them. */
-export type AiAction = { label: string; command: string; args: Record<string, string | number | boolean>; step?: "start" | "select" };
+export type AiAction = { label: string; command: string; args: Record<string, string | number | boolean>; step?: "start" | "manual" | "select" | "draft" };
 
 export type AiRecordTablePart = {
   type: "record_table";
@@ -434,15 +436,78 @@ export type AiRecordCardPart = {
   actions?: AiAction[];
 };
 
+/** One column of a line-item field (order lines, BOM components, receipt lines). */
+export type AiLineColumn = {
+  name: string;
+  label: string;
+  /** "readonly" shows a value the person cannot change (a product name, a remaining quantity). */
+  kind: "text" | "select" | "readonly";
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  align?: "right";
+};
+
+export type AiLinesSpec = {
+  columns: AiLineColumn[];
+  /** Rows come from the record (a receipt's order lines): none can be added or removed. */
+  fixedRows?: boolean;
+  addLabel?: string;
+  maxRows: number;
+  /** Adds a "fill all remaining" shortcut: copies column `from` into column `to` on every row. */
+  fillRemaining?: { from: string; to: string };
+};
+
 export type AiFormField = {
   name: string;
   label: string;
-  kind: "text" | "textarea" | "number" | "select" | "checkbox";
+  /** "lines": `value` is a JSON array of rows (objects of strings). */
+  kind: "text" | "textarea" | "number" | "select" | "checkbox" | "lines";
+  lines?: AiLinesSpec;
   required?: boolean;
   value?: string | boolean;
   hint?: string;
   placeholder?: string;
   options?: { value: string; label: string }[];
+};
+
+/** Where a draft value came from. Verified on the server; the model's own claim is never taken at face value. */
+export type AiProvenance = "you" | "found" | "inferred" | "default";
+
+/** Extra data on a form that an AI draft prefilled: provenance per field, open questions and, for edits, the original values. */
+export type AiDraftMeta = {
+  sourceText: string;
+  /** The record being edited or acted on, when the command has one. */
+  targetId?: string;
+  provenance: Record<string, AiProvenance>;
+  questions: { field?: string; question: string }[];
+  /** Line-item fields: provenance per cell, one entry per row, in row order. */
+  lineProvenance?: Record<string, Record<string, AiProvenance>[]>;
+  /** Edits only: the record's values before any change. */
+  original?: Record<string, string | boolean>;
+  changed?: string[];
+};
+
+export type AiEntryChoicePart = {
+  type: "entry_choice";
+  title: string;
+  description: string;
+  command: string;
+  /** Carried to either path, for example text typed after the command. */
+  args: Record<string, string | number | boolean>;
+  manual: { label: string; description: string };
+  ai: { label: string; description: string };
+  placeholder: string;
+  examples: string[];
+};
+
+export type AiDraftPromptPart = {
+  type: "draft_prompt";
+  title: string;
+  command: string;
+  args: Record<string, string | number | boolean>;
+  placeholder: string;
+  examples: string[];
+  submitLabel: string;
 };
 
 export type AiFormPart = {
@@ -454,6 +519,7 @@ export type AiFormPart = {
   context: Record<string, string | number | boolean>;
   fields: AiFormField[];
   submitLabel: string;
+  draft?: AiDraftMeta;
 };
 
 export type AiMessageDoc = {

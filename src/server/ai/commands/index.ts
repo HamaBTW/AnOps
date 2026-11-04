@@ -2,6 +2,9 @@ import "server-only";
 import type { AiAccess } from "@/server/ai/access/access.service";
 import { accessCommand, helpCommand } from "@/server/ai/commands/core";
 import { INVENTORY_COMMANDS } from "@/server/ai/commands/inventory.commands";
+import { PURCHASING_COMMANDS } from "@/server/ai/commands/purchasing.commands";
+import { MANUFACTURING_COMMANDS } from "@/server/ai/commands/manufacturing.commands";
+import { FINANCE_COMMANDS } from "@/server/ai/commands/finance.commands";
 import type { CommandDefinition } from "@/server/ai/commands/types";
 import type { ToolRegistry } from "@/server/ai/tools/registry";
 
@@ -27,6 +30,8 @@ export type CommandRegistry = {
   get(name: string): CommandDefinition | undefined;
   /** Palette entries for this member. Hidden (row-action-only) commands are never listed. */
   listFor(access: AiAccess, _registry?: ToolRegistry): CommandDto[];
+  /** The command that offers AI-assisted entry for a write tool, if any. */
+  byDraftTool(toolName: string): CommandDefinition | undefined;
   /** "/products bolt" -> the definition and the text after the command; "unknown" for a slash word nobody defines. */
   parse(text: string): { def: CommandDefinition; rest: string } | "unknown" | null;
 };
@@ -46,6 +51,7 @@ export function createCommandRegistry(defs: readonly CommandDefinition[]): Comma
       [...byName.values()]
         .filter((d) => !d.hidden && isCommandAvailable(d, access))
         .map((d) => ({ command: `/${d.name}`, description: d.description, example: d.example, module: d.module })),
+    byDraftTool: (toolName) => [...byName.values()].find((d) => d.draft?.tool === toolName),
     parse(text) {
       if (!text.startsWith("/")) return null;
       const [word, ...rest] = text.split(/\s+/);
@@ -60,4 +66,4 @@ const help = helpCommand(
   (def, access) => isCommandAvailable(def, access)
 );
 
-export const commandRegistry: CommandRegistry = createCommandRegistry([help, accessCommand, ...INVENTORY_COMMANDS]);
+export const commandRegistry: CommandRegistry = createCommandRegistry([help, accessCommand, ...INVENTORY_COMMANDS, ...PURCHASING_COMMANDS, ...MANUFACTURING_COMMANDS, ...FINANCE_COMMANDS]);

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, PencilLine, Sparkles } from "lucide-react";
+import { LinesField } from "@/features/ai/components/lines-field";
 import { useThreadActions } from "@/features/ai/components/thread-actions";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { Field, FieldError, Select, Textarea } from "@/shared/components/ui/form-kit";
 import { cn } from "@/shared/lib/utils";
-import type { AiAction, AiDiffRow, AiFormPart, AiRecordCardPart, AiRecordTablePart } from "@/server/db/documents";
+import type { AiAction, AiDiffRow, AiDraftPromptPart, AiEntryChoicePart, AiFormPart, AiProvenance, AiRecordCardPart, AiRecordTablePart } from "@/server/db/documents";
 
 const inputClass =
   "min-h-[44px] w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-focus-ring)] disabled:opacity-60 aria-[invalid=true]:border-[var(--color-status-error)]";
@@ -192,13 +193,25 @@ export function DiffList({ rows }: { rows: AiDiffRow[] }) {
 
 export function GuidedForm({ part }: { part: AiFormPart }) {
   const { run, busy } = useThreadActions();
+  const draft = part.draft;
   const [values, setValues] = useState<Record<string, string | boolean>>(() => Object.fromEntries(part.fields.map((f) => [f.name, f.value ?? (f.kind === "checkbox" ? false : "")])));
+  const [prov, setProv] = useState<Record<string, AiProvenance>>(draft?.provenance ?? {});
+  const [lineProv, setLineProv] = useState<Record<string, Record<string, AiProvenance>[]>>(draft?.lineProvenance ?? {});
   const [pending, setPending] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [done, setDone] = useState<null | "submitted" | "refined">(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [change, setChange] = useState("");
 
   const missing = part.fields.some((f) => f.required && f.kind !== "checkbox" && String(values[f.name] ?? "").trim() === "");
+  const edit = (name: string, value: string | boolean) => {
+    setValues((v) => ({ ...v, [name]: value }));
+    if (draft) setProv((p) => ({ ...p, [name]: "you" }));
+  };
+
+  // A question about a field disappears once the field has a value; general questions stay.
+  const openQuestions = (draft?.questions ?? []).filter((q) => !q.field || String(values[q.field] ?? "").trim() === "");
+  const questionFor = (name: string) => openQuestions.find((q) => q.field === name)?.question;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -208,53 +221,191 @@ export function GuidedForm({ part }: { part: AiFormPart }) {
     const result = await run({ command: part.command, step: "submit", args: part.context, values: values as Record<string, string | boolean>, label: part.title });
     setPending(false);
     if (result.ok) {
-      setSubmitted(true);
+      setDone("submitted");
       return;
     }
     setError(result.error.message ?? "Something went wrong.");
     if (result.error.details) setFieldErrors(result.error.details);
   };
 
+  const refine = async () => {
+    const text = change.trim();
+    if (text.length < 3 || !draft) return;
+    setError(null);
+    setPending(true);
+    const result = await run({
+      command: part.command,
+      step: "draft",
+      args: draft.targetId ? { targetId: draft.targetId } : {},
+      values: values as Record<string, string | boolean>,
+      draft: { text, provenance: prov, lineProvenance: lineProv },
+      label: text.length > 100 ? `${text.slice(0, 97)}...` : text,
+    });
+    setPending(false);
+    if (result.ok) setDone("refined");
+    else setError(result.error.message ?? "Something went wrong.");
+  };
+
+  const control = (f: AiFormPart["fields"][number], id: string, invalid: boolean, inferred: boolean) => {
+    const common = { id, "aria-invalid": invalid || undefined, "aria-describedby": f.hint ? `${id}-hint` : undefined };
+    if (f.kind === "lines" && f.lines) {
+      return (
+        <LinesField
+          id={id}
+          field={f}
+          value={String(values[f.name] ?? "[]")}
+          provenance={lineProv[f.name]}
+          errors={fieldErrors}
+          disabled={locked}
+          onChange={(rows) => edit(f.name, JSON.stringify(rows))}
+          onCellEdit={(row, column) =>
+            setLineProv((p) => {
+              const list = [...(p[f.name] ?? [])];
+              while (list.length <= row) list.push({});
+              list[row] = { ...list[row], [column]: "you" };
+              return { ...p, [f.name]: list };
+            })
+          }
+        />
+      );
+    }
+    if (f.kind === "select")
+      return (
+        <Select {...common} value={String(values[f.name] ?? "")} onChange={(e) => edit(f.name, e.target.value)} className={cn(inferred && "border-[var(--color-status-warning)]")}>
+          {f.options?.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </Select>
+      );
+    if (f.kind === "textarea") return <Textarea {...common} rows={2} value={String(values[f.name] ?? "")} onChange={(e) => edit(f.name, e.target.value)} className={cn(inferred && "border-[var(--color-status-warning)]")} />;
+    return (
+      <input
+        {...common}
+        inputMode={f.kind === "number" ? "decimal" : undefined}
+        value={String(values[f.name] ?? "")}
+        placeholder={f.placeholder}
+        onChange={(e) => edit(f.name, e.target.value)}
+        className={cn(inputClass, inferred && "border-[var(--color-status-warning)]")}
+      />
+    );
+  };
+
+  const locked = pending || done !== null;
+
   return (
     <form onSubmit={submit} aria-label={part.title} noValidate className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4">
-      <h3 className="text-base font-semibold text-[var(--color-text-primary)]">{part.title}</h3>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h3 className="text-base font-semibold text-[var(--color-text-primary)]">{part.title}</h3>
+        {draft && <StatusBadge label="AI draft" tone="info" />}
+      </div>
       {part.description && <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">{part.description}</p>}
-      <fieldset disabled={pending || submitted} className="mt-4 grid gap-4 sm:grid-cols-2">
+
+      {draft && openQuestions.length > 0 && (
+        <div role="status" className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-status-warning-bg)] p-3 text-sm text-[var(--color-status-warning)]">
+          <p className="font-semibold">To finish this draft</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {openQuestions.map((q, i) => (
+              <li key={i}>{q.question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <fieldset disabled={locked} className="mt-4 grid gap-4 sm:grid-cols-2">
         {part.fields.map((f) => {
           const id = `${part.command}-${f.name}`;
-          const wide = f.kind === "textarea";
-          if (f.kind === "checkbox") {
+          const wide = f.kind === "textarea" || f.kind === "lines";
+          const p = prov[f.name];
+          const inferred = draft ? p === "inferred" : false;
+          const was = draft?.original?.[f.name];
+          const changedNow = was !== undefined && String(was) !== String(values[f.name]);
+          // A dropdown stores an id; show the person the name it stands for.
+          const wasText = was === undefined ? "" : f.kind === "select" ? (f.options?.find((o) => o.value === String(was))?.label ?? String(was)) : String(was);
+          const q = questionFor(f.name);
+
+          if (!draft) {
+            if (f.kind === "checkbox") {
+              return (
+                <div key={f.name} className="flex items-start gap-3 sm:col-span-2">
+                  <input id={id} type="checkbox" checked={Boolean(values[f.name])} onChange={(e) => edit(f.name, e.target.checked)} className="mt-1 size-5 accent-[var(--color-text-primary)]" />
+                  <label htmlFor={id} className="min-h-[28px] text-sm text-[var(--color-text-primary)]">
+                    {f.label}
+                    {f.hint && <span className="block text-xs text-[var(--color-text-secondary)]">{f.hint}</span>}
+                  </label>
+                </div>
+              );
+            }
             return (
-              <div key={f.name} className={cn("flex items-start gap-3 sm:col-span-2")}>
-                <input id={id} type="checkbox" checked={Boolean(values[f.name])} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.checked }))} className="mt-1 size-5 accent-[var(--color-text-primary)]" />
-                <label htmlFor={id} className="min-h-[28px] text-sm text-[var(--color-text-primary)]">
-                  {f.label}
-                  {f.hint && <span className="block text-xs text-[var(--color-text-secondary)]">{f.hint}</span>}
-                </label>
-              </div>
+              <Field key={f.name} label={f.label} htmlFor={id} required={f.required} hint={f.hint} error={fieldErrors[f.name]} className={cn(wide && "sm:col-span-2")}>
+                {control(f, id, Boolean(fieldErrors[f.name]), false)}
+              </Field>
             );
           }
+
           return (
-            <Field key={f.name} label={f.label} htmlFor={id} required={f.required} hint={f.hint} error={fieldErrors[f.name]} className={cn(wide && "sm:col-span-2")}>
-              {f.kind === "select" ? (
-                <Select id={id} value={String(values[f.name] ?? "")} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} aria-invalid={Boolean(fieldErrors[f.name])}>
-                  {f.options?.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </Select>
-              ) : f.kind === "textarea" ? (
-                <Textarea id={id} rows={2} value={String(values[f.name] ?? "")} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} aria-invalid={Boolean(fieldErrors[f.name])} />
+            <div key={f.name} className={cn("min-w-0 space-y-1.5", (wide || f.kind === "checkbox") && "sm:col-span-2")}>
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                <label htmlFor={id} className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {f.label}
+                  {f.required && <span aria-hidden="true" className="ml-0.5 text-[var(--color-status-error)]">*</span>}
+                </label>
+                {p && (
+                  <span title={PROVENANCE[p].hint}>
+                    <StatusBadge label={PROVENANCE[p].label} tone={PROVENANCE[p].tone} />
+                  </span>
+                )}
+              </div>
+              {f.kind === "checkbox" ? (
+                <div className="flex items-center gap-3">
+                  <input id={id} type="checkbox" checked={Boolean(values[f.name])} onChange={(e) => edit(f.name, e.target.checked)} className="size-5 accent-[var(--color-text-primary)]" />
+                  <span className="text-sm text-[var(--color-text-secondary)]">{values[f.name] ? "Yes" : "No"}</span>
+                </div>
               ) : (
-                <input id={id} inputMode={f.kind === "number" ? "decimal" : undefined} value={String(values[f.name] ?? "")} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} aria-invalid={Boolean(fieldErrors[f.name])} aria-describedby={f.hint ? `${id}-hint` : undefined} className={inputClass} />
+                control(f, id, Boolean(fieldErrors[f.name]), inferred)
               )}
-            </Field>
+              {changedNow && (
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  Was: <span className="line-through">{wasText || "empty"}</span>
+                </p>
+              )}
+              {inferred && <p className="text-xs text-[var(--color-status-warning)]">The AI assumed this. Check it, or change it.</p>}
+              {q && <p className="text-xs font-medium text-[var(--color-status-warning)]">{q}</p>}
+              {fieldErrors[f.name] ? <FieldError id={`${id}-error`}>{fieldErrors[f.name]}</FieldError> : f.hint ? <p id={`${id}-hint`} className="text-xs text-[var(--color-text-secondary)]">{f.hint}</p> : null}
+            </div>
           );
         })}
       </fieldset>
+
+      {draft && done === null && (
+        <div className="mt-4 space-y-1.5 border-t border-[var(--color-border-subtle)] pt-3">
+          <label htmlFor={`${part.command}-refine`} className="block text-sm font-semibold text-[var(--color-text-primary)]">Ask the AI to change something</label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              id={`${part.command}-refine`}
+              value={change}
+              disabled={locked}
+              onChange={(e) => setChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void refine();
+                }
+              }}
+              placeholder="For example: make it 15 TND, put it in the Fasteners category"
+              className={inputClass}
+            />
+            <Button onClick={() => void refine()} disabled={locked || busy || change.trim().length < 3} className="sm:shrink-0">
+              <Sparkles aria-hidden className="size-4" />
+              Update draft
+            </Button>
+          </div>
+        </div>
+      )}
+
       {error && Object.keys(fieldErrors).length === 0 && <FieldError>{error}</FieldError>}
       <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        {submitted ? (
-          <p role="status" className="text-sm text-[var(--color-text-secondary)]">Sent for your review below.</p>
+        {done ? (
+          <p role="status" className="text-sm text-[var(--color-text-secondary)]">{done === "refined" ? "Updated draft below." : "Sent for your review below."}</p>
         ) : (
           <Button type="submit" variant="primary" disabled={pending || busy || missing}>
             {pending && <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />}
@@ -265,3 +416,131 @@ export function GuidedForm({ part }: { part: AiFormPart }) {
     </form>
   );
 }
+
+// ─── AI-assisted entry ────────────────────────────────────────────────────────
+
+/** The description box shared by the choice card and the "describe it again" prompt. */
+function DescribeBox({
+  command,
+  args,
+  placeholder,
+  examples,
+  submitLabel,
+  onDone,
+}: {
+  command: string;
+  args: Record<string, string | number | boolean>;
+  placeholder: string;
+  examples: string[];
+  submitLabel: string;
+  onDone?: () => void;
+}) {
+  const { run, busy } = useThreadActions();
+  const [text, setText] = useState(typeof args.text === "string" ? args.text : "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const go = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const description = text.trim();
+    if (description.length < 3) return;
+    setError(null);
+    setPending(true);
+    const result = await run({ command, step: "draft", args: { ...args, text: description.slice(0, 600) }, draft: { text: description, provenance: {} }, label: description.length > 100 ? `${description.slice(0, 97)}...` : description });
+    setPending(false);
+    if (result.ok) onDone?.();
+    else setError(result.error.message ?? "Something went wrong.");
+  };
+
+  return (
+    <form onSubmit={go} className="space-y-3">
+      <div>
+        <label htmlFor={`describe-${command}`} className="mb-1.5 block text-sm font-semibold text-[var(--color-text-primary)]">Describe it in your own words</label>
+        <Textarea id={`describe-${command}`} rows={3} value={text} maxLength={2000} placeholder={placeholder} onChange={(e) => setText(e.target.value)} disabled={pending} />
+      </div>
+      {examples.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {examples.map((ex) => (
+            <button key={ex} type="button" onClick={() => setText(ex)} className="min-h-[44px] rounded-[var(--radius-pill)] border border-[var(--color-border-subtle)] px-3 py-1 text-left text-xs text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]">
+              Try: {ex.length > 70 ? `${ex.slice(0, 67)}...` : ex}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <FieldError>{error}</FieldError>}
+      <div className="flex justify-end">
+        <Button type="submit" variant="primary" disabled={pending || busy || text.trim().length < 3}>
+          {pending ? <Loader2 aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : <Sparkles aria-hidden className="size-4" />}
+          {pending ? "Preparing" : submitLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function EntryChoice({ part }: { part: AiEntryChoicePart }) {
+  const { run, busy } = useThreadActions();
+  const [mode, setMode] = useState<"choose" | "ai" | "manual">("choose");
+
+  const manual = async () => {
+    setMode("manual");
+    const result = await run({ command: part.command, step: "manual", args: part.args, label: part.manual.label });
+    if (!result.ok) setMode("choose");
+  };
+
+  return (
+    <section aria-label={part.title} className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4">
+      <h3 className="text-base font-semibold text-[var(--color-text-primary)]">{part.title}</h3>
+      <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">{part.description}</p>
+
+      {mode !== "ai" ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={manual}
+            disabled={busy || mode === "manual"}
+            className="flex min-h-[44px] flex-col items-start gap-1 rounded-[var(--radius-control)] border border-[var(--color-border-control)] p-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-60"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]"><PencilLine aria-hidden className="size-4" />{part.manual.label}</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">{part.manual.description}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("ai")}
+            disabled={busy}
+            className="flex min-h-[44px] flex-col items-start gap-1 rounded-[var(--radius-control)] border-2 border-[var(--color-action-primary)] bg-[var(--color-bg-subtle)] p-3 text-left transition-colors hover:bg-[var(--color-bg-surface)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-60"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]"><Sparkles aria-hidden className="size-4" />{part.ai.label}</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">{part.ai.description}</span>
+          </button>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]"><Sparkles aria-hidden className="size-4" />{part.ai.label}</p>
+            <button type="button" onClick={() => setMode("choose")} className="min-h-[44px] px-2 text-xs font-semibold text-[var(--color-text-secondary)] underline underline-offset-2 hover:text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]">
+              Back
+            </button>
+          </div>
+          <DescribeBox command={part.command} args={part.args} placeholder={part.placeholder} examples={part.examples} submitLabel="Prepare draft" onDone={() => setMode("choose")} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function DraftPrompt({ part }: { part: AiDraftPromptPart }) {
+  return (
+    <section aria-label={part.title} className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4">
+      <h3 className="mb-3 text-base font-semibold text-[var(--color-text-primary)]">{part.title}</h3>
+      <DescribeBox command={part.command} args={part.args} placeholder={part.placeholder} examples={part.examples} submitLabel={part.submitLabel} />
+    </section>
+  );
+}
+
+const PROVENANCE: Record<AiProvenance, { label: string; tone: "info" | "success" | "warning" | "neutral"; hint: string }> = {
+  you: { label: "You said", tone: "info", hint: "Taken from your description or edited by you" },
+  found: { label: "Found in your data", tone: "success", hint: "Matched to an existing record, or unchanged from the record" },
+  inferred: { label: "AI guess", tone: "warning", hint: "The AI assumed this. Check it." },
+  default: { label: "Default", tone: "neutral", hint: "The form's usual starting value" },
+};

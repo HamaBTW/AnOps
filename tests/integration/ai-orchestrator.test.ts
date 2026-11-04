@@ -258,3 +258,45 @@ describe("conversation and tool loop", () => {
 });
 
 void ObjectId;
+
+describe("a reply can never claim a change that was not proposed", () => {
+  it("'Payment recorded' with no proposal is asked about once, then replaced; nothing is stored", async () => {
+    const m = await member();
+    const { complete, calls } = scripted(final("Done! The payment was recorded."), final("Payment recorded successfully."));
+    const events = await drain(runTurn(wsOf(h, m), { text: "Atlas Foods paid 135.66 TND by bank transfer" }, { registry, complete }));
+    expect(textOf(events)).toContain("I have not made that change");
+    expect(textOf(events)).not.toContain("recorded successfully");
+    expect(calls).toHaveBeenCalledTimes(2); // one nudge, then the safe reply
+    expect(JSON.stringify(calls.mock.calls[1][0].messages)).toContain("Never say a change was made");
+    expect(await h.db.collection(COLLECTIONS.aiPendingActions).countDocuments({ userId: m.userId })).toBe(0);
+  });
+
+  it("after the nudge the model can still make a real proposal, and a clarifying question is allowed straight away", async () => {
+    const m = await member();
+    effects.length = 0;
+    const ok = scripted(final("Added it."), tool("add_item", { name: "Washer" }), final("I prepared that for your confirmation."));
+    const events = await drain(runTurn(wsOf(h, m), { text: "add a washer to the list" }, { registry, complete: ok.complete }));
+    expect(events.some((e) => e.type === "part" && e.part.type !== "text")).toBe(true);
+    expect(effects).toEqual([]); // proposed, never executed in the turn
+    expect(textOf(events)).toContain("Review it and confirm");
+    const asks = scripted(final("What is the amount and the payment method?"));
+    const q = await drain(runTurn(wsOf(h, m), { text: "record a payment from Atlas" }, { registry, complete: asks.complete }));
+    expect(textOf(q)).toBe("What is the amount and the payment method?");
+    expect(asks.calls).toHaveBeenCalledTimes(1);
+  });
+
+  it("an honest refusal is left alone", async () => {
+    const m = await member();
+    const refuse = scripted(final("I cannot record payments for you."));
+    expect(textOf(await drain(runTurn(wsOf(h, m), { text: "record a payment" }, { registry, complete: refuse.complete })))).toBe("I cannot record payments for you.");
+    expect(refuse.calls).toHaveBeenCalledTimes(1);
+  });
+
+  it("plain questions and reads are untouched", async () => {
+    const m = await member();
+    const read = scripted(tool("list_items"), final("You have a Bolt."));
+    expect(textOf(await drain(runTurn(wsOf(h, m), { text: "what items were created recently" }, { registry, complete: read.complete })))).toBe("You have a Bolt.");
+    const chat = scripted(final("Hello! How can I help?"));
+    expect(textOf(await drain(runTurn(wsOf(h, m), { text: "hello there" }, { registry, complete: chat.complete })))).toContain("Hello");
+  });
+});

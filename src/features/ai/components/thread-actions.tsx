@@ -5,9 +5,11 @@ import type { ErrorLike } from "@/shared/lib/action-error-copy";
 
 export type ThreadRequest = {
   command: string;
-  step: "start" | "select" | "submit";
+  step: "start" | "manual" | "select" | "submit" | "draft";
   args?: Record<string, string | number | boolean>;
   values?: Record<string, string | number | boolean>;
+  /** AI-assisted steps: the description, and where each current value came from when refining. */
+  draft?: { text: string; provenance: Record<string, "you" | "found" | "inferred" | "default">; lineProvenance?: Record<string, Record<string, "you" | "found" | "inferred" | "default">[]> };
   /** Shown as the person's own message in the thread. */
   label: string;
 };

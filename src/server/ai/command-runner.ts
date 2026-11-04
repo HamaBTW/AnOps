@@ -6,6 +6,7 @@ import { commandRegistry, isCommandAvailable, type CommandRegistry } from "@/ser
 import type { CommandArgs, CommandDefinition, CommandEnv, CommandResult } from "@/server/ai/commands/types";
 import { appendMessages, getConversation, newMessage } from "@/server/ai/conversation.service";
 import { aiToolRegistry } from "@/server/ai/tools";
+import { runDraft, type CompleteFn } from "@/server/ai/draft/draft-engine";
 import type { ToolRegistry } from "@/server/ai/tools/registry";
 import { consumeRateLimit } from "@/server/security/rate-limit";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
@@ -14,15 +15,24 @@ import { toFieldErrors } from "@/shared/lib/validation";
 
 const COMMAND_RATE = { limit: 90, windowMs: 60_000 };
 
-export type CommandStep = "start" | "select" | "submit";
+export type CommandStep = "start" | "manual" | "select" | "submit" | "draft";
 
 export const commandRequestSchema = z
   .object({
     command: z.string().regex(/^[a-z]{2,24}$/),
-    step: z.enum(["start", "select", "submit"]),
-    args: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()])).default({}),
+    step: z.enum(["start", "manual", "select", "submit", "draft"]),
+    args: z.record(z.string().max(40), z.union([z.string().max(600), z.number(), z.boolean()])).default({}),
     values: z.record(z.string().max(40), z.union([z.string().max(2000), z.number(), z.boolean()])).default({}),
     conversationId: z.string().regex(/^[a-f0-9]{24}$/i).optional(),
+    /** AI-assisted steps: the description and, when refining, where each current value came from. */
+    draft: z
+      .object({
+        text: z.string().max(2000),
+        provenance: z.record(z.string().max(40), z.enum(["you", "found", "inferred", "default"])).default({}),
+        lineProvenance: z.record(z.string().max(40), z.array(z.record(z.string().max(40), z.enum(["you", "found", "inferred", "default"]))).max(100)).optional(),
+      })
+      .strict()
+      .optional(),
     /** What the person did, shown in their own history ("Selected Steel bolt"). */
     label: z.string().max(120).optional(),
   })
@@ -30,7 +40,7 @@ export const commandRequestSchema = z
 
 export type CommandRequest = z.infer<typeof commandRequestSchema>;
 
-export type CommandDeps = { commands?: CommandRegistry; registry?: ToolRegistry };
+export type CommandDeps = { commands?: CommandRegistry; registry?: ToolRegistry; complete?: CompleteFn };
 
 function liveEnv(ctx: WorkspaceContext, access: AiAccess, registry: ToolRegistry, conversationId: ObjectId | null): CommandEnv {
   return { ctx: { ...ctx, role: access.member!.role, permissions: access.member!.permissions }, access, registry, conversationId };
@@ -51,7 +61,14 @@ function checkArgs(def: CommandDefinition, raw: unknown): CommandArgs {
 export async function executeCommand(
   ctx: WorkspaceContext,
   access: AiAccess,
-  request: { name: string; step: CommandStep; args: unknown; values?: Record<string, string | number | boolean>; conversationId: ObjectId | null },
+  request: {
+    name: string;
+    step: CommandStep;
+    args: unknown;
+    values?: Record<string, string | number | boolean>;
+    draft?: { text: string; provenance: Record<string, "you" | "found" | "inferred" | "default">; lineProvenance?: Record<string, Record<string, "you" | "found" | "inferred" | "default">[]> };
+    conversationId: ObjectId | null;
+  },
   deps: CommandDeps = {}
 ): Promise<CommandResult> {
   const commands = deps.commands ?? commandRegistry;
@@ -60,6 +77,16 @@ export async function executeCommand(
   const env = liveEnv(ctx, access, deps.registry ?? aiToolRegistry, request.conversationId);
   const args = checkArgs(def, request.args);
 
+  if (request.step === "manual") {
+    if (!def.manual) throw new AppError("NOT_FOUND", "That step does not exist.");
+    return def.manual(env, args);
+  }
+  if (request.step === "draft" || (request.step === "start" && def.draft?.kind === "create" && String(args.text ?? "").trim().length >= 8)) {
+    if (!def.draft) throw new AppError("NOT_FOUND", "That step does not exist.");
+    // Drafting reads real records (options, the record being changed), so it needs the same view access as the manual form.
+    if (def.module !== "core" && !access.can(def.module, "view")) throw new AppError("FORBIDDEN", "You also need view access in this module to use AI-assisted entry.");
+    return runDraft(env, def, args, { text: request.draft?.text ?? String(args.text ?? ""), values: request.values ?? {}, provenance: request.draft?.provenance ?? {}, lineProvenance: request.draft?.lineProvenance }, { complete: deps.complete });
+  }
   if (request.step === "start") return def.start(env, args);
   if (request.step === "select") {
     if (!def.select) throw new AppError("NOT_FOUND", "That step does not exist.");
@@ -82,7 +109,7 @@ export async function runCommandStep(ctx: WorkspaceContext, rawRequest: unknown,
   // The conversation must be the caller's own; getConversation is scoped to company and user.
   const conversationId = request.conversationId ? new ObjectId((await getConversation(ctx, request.conversationId)).id) : null;
 
-  const result = await executeCommand(ctx, access, { name: request.command, step: request.step, args: request.args, values: request.values, conversationId }, deps);
+  const result = await executeCommand(ctx, access, { name: request.command, step: request.step, args: request.args, values: request.values, draft: request.draft, conversationId }, deps);
 
   if (conversationId) {
     const parts = [...(result.text ? [{ type: "text" as const, text: result.text }] : []), ...result.parts];

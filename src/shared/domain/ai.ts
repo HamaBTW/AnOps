@@ -82,4 +82,4 @@ export const AI_PRESETS: Record<AiPresetKey, { label: string; description: strin
 };
 
 /** Modules that already have AI tools. Grants for the others can be saved but nothing is exposed yet. */
-export const AI_MODULES_WITH_TOOLS: readonly AiModuleKey[] = ["inventory"];
+export const AI_MODULES_WITH_TOOLS: readonly AiModuleKey[] = ["inventory", "purchasing", "manufacturing", "finance"];

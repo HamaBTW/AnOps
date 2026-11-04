@@ -115,7 +115,9 @@ describe("reading", () => {
 describe("guided edit", () => {
   it("pick, edit, review the diff, confirm; the module's version rule protects against stale forms", async () => {
     const manager = await newManager();
-    const picker = kind(await partsOf(manager, { command: "editproduct", step: "start", args: { q: "bolt" } }), "record_table");
+    // Starting the command now offers the choice; the manual path is unchanged behind the "manual" step.
+    expect(kind(await partsOf(manager, { command: "editproduct", step: "start", args: { q: "bolt" } }), "entry_choice")).toMatchObject({ command: "editproduct" });
+    const picker = kind(await partsOf(manager, { command: "editproduct", step: "manual", args: { q: "bolt" } }), "record_table");
     expect(picker.rows[0].actions).toEqual([{ label: "Select", command: "editproduct", args: { productId: A.bolt }, step: "select" }]);
 
     const formPart = kind(await partsOf(manager, { command: "editproduct", step: "select", args: { productId: A.bolt } }), "form");
@@ -152,7 +154,8 @@ describe("guided edit", () => {
 describe("guided create", () => {
   it("/newproduct builds a form with the company's categories, then a confirmation", async () => {
     const manager = await newManager();
-    const formPart = kind(await partsOf(manager, { command: "newproduct", step: "start", args: {} }), "form");
+    expect(kind(await partsOf(manager, { command: "newproduct", step: "start", args: {} }), "entry_choice")).toMatchObject({ command: "newproduct" });
+    const formPart = kind(await partsOf(manager, { command: "newproduct", step: "manual", args: {} }), "form");
     expect(formPart.fields.map((f) => f.name)).toEqual(expect.arrayContaining(["sku", "name", "unitOfMeasure", "categoryId", "cost", "salePrice", "reorderPoint", "isStorable"]));
     const review = kind(await partsOf(manager, { command: "newproduct", step: "submit", args: {}, values: { sku: "gasket-1", name: "Gasket", unitOfMeasure: "unit", categoryId: "", cost: "1.5", salePrice: "2", reorderPoint: "10", isStorable: true, description: "" } }), "confirmation");
     expect(review.summary).toBe('Create product "Gasket" (GASKET-1).');
@@ -274,7 +277,7 @@ describe("chat: slash commands and natural language", () => {
     expect(text).not.toContain("/adjust");
   });
 
-  it("natural language: the model finds a product by search, the data fed back carries ids, and an edit is only proposed", async () => {
+  it("natural language: the model finds a product by search, then the edit lands in an editable draft; nothing is saved", async () => {
     const manager = await newManager();
     const { complete, calls } = scripted(
       JSON.stringify({ type: "tool", tool: "inventory_list_products", args: { q: "bolt" } }),
@@ -284,8 +287,10 @@ describe("chat: slash commands and natural language", () => {
     const events = await drain(runTurn(wsOf(h, manager), { text: "set the bolt price to 9" }, { complete }));
     const secondPrompt = calls.mock.calls[1][0].messages.map((m: { content: string }) => m.content).join("\n");
     expect(secondPrompt).toContain(A.bolt);
-    const card = partsFrom(events).find((p) => p.type === "confirmation");
-    expect(card && card.type === "confirmation" && card.details).toEqual([{ label: "Sale price", before: `${before} TND`, after: "9 TND" }]);
+    const draft = partsFrom(events).find((p) => p.type === "form");
+    expect(draft && draft.type === "form" && draft.draft).toMatchObject({ targetId: A.bolt, changed: ["salePrice"] });
+    expect(draft && draft.type === "form" && draft.draft?.provenance.salePrice).toBe("you"); // "9" is in the person's own words
+    expect(partsFrom(events).some((p) => p.type === "confirmation")).toBe(false);
     expect((await getProduct(wsOf(h, T.A.owner), A.bolt)).salePrice).toBe(before);
   });
 

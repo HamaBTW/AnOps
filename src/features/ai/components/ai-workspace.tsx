@@ -30,6 +30,10 @@ const SUGGESTIONS = [
   { command: "/products", label: "Browse products" },
   { command: "/stock", label: "Check stock levels" },
   { command: "/newproduct", label: "Add a product" },
+  { command: "/neworder", label: "Create a purchase order" },
+  { command: "/materials", label: "Check materials for production" },
+  { command: "/newinvoice", label: "Create an invoice" },
+  { command: "/unpaid", label: "See unpaid invoices" },
   { command: "/receive", label: "Receive stock" },
   { command: "/access", label: "What can you do for me?" },
   { command: "/help", label: "Show available commands" },
@@ -280,7 +284,7 @@ export function AiWorkspace({ initial }: { initial: AiWorkspaceState }) {
               <div className="my-auto">
                 <h3 className="text-2xl text-[var(--color-text-primary)]">What do you want to get done?</h3>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  Ask in English or French, or type / for commands. Inventory is connected: products, categories, warehouses and stock. Purchasing, Manufacturing, Finance, Marketing and HR are being connected one at a time.
+                  Ask in English or French, or type / for commands. Inventory, Purchasing, Manufacturing and Finance are connected: stock, orders, receipts, work orders, customers, invoices, payments and expenses. Marketing and HR are being connected one at a time.
                 </p>
                 <ul className="mt-5 grid gap-2 sm:grid-cols-2">
                   {SUGGESTIONS.filter((s) => initial.commands.some((c) => c.command === s.command)).slice(0, 4).map((s) => (

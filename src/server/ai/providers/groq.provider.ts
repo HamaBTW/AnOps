@@ -101,7 +101,9 @@ export class GroqProvider implements AiProvider {
           }
         }
 
-        // Non-retryable. Never forward the provider's message: it can echo request content.
+        // Non-retryable. Never forward the provider's message: it can echo request content. Only its short
+        // machine code (for example "json_validate_failed") is logged, so a rejection can be diagnosed.
+        console.warn(`[Groq] request rejected (HTTP ${status ?? "unknown"}${rejectionCode(err)})`);
         throw new AiProviderError(this.name, `API error (HTTP ${status ?? "unknown"})`, false);
       }
 
@@ -112,6 +114,11 @@ export class GroqProvider implements AiProvider {
   }
 }
 
+function rejectionCode(err: unknown): string {
+  const code = (err as { error?: { error?: { code?: unknown } } })?.error?.error?.code;
+  return typeof code === "string" && /^[a-z0-9_]{3,40}$/i.test(code) ? `, ${code}` : "";
+}
+
 function buildRequest(model: string, options: AiCompletionOptions) {
   return {
     model,
@@ -119,6 +126,10 @@ function buildRequest(model: string, options: AiCompletionOptions) {
     max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: options.temperature ?? DEFAULT_TEMPERATURE,
     ...(options.jsonObject ? { response_format: { type: "json_object" as const } } : {}),
+    // gpt-oss models think before answering and the thinking counts against max_completion_tokens. At the default
+    // effort a short budget can be spent entirely on thinking, which returns an empty reply that fails JSON mode.
+    // Extraction and routing do not need deep reasoning.
+    ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" as const } : {}),
   };
 }
 

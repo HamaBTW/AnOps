@@ -47,6 +47,9 @@ export const PERMISSIONS = {
   MARKETING_SOCIAL_MANAGE: "marketing.social.manage",
   MARKETING_SOCIAL_PUBLISH: "marketing.social.publish",
   MARKETING_AI_GENERATE: "marketing.ai.generate",
+  /** Owner/admin only. Using AI needs no role permission: the company grant plus each cell's own module permission is the gate. */
+  AI_ACCESS_MANAGE: "ai.access.manage",
+  AI_USAGE_VIEW: "ai.usage.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

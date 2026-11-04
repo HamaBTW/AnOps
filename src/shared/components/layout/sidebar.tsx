@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Sparkles } from "lucide-react";
 import {
   IconGrid,
   IconUsers,
@@ -28,6 +28,7 @@ import { logoutAction } from "@/features/auth/actions/auth.action";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: IconGrid },
+  { name: "AnOps AI", href: "/ai", icon: Sparkles },
   { name: "Company", href: "/company", icon: IconBuilding },
   { name: "HR & Payroll", href: "/hr", icon: IconProfileCard },
   { name: "CRM", href: "/crm", icon: IconUsers },

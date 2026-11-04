@@ -92,6 +92,28 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, orderNumber: 1 }, name: "wo_number_unique", unique: true },
     { key: { companyId: 1, status: 1, createdAt: -1 }, name: "wo_status_time" },
   ],
+  [COLLECTIONS.aiSettings]: [{ key: { companyId: 1 }, name: "ai_settings_company_unique", unique: true }],
+  [COLLECTIONS.aiAccessGrants]: [
+    { key: { companyId: 1, userId: 1 }, name: "ai_grant_member_unique", unique: true },
+    { key: { companyId: 1, enabled: 1 }, name: "ai_grant_enabled" },
+  ],
+  [COLLECTIONS.aiConversations]: [
+    { key: { companyId: 1, userId: 1, updatedAt: -1 }, name: "ai_conversation_owner_time" },
+    // Retention: documents leave when expiresAt passes. The service sets expiresAt on every write.
+    { key: { expiresAt: 1 }, name: "ai_conversation_ttl", expireAfterSeconds: 0 },
+  ],
+  [COLLECTIONS.aiPendingActions]: [
+    { key: { companyId: 1, userId: 1, status: 1, createdAt: -1 }, name: "ai_pending_owner_status" },
+    // Outcome rows stay a day past expiry so a late confirm gets a precise answer, then they are removed.
+    { key: { expiresAt: 1 }, name: "ai_pending_ttl", expireAfterSeconds: 86_400 },
+  ],
+  [COLLECTIONS.aiUsage]: [
+    { key: { companyId: 1, day: 1, userId: 1 }, name: "ai_usage_day_member_unique", unique: true },
+  ],
+  [COLLECTIONS.aiNotices]: [
+    { key: { companyId: 1, userId: 1, createdAt: -1 }, name: "ai_notice_owner_time" },
+    { key: { expiresAt: 1 }, name: "ai_notice_ttl", expireAfterSeconds: 0 },
+  ],
   ...MARKETING_INDEXES,
 };
 

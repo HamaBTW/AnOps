@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/shared/lib/utils";
 
-export type ModuleTab = { label: string; href: string };
+export type ModuleTab = { label: string; href: string; /** Match only this exact path, for a root tab whose siblings live below it. */ exact?: boolean };
 
 /** Section navigation inside a module. Active state follows the current path, including nested routes. */
 export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
@@ -13,7 +13,7 @@ export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
     <nav aria-label="Module sections" className="-mx-1 overflow-x-auto">
       <ul className="flex min-w-max gap-1 border-b border-[var(--color-border-subtle)] px-1">
         {tabs.map((tab) => {
-          const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+          const active = pathname === tab.href || (!tab.exact && pathname.startsWith(`${tab.href}/`));
           return (
             <li key={tab.href}>
               <Link

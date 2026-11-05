@@ -39,9 +39,11 @@ async function getNextInvoiceNumber(db: any, companyId: ObjectId) {
 export class FinanceService {
   private companyId: ObjectId;
   private permissions: ReadonlySet<import("@/server/security/permissions").Permission>;
+  private companyRole: CompanyRole;
 
   constructor(ctx: FinanceServiceContext) {
     this.companyId = requireCompanyId(ctx.companyId);
+    this.companyRole = ctx.companyRole;
     const workspaceRole = workspaceRoleFor(ctx.companyRole);
     this.permissions = permissionsForRole(workspaceRole);
   }
@@ -57,11 +59,13 @@ export class FinanceService {
   async getDashboard() {
     this.ensurePermission("finance.read");
     const db = await getDb();
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // The company calendar day (Africa/Tunis), the same one the AI tools use for "overdue".
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Tunis", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
     const [invoiceAgg, expenseAgg, overdueAgg, overdueList, monthlyPayments, monthlyExpenses] = await Promise.all([
       db.collection("finance_invoices").aggregate([
-        { $match: { companyId: this.companyId, status: { $ne: "void" } } },
+        // Only invoices that are official and not cancelled count: drafts are not yet receivable, voided ones never were.
+        { $match: { companyId: this.companyId, status: { $in: ["posted", "partially_paid", "paid"] } } },
         {
           $group: {
             _id: null,
@@ -85,7 +89,7 @@ export class FinanceService {
         {
           $match: {
             companyId: this.companyId,
-            status: { $nin: ["paid", "void", "draft"] },
+            status: { $in: ["posted", "partially_paid"] },
             dueDate: { $lt: todayStr },
           },
         },
@@ -101,7 +105,7 @@ export class FinanceService {
         {
           $match: {
             companyId: this.companyId,
-            status: { $nin: ["paid", "void", "draft"] },
+            status: { $in: ["posted", "partially_paid"] },
             dueDate: { $lt: todayStr },
           },
         },
@@ -127,6 +131,8 @@ export class FinanceService {
     ]);
 
     const inv = (invoiceAgg[0] as any) || { totalInvoiced: 0, totalPaid: 0, outstanding: 0 };
+    // Sums of two-decimal floats can carry residue; report whole cents.
+    for (const k of ["totalInvoiced", "totalPaid", "outstanding"]) inv[k] = fromCents(toCents(inv[k] || 0));
     const expensesCount: Record<string, number> = {};
     const expensesAmount: Record<string, number> = {};
     for (const e of expenseAgg) {
@@ -135,6 +141,7 @@ export class FinanceService {
     }
 
     const overdueData = (overdueAgg[0] as any) || { count: 0, totalOverdue: 0 };
+    overdueData.totalOverdue = fromCents(toCents(overdueData.totalOverdue || 0));
 
     // Format last 6 months timeline
     const now = new Date();
@@ -724,6 +731,8 @@ export class FinanceService {
       total: d.total || 0,
       currency: d.currency || "TND",
       status: d.status,
+      createdBy: d.createdBy as string | undefined,
+      submittedBy: d.submittedBy as string | undefined,
       receiptDocumentId: d.receiptDocumentId?.toString(),
       notes: d.notes,
       rejectionReason: d.rejectionReason,
@@ -793,16 +802,33 @@ export class FinanceService {
     return { success: true };
   }
 
+  /**
+   * Separation of duties: nobody approves an expense they created or submitted. The company owner is the one
+   * exception, so a company with a single owner is never locked out of approving its own spending.
+   */
+  isSelfApproval(expense: { createdBy?: string; submittedBy?: string }, userId: string): boolean {
+    return this.companyRole !== "owner" && (expense.createdBy === userId || expense.submittedBy === userId);
+  }
+
   async approveExpense(expenseId: string, userId: string) {
     this.ensurePermission("finance.expense.approve");
     if (!ObjectId.isValid(expenseId)) throw new AppError("VALIDATION_ERROR", "Invalid expense");
     const db = await getDb();
     const now = new Date();
-    const res = await db.collection("finance_expenses").updateOne(
-      { _id: new ObjectId(expenseId), companyId: this.companyId, status: "submitted" },
-      { $set: { status: "approved", approvedAt: now, approvedBy: userId, updatedAt: now, updatedBy: userId } }
-    );
-    if (res.matchedCount === 0) throw new AppError("INVALID_TRANSITION", "Expense cannot be approved");
+    const filter: Record<string, unknown> = { _id: new ObjectId(expenseId), companyId: this.companyId, status: "submitted" };
+    // Enforced in the same atomic update that changes the status.
+    if (this.companyRole !== "owner") {
+      filter.createdBy = { $ne: userId };
+      filter.submittedBy = { $ne: userId };
+    }
+    const res = await db.collection("finance_expenses").updateOne(filter, {
+      $set: { status: "approved", approvedAt: now, approvedBy: userId, updatedAt: now, updatedBy: userId },
+    });
+    if (res.matchedCount === 0) {
+      const e = await db.collection("finance_expenses").findOne({ _id: new ObjectId(expenseId), companyId: this.companyId, status: "submitted" });
+      if (e && this.isSelfApproval(e as { createdBy?: string; submittedBy?: string }, userId)) throw new AppError("FORBIDDEN", "You cannot approve an expense you created or submitted. Ask another approver.");
+      throw new AppError("INVALID_TRANSITION", "Expense cannot be approved");
+    }
     return { success: true };
   }
 
@@ -885,6 +911,7 @@ export class FinanceService {
 
     // Money is compared in whole cents: summing floats leaves residue (0.3 - 0.1 is not 0.2) that
     // would reject a legitimate allocation or leave a fraction of a cent on a balance.
+    if (new Set(allocations.map((a) => a.invoiceId)).size !== allocations.length) throw new AppError("VALIDATION_ERROR", "Each invoice can appear only once");
     let totalAllocCents = 0;
     for (const a of allocations) {
       if (!ObjectId.isValid(a.invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
@@ -898,6 +925,9 @@ export class FinanceService {
     for (const a of allocations) {
       const inv = await db.collection("finance_invoices").findOne({ _id: new ObjectId(a.invoiceId), companyId: this.companyId });
       if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
+      // Only posted invoices are collectable, and money is never converted between currencies.
+      if (inv.status !== "posted" && inv.status !== "partially_paid") throw new AppError("INVALID_TRANSITION", "Payments can only be applied to posted invoices");
+      if ((inv.currency || "TND") !== (payment.currency || "TND")) throw new AppError("VALIDATION_ERROR", "Payment and invoice currencies differ");
       if (toCents(inv.balance || 0) < toCents(Number(a.amount) || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds invoice balance");
     }
 

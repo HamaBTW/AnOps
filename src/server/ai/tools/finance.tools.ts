@@ -326,11 +326,11 @@ export const summaryTool = defineTool({
     const svc = fin(ctx);
     const d = await svc.getDashboard();
     const invoices = await svc.listInvoices();
-    const voided = invoices.filter((i) => i.status === "voided" && toCents(i.total) > 0);
-    const drafts = invoices.filter((i) => i.status === "draft" && toCents(i.total) > 0);
     const notes: string[] = [];
-    if (voided.length) notes.push(`${voided.length} voided invoice${voided.length === 1 ? " is" : "s are"} still counted in Invoiced and Outstanding, as the Finance dashboard does today.`);
-    if (drafts.length) notes.push(`${drafts.length} draft invoice${drafts.length === 1 ? " is" : "s are"} counted in Invoiced and Outstanding before being posted.`);
+    // The dashboard adds amounts without converting; say so when more than one currency is in play.
+    const counted = invoices.filter((i) => ["posted", "partially_paid", "paid"].includes(i.status));
+    const currencies = [...new Set(counted.map((i) => i.currency))];
+    if (currencies.length > 1) notes.push(`Invoices in ${currencies.join(", ")} are added together without conversion, so read these totals with care.`);
     return {
       summary: "Finance summary",
       parts: [summaryCard(d, notes)],
@@ -795,6 +795,7 @@ function expenseTool(opts: {
     async prepare(ctx, args: { expenseId: string; reason?: string }) {
       const e = await findExpense(ctx, args.expenseId);
       if (e.status !== opts.from) throw new AppError("INVALID_TRANSITION", `This expense is ${e.status}. Only ${opts.from} expenses can be ${opts.verb}.`);
+      if (opts.name === "finance_approve_expense" && fin(ctx).isSelfApproval(e, uid(ctx))) throw new AppError("FORBIDDEN", "You cannot approve an expense you created or submitted. Ask another approver.");
       const reason = opts.extra ? parse(expenseRejectSchema, { expenseId: args.expenseId, reason: args.reason }).reason : "";
       const label = `${e.vendor || e.description} (${moneyOf(e.total, e.currency)})`;
       const typed = opts.risk === "financial" || opts.risk === "destructive" ? money(toCents(e.total), e.currency) : undefined;

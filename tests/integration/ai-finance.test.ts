@@ -30,6 +30,7 @@ const grant = (modules: AiModules) => ({ enabled: true, modules, canAuditTranscr
 const svcOf = (companyId: ObjectId, userId: ObjectId) => new FinanceService({ companyId: companyId.toHexString(), companyRole: "owner", userId: userId.toHexString() });
 const svc = () => svcOf(T.companyA, T.A.owner.userId);
 const uid = () => T.A.owner.userId.toHexString();
+const as2 = (role: "owner" | "admin", userId: ObjectId) => new FinanceService({ companyId: T.companyA.toHexString(), companyRole: role, userId: userId.toHexString() });
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Tunis" }).format(new Date());
 
 const line = (description: string, quantity: number, unitPrice: number, taxRate = 0) => ({ description, quantity, unitPrice, taxRate });
@@ -141,15 +142,17 @@ describe("reads", () => {
     expect((r.data as { openBalance: string[] }).openBalance.sort()).toEqual(["0.30 EUR", "5.00 USD"]);
   });
 
-  it("the summary repeats the dashboard exactly and warns about figures the dashboard counts oddly", async () => {
+  it("the summary repeats the dashboard exactly, and drafts and voided invoices are in neither", async () => {
     const voided = await draftInvoice(A.ben, [line("Void me", 1, 70)]);
     await svc().voidInvoice(voided, "mistake", uid());
+    await draftInvoice(A.ben, [line("Still a draft", 1, 33)]);
     const dash = await svc().getDashboard();
     const r = await f.read(viewer, "finance_get_summary", {});
-    const d = r.data as { invoiced: string; outstanding: string; caveats: string[] };
-    expect(d.invoiced).toBe(dash.totalInvoiced.toFixed(2));
-    expect(d.outstanding).toBe(dash.outstanding.toFixed(2));
-    expect(d.caveats.join(" ")).toMatch(/voided invoice/);
+    const d = r.data as { invoiced: string; collected: string; outstanding: string; overdue: string; caveats: string[] };
+    expect(d).toMatchObject({ invoiced: dash.totalInvoiced.toFixed(2), collected: dash.totalPaid.toFixed(2), outstanding: dash.outstanding.toFixed(2), overdue: dash.overdue.toFixed(2) });
+    const sum = (await svc().listInvoices()).filter((i) => ["posted", "partially_paid", "paid"].includes(i.status)).reduce((n, i) => n + Math.round(i.total * 100), 0);
+    expect(Math.round(dash.totalInvoiced * 100)).toBe(sum); // the same definition, computed independently
+    expect(d.caveats.join(" ")).not.toMatch(/voided|draft/);
   });
 
   it("a viewer's cards offer no write actions; the admin's offer the next step", async () => {
@@ -398,6 +401,13 @@ describe("expenses", () => {
     await f.confirm(boss, approve.id, "19.70 TND");
     expect((await svc().listExpenses("approved")).map((x) => x.id)).toContain(e.id);
     expect(await code(f.propose(boss, "finance_reject_expense", { expenseId: e.id, reason: "too late" }))).toBe("INVALID_TRANSITION");
+  });
+
+  it("an approver cannot approve their own expense through AI either, and the card says why", async () => {
+    const id = await as2("admin", boss.userId).createExpense({ expenseDate: "2026-11-02", description: "Boss expense", amount: 15, tax: 0, currency: "TND" }, boss.userId.toHexString());
+    await as2("admin", boss.userId).submitExpense(id, boss.userId.toHexString());
+    expect(await code(f.propose(boss, "finance_approve_expense", { expenseId: id }))).toBe("FORBIDDEN");
+    expect(await code(f.propose(T.A.owner, "finance_approve_expense", { expenseId: id }))).toBe("OK");
   });
 
   it("reject needs a reason and the total typed; a rejected expense cannot be approved", async () => {

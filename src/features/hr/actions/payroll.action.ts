@@ -23,8 +23,8 @@ export async function generatePayslipsAction(rawData: unknown): Promise<ActionRe
       return { error: firstIssue };
     }
 
-    const { period, employeeIds, workingDaysInMonth } = parsed.data;
-    const records = await generatePayslips(period, employeeIds, workingDaysInMonth, admin.companyId);
+    const { period, employeeIds, workingDaysInMonth, correctPaid } = parsed.data;
+    const records = await generatePayslips(period, employeeIds, workingDaysInMonth, admin.companyId, { allowPaidCorrection: correctPaid === true });
     revalidatePath("/hr");
     return { success: true, data: records };
   } catch (err: unknown) {

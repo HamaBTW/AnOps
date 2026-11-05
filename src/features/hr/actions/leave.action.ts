@@ -203,7 +203,7 @@ export async function cancelLeaveRequestAction(
   try {
     const authUser = await requireAuthUser();
     const actorName = authUser.employee?.fullName || authUser.email;
-    const cancelled = await cancelLeaveRequest(requestId, reason, actorName, authUser.companyId);
+    const cancelled = await cancelLeaveRequest(requestId, reason, actorName, authUser.companyId, { isAdmin: authUser.isAdmin, employeeId: authUser.employee?.id ?? null });
     revalidatePath("/hr");
     return { success: true, data: cancelled };
   } catch (err: unknown) {

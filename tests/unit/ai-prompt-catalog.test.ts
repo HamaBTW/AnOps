@@ -17,8 +17,13 @@ describe("the tool list given to the model", () => {
 
   it("stays within a budget the smallest provider limit can take, so adding a module cannot silently break chat", () => {
     const text = toolCatalog(aiToolRegistry.all());
-    expect(Math.ceil(text.length / 4)).toBeLessThan(5200); // about 4.1k tokens today; raw JSON Schema was 9.4k and returned HTTP 413
     for (const tool of aiToolRegistry.all()) expect(text, tool.name).toContain(`- ${tool.name} [${tool.kind}]`);
+    // The full list is no longer sent (it passed 5k tokens with five modules; raw JSON Schema returned HTTP 413). What a request
+    // sends is core plus the modules it mentions, and that has to stay small whichever module it is.
+    for (const probe of ["invoice", "stock", "purchase order", "bill of materials", "employee leave"]) {
+      const scoped = toolCatalog(scopeTools([...aiToolRegistry.all()], [probe]));
+      expect(Math.ceil(scoped.length / 4), probe).toBeLessThan(3200);
+    }
   });
 
   it("never shows schema noise or identity fields", () => {

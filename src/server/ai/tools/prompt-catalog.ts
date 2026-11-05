@@ -60,6 +60,7 @@ const MODULE_WORDS: Record<string, RegExp> = {
   inventory: /\b(stock|inventor|products?|produits?|warehouses?|entrep[oô]ts?|sku|categor|movements?|mouvements?|transfer|adjust|reorder|on hand)/i,
   purchasing: /\b(suppl|fournisseur|purchas|achat|orders?|commandes?|po\b|receipts?|re[cç]us?|r[eé]ception|goods|replenish|r[eé]appro)/i,
   manufacturing: /\b(bom|bill of materials|nomenclature|work orders?|ordres? de fabrication|production|manufactur|fabricat|assembl|materials?|mati[eè]res?|components?)/i,
+  hr: /\b(employees?|employ[eé]s?|staff|salar|salaire|payroll|paie|payslips?|fiche de paie|leave|cong[eé]s?|vacation|absence|attendance|pr[eé]sence|department|d[eé]partement|job titles?|poste|hr\b|rh\b|solde|hire|embauche|check.?in)/i,
   finance: /\b(invoice|factur|customers?|clients?|payments?|paiements?|paid|expenses?|d[eé]penses?|finance|balance|solde|overdue|retard|owes?|revenue|cash|tax|tva|receivable|unpaid|impay|allocate|reconcil)/i,
 };
 

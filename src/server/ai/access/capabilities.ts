@@ -57,12 +57,13 @@ const CEILING: Record<AiModuleKey, Record<AiOperation, Permission | null>> = {
     delete: PERMISSIONS.MARKETING_CONTACT_MANAGE,
     approve: PERMISSIONS.MARKETING_CAMPAIGN_APPROVE,
   },
+  // HR writes are owner/admin only, as in the HR server actions. hr.manage is also held by managers, so it is not the ceiling.
   hr: {
     view: PERMISSIONS.HR_READ,
-    create: PERMISSIONS.HR_MANAGE,
-    edit: PERMISSIONS.HR_MANAGE,
-    delete: PERMISSIONS.HR_MANAGE,
-    approve: PERMISSIONS.HR_MANAGE,
+    create: PERMISSIONS.HR_ADMIN,
+    edit: PERMISSIONS.HR_ADMIN,
+    delete: PERMISSIONS.HR_ADMIN,
+    approve: PERMISSIONS.HR_ADMIN,
   },
 };
 

@@ -107,6 +107,8 @@ export type CommandDefinition = {
   operation: AiOperation;
   /** The exact permission the underlying service asserts. null for core commands. */
   permission: Permission | null;
+  /** Needs the separate sensitive-HR switch on the member's AI grant, on top of the module cell. */
+  sensitive?: "hr";
   /** Reached only from a row or card action, so not listed in the palette. */
   hidden?: boolean;
   /** Validates the args that arrive with any step (start args, the selected id, the form context). */

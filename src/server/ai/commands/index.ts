@@ -5,6 +5,7 @@ import { INVENTORY_COMMANDS } from "@/server/ai/commands/inventory.commands";
 import { PURCHASING_COMMANDS } from "@/server/ai/commands/purchasing.commands";
 import { MANUFACTURING_COMMANDS } from "@/server/ai/commands/manufacturing.commands";
 import { FINANCE_COMMANDS } from "@/server/ai/commands/finance.commands";
+import { HR_COMMANDS } from "@/server/ai/commands/hr.commands";
 import type { CommandDefinition } from "@/server/ai/commands/types";
 import type { ToolRegistry } from "@/server/ai/tools/registry";
 
@@ -22,6 +23,7 @@ export function isCommandAvailable(def: CommandDefinition, access: AiAccess): bo
   if (access.state !== "ready" || !access.member) return false;
   if (def.module === "core") return true;
   if (!access.can(def.module, def.operation)) return false;
+  if (def.sensitive === "hr" && !access.grant.canViewSensitiveHr) return false;
   return def.permission ? access.member.permissions.has(def.permission) : true;
 }
 
@@ -66,4 +68,4 @@ const help = helpCommand(
   (def, access) => isCommandAvailable(def, access)
 );
 
-export const commandRegistry: CommandRegistry = createCommandRegistry([help, accessCommand, ...INVENTORY_COMMANDS, ...PURCHASING_COMMANDS, ...MANUFACTURING_COMMANDS, ...FINANCE_COMMANDS]);
+export const commandRegistry: CommandRegistry = createCommandRegistry([help, accessCommand, ...INVENTORY_COMMANDS, ...PURCHASING_COMMANDS, ...MANUFACTURING_COMMANDS, ...FINANCE_COMMANDS, ...HR_COMMANDS]);

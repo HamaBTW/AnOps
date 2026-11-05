@@ -86,13 +86,13 @@ describe("tool registry guards", () => {
     expect(() => createToolRegistry([defineTool({ ...base, name: "Bad Name", input: z.object({}) })])).toThrow(/Invalid/);
   });
 
-  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing and Finance tools", () => {
+  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing, Finance and HR tools", () => {
     const names = aiToolRegistry.all().map((t) => t.name);
     expect(names.slice(0, CORE_TOOLS.length)).toEqual(CORE_TOOLS.map((t) => t.name));
-    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance"].includes(t.module))).toBe(true);
-    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance)_/.test(n))).toBe(true);
-    // Marketing, HR, CRM and the rest have no AI tools yet: nothing may claim them.
-    expect(names.some((n) => /marketing|hr_|crm|sales|community|company/.test(n))).toBe(false);
+    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance", "hr"].includes(t.module))).toBe(true);
+    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance|hr)_/.test(n))).toBe(true);
+    // Marketing, CRM and the rest have no AI tools yet: nothing may claim them.
+    expect(names.some((n) => /marketing|crm|sales|community|company/.test(n))).toBe(false);
   });
 
   it("every Purchasing and Manufacturing write names its record in the confirmation, and money or stock movers are typed or sensitive", () => {
@@ -117,6 +117,32 @@ describe("tool registry guards", () => {
     expect(writes.map((t) => t.name).filter((n) => /pay_expense|mark_paid|delete|transfer|refund|ocr|scan/.test(n))).toEqual([]);
   });
 
+  it("HR: every write is owner/admin only with a live preview, nothing creates accounts or pays, sensitive reads are flagged", () => {
+    const hrTools = aiToolRegistry.all().filter((t) => t.module === "hr");
+    const writes = hrTools.filter((t) => t.kind === "write");
+    for (const t of writes) {
+      expect(t.permission, t.name).toBe(PERMISSIONS.HR_ADMIN);
+      expect(t.prepare, t.name).toBeTypeOf("function");
+    }
+    for (const t of hrTools.filter((x) => x.kind === "read")) expect(t.permission, t.name).toBe(PERMISSIONS.HR_READ);
+    expect(hrTools.filter((t) => t.sensitive === "hr").map((t) => t.name).sort()).toEqual(["hr_get_payslip", "hr_list_payslips", "hr_payroll_summary", "hr_preview_payroll"]);
+    expect(writes.map((t) => t.name).filter((n) => /create_employee|salary|password|account|generate|payslip|payroll|delete|status|role/.test(n))).toEqual([]);
+    expect(aiToolRegistry.get("hr_approve_leave_request")?.risk).toBe("financial");
+    expect(aiToolRegistry.get("hr_adjust_leave_balance")?.risk).toBe("financial");
+    expect(commandRegistry.get("payrollpreview")?.sensitive).toBe("hr");
+    expect(commandRegistry.get("payslips")?.sensitive).toBe("hr");
+    expect(commandRegistry.get("adjustleave")!.draft!.criticalFields).toEqual(expect.arrayContaining(["employeeId", "days"]));
+    expect(commandRegistry.get("submitleave")!.draft!.criticalFields).toEqual(expect.arrayContaining(["startDate", "endDate", "leaveType"]));
+    for (const tool of ["hr_approve_leave_request", "hr_reject_leave_request", "hr_cancel_leave_request"]) expect(commandRegistry.byDraftTool(tool), tool).toBeUndefined();
+  });
+
+  it("HR writes are beyond a manager's role ceiling: a grant cannot be saved for them", () => {
+    const manager = permissionsForRole("operator");
+    expect(roleAllows(manager, "hr", "view")).toBe(true);
+    for (const op of ["create", "edit", "delete", "approve"] as const) expect(roleAllows(manager, "hr", op), op).toBe(false);
+    for (const op of ["create", "edit", "delete", "approve"] as const) expect(roleAllows(permissionsForRole("admin"), "hr", op), op).toBe(true);
+  });
+
   it("every Inventory write needs confirmation metadata and every read is low risk", () => {
     for (const tool of aiToolRegistry.all().filter((t) => t.module === "inventory")) {
       if (tool.kind === "read") expect(tool.risk).toBe("low");
@@ -132,8 +158,8 @@ describe("AI-assisted entry declarations", () => {
   it("every draft-capable command ends in a registered write tool of the same module, keeps a manual step, and marks its critical fields", () => {
     const drafts = commandRegistry.all().filter((c) => c.draft);
     expect(drafts.map((c) => c.name).sort()).toEqual([
-      "adjust", "allocate", "editbom", "editcategory", "editcustomer", "editorder", "editproduct", "editsupplier", "editwarehouse", "genreplenishment", "issue", "newbom", "newcategory",
-      "newcustomer", "newexpense", "newexpensecategory", "newinvoice", "neworder", "newproduct", "newsupplier", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "transfer",
+      "adjust", "adjustleave", "allocate", "editbom", "editcategory", "editcustomer", "editdepartment", "editemployee", "editjobtitle", "editorder", "editproduct", "editsupplier", "editwarehouse", "genreplenishment", "issue", "newbom", "newcategory",
+      "newcustomer", "newdepartment", "newexpense", "newexpensecategory", "newinvoice", "newjobtitle", "neworder", "newproduct", "newsupplier", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "submitleave", "transfer",
     ]);
     for (const def of drafts) {
       const tool = aiToolRegistry.get(def.draft!.tool);

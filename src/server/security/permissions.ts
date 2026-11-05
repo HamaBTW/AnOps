@@ -10,6 +10,8 @@ import { AppError } from "@/shared/lib/errors";
 export const PERMISSIONS = {
   HR_READ: "hr.read",
   HR_MANAGE: "hr.manage",
+  /** HR changes and approvals made through the AI Command Center: owners and admins only, matching the HR server actions. */
+  HR_ADMIN: "hr.admin",
   HR_ATTENDANCE_RECORD: "hr.attendance.record",
   INVENTORY_READ: "inventory.read",
   INVENTORY_PRODUCT_MANAGE: "inventory.product.manage",

@@ -4,7 +4,7 @@
  */
 
 export type AiOperation = "view" | "create" | "edit" | "delete" | "approve";
-export type AiModuleKey = "inventory" | "purchasing" | "manufacturing" | "finance" | "marketing" | "hr";
+export type AiModuleKey = "inventory" | "purchasing" | "manufacturing" | "finance" | "marketing" | "hr" | "community";
 export type AiModuleGrant = Record<AiOperation, boolean>;
 export type AiModules = Partial<Record<AiModuleKey, AiModuleGrant>>;
 export type AiRisk = "low" | "sensitive" | "destructive" | "financial";
@@ -18,6 +18,7 @@ export const AI_MODULES: readonly AiModuleKey[] = [
   "finance",
   "marketing",
   "hr",
+  "community",
 ];
 
 export const AI_MODULE_LABELS: Record<AiModuleKey, string> = {
@@ -27,6 +28,7 @@ export const AI_MODULE_LABELS: Record<AiModuleKey, string> = {
   finance: "Finance",
   marketing: "Marketing",
   hr: "HR",
+  community: "Community",
 };
 
 export const AI_OPERATION_LABELS: Record<AiOperation, string> = {
@@ -47,7 +49,7 @@ function grant(...operations: AiOperation[]): AiModuleGrant {
   return g;
 }
 
-export type AiPresetKey = "marketing" | "supply_chain" | "hr" | "finance" | "viewer";
+export type AiPresetKey = "marketing" | "supply_chain" | "hr" | "finance" | "community" | "viewer";
 
 export const AI_PRESETS: Record<AiPresetKey, { label: string; description: string; modules: AiModules }> = {
   marketing: {
@@ -74,6 +76,11 @@ export const AI_PRESETS: Record<AiPresetKey, { label: string; description: strin
     description: "Customers, invoices and expenses, within the person's finance permissions.",
     modules: { finance: grant("view", "create", "edit") },
   },
+  community: {
+    label: "Community",
+    description: "Articles, forum and support chat. Publishing stays with owners and admins.",
+    modules: { community: grant("view", "create", "edit") },
+  },
   viewer: {
     label: "Read-only",
     description: "View access to every module.",
@@ -82,4 +89,4 @@ export const AI_PRESETS: Record<AiPresetKey, { label: string; description: strin
 };
 
 /** Modules that already have AI tools. Grants for the others can be saved but nothing is exposed yet. */
-export const AI_MODULES_WITH_TOOLS: readonly AiModuleKey[] = ["inventory", "purchasing", "manufacturing", "finance", "hr", "marketing"];
+export const AI_MODULES_WITH_TOOLS: readonly AiModuleKey[] = ["inventory", "purchasing", "manufacturing", "finance", "hr", "marketing", "community"];

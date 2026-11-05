@@ -150,25 +150,18 @@ describe("Community - Live Support Chat Schemas", () => {
     expect(chat.channel).toBe("web_widget");
   });
 
-  it("validates chat message sending with appropriate sender types", () => {
-    const agentMsg = sendChatMessageSchema.parse({
+  it("accepts only the conversation and the text: the sender's role is decided by the server, never by the client", () => {
+    const msg = sendChatMessageSchema.parse({
       conversationId: "conv_456",
       body: "Hello Sarah! Yes, in AnOps you can configure the standard 19% VAT in settings.",
-      senderType: "agent",
-      messageType: "text",
-    });
-
-    expect(agentMsg.senderType).toBe("agent");
-
-    const botMsg = sendChatMessageSchema.parse({
-      conversationId: "conv_456",
-      body: "Our support agents are currently offline. Here is an automated FAQ answer.",
       senderType: "bot",
       messageType: "faq_answer",
     });
 
-    expect(botMsg.senderType).toBe("bot");
-    expect(botMsg.messageType).toBe("faq_answer");
+    expect(msg).toEqual({
+      conversationId: "conv_456",
+      body: "Hello Sarah! Yes, in AnOps you can configure the standard 19% VAT in settings.",
+    });
   });
 });
 

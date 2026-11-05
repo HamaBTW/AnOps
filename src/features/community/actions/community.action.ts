@@ -1,8 +1,10 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
-import { requireActiveTenant } from "@/server/tenant/context";
 import { getCurrentAuthUser } from "@/server/auth/rbac";
+import { resolveWorkspace, type WorkspaceContext } from "@/server/tenancy/workspace";
+import { toActionError } from "@/server/actions/run-action";
 import { parseWithSchema } from "@/shared/lib/validation";
 import {
   createBlogPostSchema,
@@ -26,12 +28,14 @@ import {
   deleteComment,
   startChatConversation,
   sendChatMessage,
+  postBotMessage,
   closeChatConversation,
   getChatConversationById,
   getChatMessages,
   saveAISummary,
   saveAIReplySuggestion,
   getBlogPosts,
+  seedCommunityDemoData,
 } from "@/server/services/community.service";
 import {
   summarizeBlogArticle,
@@ -44,98 +48,74 @@ export type ActionResult<T = unknown> =
   | { success: true; data: T; message?: string }
   | { success: false; error: string; fieldErrors?: Record<string, string> };
 
+/**
+ * Every Community action resolves the workspace first (live account check, active company, role permissions) and the
+ * service enforces the permission it needs. A hidden button is never the only control. Messages for expected errors
+ * (forbidden, not found, stale) are shown as they are; anything unexpected becomes a generic message.
+ */
+async function act<T = unknown>(name: string, operation: (ctx: WorkspaceContext, person: string) => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
+  const requestId = randomUUID();
+  try {
+    const ctx = await resolveWorkspace(requestId);
+    const authUser = await getCurrentAuthUser();
+    const person = authUser?.employee?.fullName || authUser?.email || "Member";
+    return await operation(ctx, person);
+  } catch (error) {
+    return { success: false, error: toActionError(error, requestId, `community.${name}`).message };
+  }
+}
+
+const invalid = (parsed: { message: string; errors?: Record<string, string> }): { success: false; error: string; fieldErrors?: Record<string, string> } => ({ success: false, error: parsed.message, fieldErrors: parsed.errors });
+
 // ============================================================================
 // BLOG POST ACTIONS
 // ============================================================================
 
 export async function createBlogPostAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-    const authorName = authUser?.employee?.fullName || authUser?.email || "Editor";
-    const authorId = authUser?.userId || "user";
-
+  return act("createPost", async (ctx, person) => {
     const parsed = parseWithSchema(createBlogPostSchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const post = await createBlogPost(tenant.companyId, parsed.data, {
-      id: authorId,
-      name: authorName,
-    });
-
+    if (!parsed.success) return invalid(parsed);
+    const post = await createBlogPost(ctx, parsed.data, person);
     revalidatePath("/community");
     return { success: true, data: post, message: "Article created successfully" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create blog post",
-    };
-  }
+  });
 }
 
 export async function updateBlogPostAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
+  return act("updatePost", async (ctx) => {
     const parsed = parseWithSchema(updateBlogPostSchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const updated = await updateBlogPost(tenant.companyId, parsed.data);
-    if (!updated) {
-      return { success: false, error: "Article not found or update failed" };
-    }
-
+    if (!parsed.success) return invalid(parsed);
+    const post = await updateBlogPost(ctx, parsed.data);
+    if (!post) return { success: false, error: "Article not found" };
     revalidatePath("/community");
-    return { success: true, data: updated, message: "Article updated successfully" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to update blog post",
-    };
-  }
+    return { success: true, data: post, message: "Article updated successfully" };
+  });
 }
 
 export async function publishBlogPostAction(postId: string): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const updated = await updateBlogPost(tenant.companyId, {
-      id: postId,
-      status: "published",
-    });
-
-    if (!updated) {
-      return { success: false, error: "Article not found" };
-    }
-
+  return act("publishPost", async (ctx) => {
+    const post = await updateBlogPost(ctx, { id: postId, status: "published" });
+    if (!post) return { success: false, error: "Article not found" };
     revalidatePath("/community");
-    return { success: true, data: updated, message: "Article published successfully" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to publish article",
-    };
-  }
+    return { success: true, data: post, message: "Article published successfully" };
+  });
 }
 
 export async function deleteBlogPostAction(postId: string): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const deleted = await deleteBlogPost(tenant.companyId, postId);
-    if (!deleted) {
-      return { success: false, error: "Article could not be deleted" };
-    }
-
+  return act("deletePost", async (ctx) => {
+    if (!(await deleteBlogPost(ctx, postId))) return { success: false, error: "Article could not be deleted" };
     revalidatePath("/community");
     return { success: true, data: { id: postId }, message: "Article deleted" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to delete article",
-    };
-  }
+  });
+}
+
+/** Explicit, administrator-only demo content. Nothing calls this automatically. */
+export async function seedCommunityDemoDataAction(): Promise<ActionResult> {
+  return act("seedDemo", async (ctx) => {
+    const result = await seedCommunityDemoData(ctx);
+    revalidatePath("/community");
+    return { success: true, data: result, message: result.seeded ? "Demo content added" : "Demo content was not added: this company already has categories" };
+  });
 }
 
 // ============================================================================
@@ -143,76 +123,31 @@ export async function deleteBlogPostAction(postId: string): Promise<ActionResult
 // ============================================================================
 
 export async function createForumTopicAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-    const authorName = authUser?.employee?.fullName || authUser?.email || "Member";
-    const authorId = authUser?.userId || "user";
-
+  return act("createTopic", async (ctx, person) => {
     const parsed = parseWithSchema(createForumTopicSchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const topic = await createForumTopic(tenant.companyId, parsed.data, {
-      id: authorId,
-      name: authorName,
-    });
-
+    if (!parsed.success) return invalid(parsed);
+    const topic = await createForumTopic(ctx, parsed.data, person);
     revalidatePath("/community");
     return { success: true, data: topic, message: "Discussion topic started" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create forum topic",
-    };
-  }
+  });
 }
 
 export async function togglePinTopicAction(topicId: string): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const isPinned = await togglePinTopic(tenant.companyId, topicId);
-
+  return act("pinTopic", async (ctx) => {
+    const isPinned = await togglePinTopic(ctx, topicId);
     revalidatePath("/community");
-    return {
-      success: true,
-      data: { isPinned },
-      message: isPinned ? "Topic pinned to top" : "Topic unpinned",
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to toggle pin",
-    };
-  }
+    return { success: true, data: { isPinned }, message: isPinned ? "Topic pinned to top" : "Topic unpinned" };
+  });
 }
 
 export async function createForumReplyAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-    const authorName = authUser?.employee?.fullName || authUser?.email || "Member";
-    const authorId = authUser?.userId || "user";
-
+  return act("createReply", async (ctx, person) => {
     const parsed = parseWithSchema(createForumReplySchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const reply = await createForumReply(tenant.companyId, parsed.data, {
-      id: authorId,
-      name: authorName,
-    });
-
+    if (!parsed.success) return invalid(parsed);
+    const reply = await createForumReply(ctx, parsed.data, person);
     revalidatePath("/community");
     return { success: true, data: reply, message: "Reply posted" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to post reply",
-    };
-  }
+  });
 }
 
 // ============================================================================
@@ -220,48 +155,21 @@ export async function createForumReplyAction(rawInput: unknown): Promise<ActionR
 // ============================================================================
 
 export async function createCommentAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-    const authorName = authUser?.employee?.fullName || authUser?.email || "User";
-    const authorId = authUser?.userId || "user";
-
+  return act("createComment", async (ctx, person) => {
     const parsed = parseWithSchema(createCommentSchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const comment = await createComment(tenant.companyId, parsed.data, {
-      id: authorId,
-      name: authorName,
-    });
-
+    if (!parsed.success) return invalid(parsed);
+    const comment = await createComment(ctx, parsed.data, person);
     revalidatePath("/community");
     return { success: true, data: comment, message: "Comment posted" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to post comment",
-    };
-  }
+  });
 }
 
 export async function deleteCommentAction(commentId: string): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const deleted = await deleteComment(tenant.companyId, commentId);
-    if (!deleted) {
-      return { success: false, error: "Comment could not be deleted" };
-    }
-
+  return act("deleteComment", async (ctx) => {
+    if (!(await deleteComment(ctx, commentId))) return { success: false, error: "Comment could not be deleted" };
     revalidatePath("/community");
     return { success: true, data: { id: commentId }, message: "Comment deleted" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to delete comment",
-    };
-  }
+  });
 }
 
 // ============================================================================
@@ -269,92 +177,45 @@ export async function deleteCommentAction(commentId: string): Promise<ActionResu
 // ============================================================================
 
 export async function startChatConversationAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-
+  return act("startChat", async (ctx) => {
     const parsed = parseWithSchema(startChatSchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const result = await startChatConversation(
-      tenant.companyId,
-      parsed.data,
-      authUser?.userId
-    );
-
+    if (!parsed.success) return invalid(parsed);
+    const result = await startChatConversation(ctx, parsed.data);
     revalidatePath("/community");
     return { success: true, data: result, message: "Support conversation started" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to start conversation",
-    };
-  }
+  });
 }
 
 export async function sendChatMessageAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-    const senderName = authUser?.employee?.fullName || authUser?.email || "Support Agent";
-
+  return act("sendChat", async (ctx, person) => {
     const parsed = parseWithSchema(sendChatMessageSchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const message = await sendChatMessage(tenant.companyId, parsed.data, {
-      id: authUser?.userId,
-      name: senderName,
-    });
-
+    if (!parsed.success) return invalid(parsed);
+    const message = await sendChatMessage(ctx, parsed.data, person);
     revalidatePath("/community");
     return { success: true, data: message };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to send message",
-    };
-  }
+  });
 }
 
 export async function closeChatConversationAction(conversationId: string): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const closed = await closeChatConversation(tenant.companyId, conversationId);
-    if (!closed) {
-      return { success: false, error: "Conversation not found or already closed" };
-    }
-
+  return act("closeChat", async (ctx) => {
+    if (!(await closeChatConversation(ctx, conversationId))) return { success: false, error: "Conversation not found or already closed" };
     revalidatePath("/community");
     return { success: true, data: { id: conversationId }, message: "Conversation marked as closed" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to close conversation",
-    };
-  }
+  });
 }
 
 /**
- * Triggers automated AI chatbot response for a conversation when human agents are offline.
- * Fulfills AnOps.md requirement: "Fallback AI chatbot for live chat when human operators are offline."
+ * The visitor widget's fallback bot (a person-triggered feature of the page, not something the AI Command Center can
+ * start). It answers only conversations the caller may open, and the message is stored by the server as the bot's.
  */
 export async function triggerAiBotReplyAction(conversationId: string): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const conversation = await getChatConversationById(tenant.companyId, conversationId);
-    if (!conversation) {
-      return { success: false, error: "Conversation not found" };
-    }
+  return act("botReply", async (ctx) => {
+    const conversation = await getChatConversationById(ctx, conversationId);
+    if (!conversation) return { success: false, error: "Conversation not found" };
 
-    const messages = await getChatMessages(tenant.companyId, conversationId);
+    const messages = await getChatMessages(ctx, conversationId);
     const lastUserMessage = [...messages].reverse().find((m) => m.senderType === "visitor")?.body || "Hello, I need assistance.";
-
-    // Load knowledge articles for context
-    const articles = await getBlogPosts(tenant.companyId, { status: "published" });
+    const articles = await getBlogPosts(ctx, { status: "published" });
 
     const agent = new CommunitySupportAgent();
     const history: AgentMessage[] = messages.map((m) => ({
@@ -363,61 +224,27 @@ export async function triggerAiBotReplyAction(conversationId: string): Promise<A
       content: m.body,
       timestamp: m.sentAt,
     }));
-
     const response = await agent.chat(history, lastUserMessage, {
-      companyName: tenant.company.name,
+      companyName: "your company",
       visitorName: conversation.visitorName,
       recentArticles: articles.map((a) => ({ title: a.title, excerpt: a.excerpt })),
     });
 
-    // Save AI response as chat message
-    const botMsg = await sendChatMessage(
-      tenant.companyId,
-      {
-        conversationId,
-        body: response.message.content,
-        senderType: "bot",
-        messageType: "faq_answer",
-      },
-      { name: "AnOps Support Bot" }
-    );
-
+    const botMsg = await postBotMessage(ctx, conversationId, response.message.content);
     revalidatePath("/community");
     return { success: true, data: botMsg, message: "AI bot reply sent" };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "AI bot reply generation failed",
-    };
-  }
+  });
 }
 
-/**
- * Generates AI suggestions for human agents to reply with one click.
- */
+/** AI suggestions for a human agent to reply with one click. Support agents only. */
 export async function getAiReplySuggestionsAction(conversationId: string): Promise<ActionResult<string[]>> {
-  try {
-    const tenant = await requireActiveTenant();
-    const messages = await getChatMessages(tenant.companyId, conversationId);
+  return act("replySuggestions", async (ctx) => {
+    const messages = await getChatMessages(ctx, conversationId);
     const lastVisitorMsg = [...messages].reverse().find((m) => m.senderType === "visitor")?.body || "Hello";
-
     const suggestions = await generateSupportReplySuggestions(lastVisitorMsg);
-
-    // Save for audit/record
-    if (suggestions[0]) {
-      await saveAIReplySuggestion(tenant.companyId, {
-        conversationId,
-        suggestedText: suggestions[0],
-      });
-    }
-
+    if (suggestions[0]) await saveAIReplySuggestion(ctx, { conversationId, suggestedText: suggestions[0] });
     return { success: true, data: suggestions };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Could not fetch suggestions",
-    };
-  }
+  });
 }
 
 // ============================================================================
@@ -425,41 +252,14 @@ export async function getAiReplySuggestionsAction(conversationId: string): Promi
 // ============================================================================
 
 export async function generateBlogPostSummaryAction(rawInput: unknown): Promise<ActionResult> {
-  try {
-    const tenant = await requireActiveTenant();
-    const authUser = await getCurrentAuthUser();
-    const requester = authUser?.employee?.fullName || authUser?.email || "Editor";
-
+  return act("summarize", async (ctx) => {
     const parsed = parseWithSchema(generateAiSummarySchema, rawInput);
-    if (!parsed.success) {
-      return { success: false, error: parsed.message, fieldErrors: parsed.errors };
-    }
-
-    const post = await getBlogPostByIdOrSlug(tenant.companyId, parsed.data.blogPostId);
-    if (!post) {
-      return { success: false, error: "Article not found" };
-    }
-
+    if (!parsed.success) return invalid(parsed);
+    const post = await getBlogPostByIdOrSlug(ctx, parsed.data.blogPostId, { countView: false });
+    if (!post) return { success: false, error: "Article not found" };
     const summaryData = await summarizeBlogArticle(post.title, post.body);
-
-    const savedSummary = await saveAISummary(tenant.companyId, {
-      blogPostId: post.id,
-      requestedBy: requester,
-      summary: summaryData.summary,
-      bulletPoints: summaryData.bulletPoints,
-      modelVersion: summaryData.modelVersion,
-    });
-
+    const savedSummary = await saveAISummary(ctx, { blogPostId: post.id, summary: summaryData.summary, bulletPoints: summaryData.bulletPoints, modelVersion: summaryData.modelVersion });
     revalidatePath("/community");
-    return {
-      success: true,
-      data: savedSummary,
-      message: "3-bullet AI summary generated successfully",
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to generate AI summary",
-    };
-  }
+    return { success: true, data: savedSummary, message: "3-bullet AI summary generated successfully" };
+  });
 }

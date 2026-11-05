@@ -7,6 +7,7 @@ import { MANUFACTURING_COMMANDS } from "@/server/ai/commands/manufacturing.comma
 import { FINANCE_COMMANDS } from "@/server/ai/commands/finance.commands";
 import { HR_COMMANDS } from "@/server/ai/commands/hr.commands";
 import { MARKETING_COMMANDS } from "@/server/ai/commands/marketing.commands";
+import { COMMUNITY_COMMANDS } from "@/server/ai/commands/community.commands";
 import type { CommandDefinition } from "@/server/ai/commands/types";
 import type { ToolRegistry } from "@/server/ai/tools/registry";
 
@@ -69,4 +70,4 @@ const help = helpCommand(
   (def, access) => isCommandAvailable(def, access)
 );
 
-export const commandRegistry: CommandRegistry = createCommandRegistry([help, accessCommand, ...INVENTORY_COMMANDS, ...PURCHASING_COMMANDS, ...MANUFACTURING_COMMANDS, ...FINANCE_COMMANDS, ...HR_COMMANDS, ...MARKETING_COMMANDS]);
+export const commandRegistry: CommandRegistry = createCommandRegistry([help, accessCommand, ...INVENTORY_COMMANDS, ...PURCHASING_COMMANDS, ...MANUFACTURING_COMMANDS, ...FINANCE_COMMANDS, ...HR_COMMANDS, ...MARKETING_COMMANDS, ...COMMUNITY_COMMANDS]);

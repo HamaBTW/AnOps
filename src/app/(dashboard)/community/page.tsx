@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import { PERMISSIONS } from "@/server/security/permissions";
 import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { getActiveTenant } from "@/server/tenant/context";
 import { getCurrentAuthUser } from "@/server/auth/rbac";
 import {
-  seedCommunityDefaultsForCompany,
   getBlogPosts,
   getCategories,
   getForumTopics,
@@ -19,27 +19,23 @@ export const metadata: Metadata = {
 };
 
 export default async function CommunityPage() {
-  // 1. Resolve active company workspace (redirects to login or onboarding if needed)
+  // Resolves the active company and the caller's permissions (redirects to login or onboarding if needed).
   const workspace = await getPageWorkspace();
-  const activeCompanyId = workspace.companyId.toHexString();
 
-  // 2. Ensure initial seed defaults exist for this company
-  await seedCommunityDefaultsForCompany(activeCompanyId);
-
-  // 3. Resolve user identity and role within company
   const authUser = await getCurrentAuthUser();
-  const userRole = authUser?.isAdmin ? "hr_admin" : (authUser?.role ?? "employee");
-  const authorName = authUser?.employee?.fullName || authUser?.email || "Fatma";
+  const authorName = authUser?.employee?.fullName || authUser?.email || "Member";
+  const canWrite = workspace.permissions.has(PERMISSIONS.COMMUNITY_WRITE);
+  const canSupport = workspace.permissions.has(PERMISSIONS.COMMUNITY_SUPPORT);
+  const canAdmin = workspace.permissions.has(PERMISSIONS.COMMUNITY_ADMIN);
 
-  // 4. Fetch all community domain entities in parallel (strictly scoped to active company)
-  const [posts, categories, topics, conversations, stats] =
-    await Promise.all([
-      getBlogPosts(activeCompanyId),
-      getCategories(activeCompanyId),
-      getForumTopics(activeCompanyId),
-      getChatConversations(activeCompanyId),
-      getCommunityDashboardStats(activeCompanyId),
-    ]);
+  // Every read below is scoped to the active company and filtered by what this role may see.
+  const [posts, categories, topics, conversations, stats] = await Promise.all([
+    getBlogPosts(workspace),
+    getCategories(workspace),
+    getForumTopics(workspace),
+    getChatConversations(workspace),
+    getCommunityDashboardStats(workspace),
+  ]);
 
   const tenant = await getActiveTenant();
   const companyName = tenant?.company?.name || "AnOps";
@@ -53,7 +49,7 @@ export default async function CommunityPage() {
       initialStats={stats}
       currentUserId={authUser?.userId}
       currentUserName={authorName}
-      userRole={userRole}
+      access={{ canWrite, canSupport, canAdmin }}
       companyName={companyName}
     />
   );

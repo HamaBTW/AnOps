@@ -28,6 +28,7 @@ interface ForumSectionProps {
   currentUserId?: string;
   currentUserName?: string;
   isAdmin?: boolean;
+  canWrite?: boolean;
 }
 
 export function ForumSection({
@@ -36,6 +37,7 @@ export function ForumSection({
   currentUserId,
   currentUserName = "You",
   isAdmin = false,
+  canWrite = false,
 }: ForumSectionProps) {
   const [topics, setTopics] = useState<ForumTopic[]>(initialTopics);
   const [selectedTopic, setSelectedTopic] = useState<ForumTopic | null>(null);
@@ -130,6 +132,7 @@ export function ForumSection({
           </div>
         </div>
 
+        {canWrite && (
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
@@ -138,6 +141,7 @@ export function ForumSection({
           <Plus size={15} />
           New Topic
         </button>
+        )}
       </div>
 
       {/* Category Filter Pills */}
@@ -238,6 +242,7 @@ export function ForumSection({
           </div>
 
           {/* Reply Form */}
+          {canWrite && (
           <form onSubmit={handlePostReply} className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-[var(--color-text-primary)] flex items-center gap-1">
@@ -274,6 +279,7 @@ export function ForumSection({
               </div>
             </div>
           </form>
+          )}
 
           {/* Polymorphic Comments Component */}
           <div className="pt-4 border-t border-[var(--color-border-subtle)]">
@@ -282,6 +288,8 @@ export function ForumSection({
               targetId={selectedTopic.id}
               currentUserId={currentUserId}
               currentUserName={currentUserName}
+              canWrite={canWrite}
+              canAdmin={isAdmin}
             />
           </div>
         </div>
@@ -297,6 +305,7 @@ export function ForumSection({
               <p className="mt-1 text-xs text-[var(--color-text-secondary)] max-w-sm mx-auto">
                 Be the first to open a question, operational proposal, or team announcement.
               </p>
+              {canWrite && (
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -305,6 +314,7 @@ export function ForumSection({
                 <Plus size={14} />
                 Start First Topic
               </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-[var(--color-border-subtle)] rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden">

@@ -20,7 +20,7 @@ describe("the tool list given to the model", () => {
     for (const tool of aiToolRegistry.all()) expect(text, tool.name).toContain(`- ${tool.name} [${tool.kind}]`);
     // The full list is no longer sent (it passed 5k tokens with five modules; raw JSON Schema returned HTTP 413). What a request
     // sends is core plus the modules it mentions, and that has to stay small whichever module it is.
-    for (const probe of ["invoice", "stock", "purchase order", "bill of materials", "employee leave", "marketing campaign"]) {
+    for (const probe of ["invoice", "stock", "purchase order", "bill of materials", "employee leave", "marketing campaign", "community article"]) {
       const scoped = toolCatalog(scopeTools([...aiToolRegistry.all()], [probe]));
       expect(Math.ceil(scoped.length / 4), probe).toBeLessThan(3200);
     }

@@ -1,7 +1,11 @@
 import "server-only";
 
 import { ObjectId, Filter, Document } from "mongodb";
-import clientPromise from "@/server/db/client";
+import { recordAudit } from "@/server/audit/audit.service";
+import { withTransaction } from "@/server/db/transactions";
+import { assertPermission, PERMISSIONS, type Permission } from "@/server/security/permissions";
+import type { WorkspaceContext } from "@/server/tenancy/workspace";
+import { AppError } from "@/shared/lib/errors";
 import type {
   BlogPost,
   ContentCategory,
@@ -26,20 +30,82 @@ import type {
   SendChatMessageInput,
 } from "@/features/community/schemas/community.schema";
 
-async function getDb() {
-  const client = await clientPromise;
-  return client.db();
+const can = (ctx: WorkspaceContext, permission: Permission) => ctx.permissions.has(permission);
+
+function audit(ctx: WorkspaceContext, action: string, entityType: string, entityId: string, metadata?: Record<string, string | number | boolean>, tx?: Parameters<typeof recordAudit>[2]) {
+  return recordAudit(ctx.db, { companyId: ctx.companyId, actorUserId: ctx.userId, action, entityType, entityId, requestId: ctx.requestId, metadata }, tx);
 }
 
-/**
- * Every community operation is strictly isolated to one company tenant.
- * There is no unscoped code path.
- */
-function requireCompanyId(companyId: string): ObjectId {
-  if (!companyId || !ObjectId.isValid(companyId)) {
-    throw new Error("A valid company is required for this operation.");
+function objectId(value: string, what: string): ObjectId {
+  if (!ObjectId.isValid(value) || value.length !== 24) throw new AppError("NOT_FOUND", `${what} was not found.`);
+  return new ObjectId(value);
+}
+
+function mapPost(doc: Document): BlogPost {
+  return {
+    id: doc._id.toString(),
+    companyId: doc.companyId.toString(),
+    authorUserId: doc.authorUserId as string,
+    authorName: doc.authorName as string,
+    slug: doc.slug as string,
+    title: doc.title as string,
+    excerpt: doc.excerpt as string,
+    body: doc.body as string,
+    coverImage: doc.coverImage as string | undefined,
+    status: doc.status as "draft" | "published" | "archived",
+    categoryIds: (doc.categoryIds || []) as string[],
+    tags: (doc.tags || []) as string[],
+    readingTimeMinutes: doc.readingTimeMinutes || calculateReadingTime(doc.body || ""),
+    publishedAt: doc.publishedAt ? new Date(doc.publishedAt).toISOString() : undefined,
+    createdAt: new Date(doc.createdAt).toISOString(),
+    updatedAt: new Date(doc.updatedAt).toISOString(),
+    viewsCount: doc.viewsCount || 0,
+    aiSummaryId: doc.aiSummaryId as string | undefined,
+  };
+}
+
+function mapMessage(doc: Document): ChatMessage {
+  return {
+    id: doc._id.toString(),
+    companyId: doc.companyId.toString(),
+    conversationId: doc.conversationId as string,
+    senderUserId: doc.senderUserId as string | undefined,
+    senderType: doc.senderType as "visitor" | "agent" | "bot" | "system",
+    senderName: doc.senderName as string,
+    body: doc.body as string,
+    messageType: doc.messageType as "text" | "system" | "faq_answer",
+    sentAt: new Date(doc.sentAt).toISOString(),
+    editedAt: doc.editedAt ? new Date(doc.editedAt).toISOString() : undefined,
+  };
+}
+
+function mapConversation(doc: Document): ChatConversation {
+  return {
+    id: doc._id.toString(),
+    companyId: doc.companyId.toString(),
+    visitorUserId: doc.visitorUserId as string | undefined,
+    visitorSessionId: doc.visitorSessionId as string,
+    visitorName: doc.visitorName as string,
+    visitorEmail: doc.visitorEmail as string | undefined,
+    status: doc.status as "open" | "assigned" | "closed",
+    channel: doc.channel as "web_widget" | "internal_support",
+    assignedToUserId: doc.assignedToUserId as string | undefined,
+    assignedToName: doc.assignedToName as string | undefined,
+    startedAt: new Date(doc.startedAt).toISOString(),
+    closedAt: doc.closedAt ? new Date(doc.closedAt).toISOString() : undefined,
+    lastMessageAt: new Date(doc.lastMessageAt || doc.startedAt).toISOString(),
+    unreadCount: doc.unreadCount || 0,
+  };
+}
+
+/** Support agents see every conversation of the company. Anyone else sees only the conversations they started themselves. */
+async function loadConversation(ctx: WorkspaceContext, conversationId: string): Promise<Document> {
+  const doc = await ctx.db.collection("chat_conversations").findOne({ _id: objectId(conversationId, "Conversation"), companyId: ctx.companyId });
+  if (!doc) throw new AppError("NOT_FOUND", "Conversation was not found.");
+  if (!can(ctx, PERMISSIONS.COMMUNITY_SUPPORT) && doc.visitorUserId !== ctx.userId.toHexString()) {
+    throw new AppError("NOT_FOUND", "Conversation was not found.");
   }
-  return new ObjectId(companyId);
+  return doc;
 }
 
 function slugify(text: string): string {
@@ -60,12 +126,23 @@ function calculateReadingTime(text: string): number {
 // SEEDING DEFAULTS
 // ============================================================================
 
-export async function seedCommunityDefaultsForCompany(companyId: string): Promise<void> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+/**
+ * Optional demo content (categories, tags, a sample article and topic). Never runs on its own: an owner or admin must ask
+ * for it explicitly. A one-time marker makes it exactly-once even when two requests arrive together, and it never
+ * touches a company that already has categories.
+ */
+export async function seedCommunityDemoData(ctx: WorkspaceContext): Promise<{ seeded: boolean }> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
-  const existingCount = await db.collection("content_categories").countDocuments({ companyId: cId });
-  if (existingCount > 0) return;
+  if ((await db.collection("content_categories").countDocuments({ companyId: cId })) > 0) return { seeded: false };
+  try {
+    await db.collection<{ _id: string; seq: number }>("counters").insertOne({ _id: `community_demo:${cId.toHexString()}`, seq: 1 });
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) return { seeded: false };
+    throw error;
+  }
 
   const now = new Date();
 
@@ -198,15 +275,18 @@ Use this thread to introduce your team, describe your daily operations, and shar
     createdAt: now,
     updatedAt: now,
   });
+  await audit(ctx, "community.demo_data.seeded", "community", cId.toHexString());
+  return { seeded: true };
 }
 
 // ============================================================================
 // BLOG POSTS & CATEGORIES
 // ============================================================================
 
-export async function getCategories(companyId: string): Promise<ContentCategory[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function getCategories(ctx: WorkspaceContext): Promise<ContentCategory[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
   const docs = await db
     .collection("content_categories")
     .find({ companyId: cId })
@@ -223,9 +303,10 @@ export async function getCategories(companyId: string): Promise<ContentCategory[
   }));
 }
 
-export async function getTags(companyId: string): Promise<ContentTag[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function getTags(ctx: WorkspaceContext): Promise<ContentTag[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
   const docs = await db
     .collection("content_tags")
     .find({ companyId: cId })
@@ -241,15 +322,19 @@ export async function getTags(companyId: string): Promise<ContentTag[]> {
 }
 
 export async function getBlogPosts(
-  companyId: string,
+  ctx: WorkspaceContext,
   filter?: { status?: string; categoryId?: string; search?: string }
 ): Promise<BlogPost[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const query: Filter<Document> = { companyId: cId };
 
-  if (filter?.status && filter.status !== "all") {
+  // Drafts and archived articles are working material: read-only members see published articles only.
+  if (!can(ctx, PERMISSIONS.COMMUNITY_WRITE)) {
+    query.status = "published";
+  } else if (filter?.status && filter.status !== "all") {
     query.status = filter.status;
   }
   if (filter?.categoryId && filter.categoryId !== "all") {
@@ -289,23 +374,27 @@ export async function getBlogPosts(
 }
 
 export async function getBlogPostByIdOrSlug(
-  companyId: string,
-  idOrSlug: string
+  ctx: WorkspaceContext,
+  idOrSlug: string,
+  options: { countView?: boolean } = {}
 ): Promise<BlogPost | null> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const isObjId = ObjectId.isValid(idOrSlug) && idOrSlug.length === 24;
   const filter: Filter<Document> = {
     companyId: cId,
     ...(isObjId ? { _id: new ObjectId(idOrSlug) } : { slug: idOrSlug }),
+    ...(can(ctx, PERMISSIONS.COMMUNITY_WRITE) ? {} : { status: "published" }),
   };
 
   const doc = await db.collection("blog_posts").findOne(filter);
   if (!doc) return null;
 
-  // Increment views in background
-  db.collection("blog_posts").updateOne({ _id: doc._id }, { $inc: { viewsCount: 1 } }).catch(() => {});
+  // Reading for a person counts a view; reading for the assistant does not change anything.
+  const counted = options.countView !== false;
+  if (counted) db.collection("blog_posts").updateOne({ _id: doc._id }, { $inc: { viewsCount: 1 } }).catch(() => {});
 
   return {
     id: doc._id.toString(),
@@ -324,28 +413,22 @@ export async function getBlogPostByIdOrSlug(
     publishedAt: doc.publishedAt ? new Date(doc.publishedAt).toISOString() : undefined,
     createdAt: new Date(doc.createdAt).toISOString(),
     updatedAt: new Date(doc.updatedAt).toISOString(),
-    viewsCount: (doc.viewsCount || 0) + 1,
+    viewsCount: (doc.viewsCount || 0) + (counted ? 1 : 0),
     aiSummaryId: doc.aiSummaryId as string | undefined,
   };
 }
 
-export async function createBlogPost(
-  companyId: string,
-  input: CreateBlogPostInput,
-  author: { id: string; name: string }
-): Promise<BlogPost> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function createBlogPost(ctx: WorkspaceContext, input: CreateBlogPostInput, authorName: string): Promise<BlogPost> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
+  // New articles start as drafts. Publishing is an administrator decision (see publishBlogPost).
+  if (input.status !== "draft") assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
 
   const now = new Date();
-  const baseSlug = slugify(input.title);
-  const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
-  const readingTime = calculateReadingTime(input.body);
-
+  const uniqueSlug = `${slugify(input.title)}-${Date.now().toString(36)}`;
   const doc = {
-    companyId: cId,
-    authorUserId: author.id,
-    authorName: author.name,
+    companyId: ctx.companyId,
+    authorUserId: ctx.userId.toHexString(),
+    authorName,
     slug: uniqueSlug,
     title: input.title,
     excerpt: input.excerpt || input.body.slice(0, 160).trim() + "...",
@@ -354,50 +437,39 @@ export async function createBlogPost(
     status: input.status,
     categoryIds: input.categoryIds,
     tags: input.tags,
-    readingTimeMinutes: readingTime,
+    readingTimeMinutes: calculateReadingTime(input.body),
     publishedAt: input.status === "published" ? now : undefined,
     createdAt: now,
     updatedAt: now,
     viewsCount: 0,
   };
-
-  const result = await db.collection("blog_posts").insertOne(doc);
-
-  return {
-    id: result.insertedId.toString(),
-    companyId: cId.toString(),
-    authorUserId: author.id,
-    authorName: author.name,
-    slug: uniqueSlug,
-    title: input.title,
-    excerpt: doc.excerpt,
-    body: input.body,
-    coverImage: input.coverImage || undefined,
-    status: input.status,
-    categoryIds: input.categoryIds,
-    tags: input.tags,
-    readingTimeMinutes: readingTime,
-    publishedAt: input.status === "published" ? now.toISOString() : undefined,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    viewsCount: 0,
-  };
+  const result = await ctx.db.collection("blog_posts").insertOne(doc);
+  await audit(ctx, "community.post.created", "community_post", result.insertedId.toHexString(), { status: input.status });
+  return mapPost({ _id: result.insertedId, ...doc });
 }
 
+/**
+ * Edits an article. Operators may edit drafts only and cannot change the status; changing a published or archived
+ * article, and every status change, needs the administrator permission. `expectedUpdatedAt` makes the edit
+ * conditional: it is applied only when nobody changed the article since it was read.
+ */
 export async function updateBlogPost(
-  companyId: string,
-  input: UpdateBlogPostInput
+  ctx: WorkspaceContext,
+  input: UpdateBlogPostInput,
+  options: { expectedUpdatedAt?: string } = {}
 ): Promise<BlogPost | null> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
-
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
   if (!ObjectId.isValid(input.id)) return null;
   const pId = new ObjectId(input.id);
+  const posts = ctx.db.collection("blog_posts");
 
-  const updateFields: Record<string, unknown> = {
-    updatedAt: new Date(),
-  };
+  const current = await posts.findOne({ _id: pId, companyId: ctx.companyId });
+  if (!current) return null;
 
+  const statusChange = input.status !== undefined && input.status !== current.status;
+  if (statusChange || current.status !== "draft") assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
+
+  const updateFields: Record<string, unknown> = { updatedAt: new Date() };
   if (input.title !== undefined) updateFields.title = input.title;
   if (input.excerpt !== undefined) updateFields.excerpt = input.excerpt;
   if (input.body !== undefined) {
@@ -407,58 +479,39 @@ export async function updateBlogPost(
   if (input.coverImage !== undefined) updateFields.coverImage = input.coverImage || undefined;
   if (input.categoryIds !== undefined) updateFields.categoryIds = input.categoryIds;
   if (input.tags !== undefined) updateFields.tags = input.tags;
-  if (input.status !== undefined) {
+  if (statusChange) {
     updateFields.status = input.status;
-    if (input.status === "published") {
-      updateFields.publishedAt = new Date();
-    }
+    if (input.status === "published") updateFields.publishedAt = new Date();
   }
 
-  const result = await db
-    .collection("blog_posts")
-    .findOneAndUpdate({ _id: pId, companyId: cId }, { $set: updateFields }, { returnDocument: "after" });
+  const guard: Document = { _id: pId, companyId: ctx.companyId, updatedAt: current.updatedAt, status: current.status };
+  if (options.expectedUpdatedAt && new Date(options.expectedUpdatedAt).getTime() !== new Date(current.updatedAt).getTime()) {
+    throw new AppError("CONFLICT", "This article changed after you reviewed it. Review it again.");
+  }
+  const result = await posts.findOneAndUpdate(guard, { $set: updateFields }, { returnDocument: "after" });
+  if (!result) throw new AppError("CONFLICT", "This article changed while it was being saved. Try again.");
 
-  if (!result) return null;
-
-  return {
-    id: result._id.toString(),
-    companyId: result.companyId.toString(),
-    authorUserId: result.authorUserId as string,
-    authorName: result.authorName as string,
-    slug: result.slug as string,
-    title: result.title as string,
-    excerpt: result.excerpt as string,
-    body: result.body as string,
-    coverImage: result.coverImage as string | undefined,
-    status: result.status as "draft" | "published" | "archived",
-    categoryIds: (result.categoryIds || []) as string[],
-    tags: (result.tags || []) as string[],
-    readingTimeMinutes: result.readingTimeMinutes || 2,
-    publishedAt: result.publishedAt ? new Date(result.publishedAt).toISOString() : undefined,
-    createdAt: new Date(result.createdAt).toISOString(),
-    updatedAt: new Date(result.updatedAt).toISOString(),
-    viewsCount: result.viewsCount || 0,
-    aiSummaryId: result.aiSummaryId as string | undefined,
-  };
+  await audit(ctx, statusChange ? `community.post.${input.status}` : "community.post.updated", "community_post", pId.toHexString(), {
+    fromStatus: String(current.status),
+    toStatus: String(result.status),
+  });
+  return mapPost(result);
 }
 
-export async function deleteBlogPost(companyId: string, postId: string): Promise<boolean> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function deleteBlogPost(ctx: WorkspaceContext, postId: string): Promise<boolean> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
   if (!ObjectId.isValid(postId)) return false;
-
-  const result = await db.collection("blog_posts").deleteOne({
-    _id: new ObjectId(postId),
-    companyId: cId,
-  });
-
-  if (result.deletedCount > 0) {
-    // Clean up related comments and summaries
-    await db.collection("comments").deleteMany({ targetType: "blog_post", targetId: postId, companyId: cId });
-    await db.collection("ai_summaries").deleteMany({ blogPostId: postId, companyId: cId });
+  const id = new ObjectId(postId);
+  // The article, its comments and its summaries go together or not at all.
+  return withTransaction(ctx.db, async (tx) => {
+    const options = { session: tx.session };
+    const removed = await ctx.db.collection("blog_posts").findOneAndDelete({ _id: id, companyId: ctx.companyId }, options);
+    if (!removed) return false;
+    await ctx.db.collection("comments").deleteMany({ targetType: "blog_post", targetId: postId, companyId: ctx.companyId }, options);
+    await ctx.db.collection("ai_summaries").deleteMany({ blogPostId: postId, companyId: ctx.companyId }, options);
+    await audit(ctx, "community.post.deleted", "community_post", postId, { status: String(removed.status) }, tx);
     return true;
-  }
-  return false;
+  });
 }
 
 // ============================================================================
@@ -466,11 +519,12 @@ export async function deleteBlogPost(companyId: string, postId: string): Promise
 // ============================================================================
 
 export async function getForumTopics(
-  companyId: string,
+  ctx: WorkspaceContext,
   filter?: { categoryId?: string; search?: string }
 ): Promise<ForumTopic[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const query: Filter<Document> = { companyId: cId };
   if (filter?.categoryId && filter.categoryId !== "all") {
@@ -507,11 +561,13 @@ export async function getForumTopics(
 }
 
 export async function getForumTopicById(
-  companyId: string,
-  topicId: string
+  ctx: WorkspaceContext,
+  topicId: string,
+  options: { countView?: boolean } = {}
 ): Promise<ForumTopic | null> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   if (!ObjectId.isValid(topicId)) return null;
 
@@ -522,7 +578,7 @@ export async function getForumTopicById(
 
   if (!doc) return null;
 
-  db.collection("forum_topics").updateOne({ _id: doc._id }, { $inc: { viewsCount: 1 } }).catch(() => {});
+  if (options.countView !== false) db.collection("forum_topics").updateOne({ _id: doc._id }, { $inc: { viewsCount: 1 } }).catch(() => {});
 
   return {
     id: doc._id.toString(),
@@ -535,7 +591,7 @@ export async function getForumTopicById(
     body: doc.body as string,
     status: doc.status as "open" | "locked" | "archived",
     isPinned: Boolean(doc.isPinned),
-    viewsCount: (doc.viewsCount || 0) + 1,
+    viewsCount: (doc.viewsCount || 0) + (options.countView !== false ? 1 : 0),
     repliesCount: doc.repliesCount || 0,
     lastReplyAt: doc.lastReplyAt ? new Date(doc.lastReplyAt).toISOString() : undefined,
     createdAt: new Date(doc.createdAt).toISOString(),
@@ -543,28 +599,23 @@ export async function getForumTopicById(
   };
 }
 
-export async function createForumTopic(
-  companyId: string,
-  input: CreateForumTopicInput,
-  author: { id: string; name: string }
-): Promise<ForumTopic> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function createForumTopic(ctx: WorkspaceContext, input: CreateForumTopicInput, authorName: string): Promise<ForumTopic> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
+  // Pinning is a moderation decision.
+  if (input.isPinned) assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
 
-  let categoryName: string | undefined = undefined;
-  if (input.categoryId && ObjectId.isValid(input.categoryId)) {
-    const cat = await db.collection("content_categories").findOne({
-      _id: new ObjectId(input.categoryId),
-      companyId: cId,
-    });
-    if (cat) categoryName = cat.name as string;
+  let categoryName: string | undefined;
+  if (input.categoryId) {
+    const cat = await ctx.db.collection("content_categories").findOne({ _id: objectId(input.categoryId, "Category"), companyId: ctx.companyId });
+    if (!cat) throw new AppError("VALIDATION_ERROR", "That category does not exist.", { categoryId: "Choose an existing category." });
+    categoryName = cat.name as string;
   }
 
   const now = new Date();
   const doc = {
-    companyId: cId,
-    authorUserId: author.id,
-    authorName: author.name,
+    companyId: ctx.companyId,
+    authorUserId: ctx.userId.toHexString(),
+    authorName,
     categoryId: input.categoryId || undefined,
     categoryName,
     title: input.title,
@@ -577,20 +628,19 @@ export async function createForumTopic(
     createdAt: now,
     updatedAt: now,
   };
-
-  const result = await db.collection("forum_topics").insertOne(doc);
-
+  const result = await ctx.db.collection("forum_topics").insertOne(doc);
+  await audit(ctx, "community.topic.created", "community_topic", result.insertedId.toHexString());
   return {
     id: result.insertedId.toString(),
-    companyId: cId.toString(),
-    authorUserId: author.id,
-    authorName: author.name,
-    categoryId: input.categoryId || undefined,
+    companyId: ctx.companyId.toString(),
+    authorUserId: doc.authorUserId,
+    authorName,
+    categoryId: doc.categoryId,
     categoryName,
-    title: input.title,
-    body: input.body,
+    title: doc.title,
+    body: doc.body,
     status: "open",
-    isPinned: Boolean(input.isPinned),
+    isPinned: doc.isPinned,
     viewsCount: 0,
     repliesCount: 0,
     lastReplyAt: now.toISOString(),
@@ -599,25 +649,22 @@ export async function createForumTopic(
   };
 }
 
-export async function togglePinTopic(companyId: string, topicId: string): Promise<boolean> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function togglePinTopic(ctx: WorkspaceContext, topicId: string): Promise<boolean> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
   if (!ObjectId.isValid(topicId)) return false;
-
-  const topic = await db.collection("forum_topics").findOne({ _id: new ObjectId(topicId), companyId: cId });
-  if (!topic) return false;
-
-  const nextPinned = !topic.isPinned;
-  await db.collection("forum_topics").updateOne(
-    { _id: topic._id },
-    { $set: { isPinned: nextPinned, updatedAt: new Date() } }
-  );
-  return nextPinned;
+  // One atomic flip: two moderators pinning together cannot both read "unpinned" and write the same value.
+  const flipped = await ctx.db
+    .collection("forum_topics")
+    .findOneAndUpdate({ _id: new ObjectId(topicId), companyId: ctx.companyId }, [{ $set: { isPinned: { $not: ["$isPinned"] }, updatedAt: "$$NOW" } }], { returnDocument: "after" });
+  if (!flipped) return false;
+  await audit(ctx, flipped.isPinned ? "community.topic.pinned" : "community.topic.unpinned", "community_topic", topicId);
+  return Boolean(flipped.isPinned);
 }
 
-export async function getForumReplies(companyId: string, topicId: string): Promise<ForumReply[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function getForumReplies(ctx: WorkspaceContext, topicId: string): Promise<ForumReply[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const docs = await db
     .collection("forum_replies")
@@ -640,20 +687,35 @@ export async function getForumReplies(companyId: string, topicId: string): Promi
   }));
 }
 
-export async function createForumReply(
-  companyId: string,
-  input: CreateForumReplyInput,
-  author: { id: string; name: string }
-): Promise<ForumReply> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+/** Sets the pin to an explicit value, and only if the topic is not already in that state (so a stale request changes nothing). */
+export async function setTopicPinned(ctx: WorkspaceContext, topicId: string, pinned: boolean): Promise<boolean> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_ADMIN);
+  if (!ObjectId.isValid(topicId)) return false;
+  const changed = await ctx.db
+    .collection("forum_topics")
+    .findOneAndUpdate({ _id: new ObjectId(topicId), companyId: ctx.companyId, isPinned: pinned ? { $ne: true } : true }, { $set: { isPinned: pinned, updatedAt: new Date() } });
+  if (!changed) return false;
+  await audit(ctx, pinned ? "community.topic.pinned" : "community.topic.unpinned", "community_topic", topicId);
+  return true;
+}
+
+export async function createForumReply(ctx: WorkspaceContext, input: CreateForumReplyInput, authorName: string): Promise<ForumReply> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
+  const topicId = objectId(input.topicId, "Topic");
+  const topic = await ctx.db.collection("forum_topics").findOne({ _id: topicId, companyId: ctx.companyId });
+  if (!topic) throw new AppError("NOT_FOUND", "Topic was not found.");
+  if (topic.status !== "open") throw new AppError("INVALID_TRANSITION", "This topic is closed to new replies.");
+  if (input.parentReplyId) {
+    const parent = await ctx.db.collection("forum_replies").findOne({ _id: objectId(input.parentReplyId, "Reply"), companyId: ctx.companyId, topicId: input.topicId });
+    if (!parent) throw new AppError("NOT_FOUND", "The reply you answered was not found.");
+  }
 
   const now = new Date();
   const doc = {
-    companyId: cId,
+    companyId: ctx.companyId,
     topicId: input.topicId,
-    authorUserId: author.id,
-    authorName: author.name,
+    authorUserId: ctx.userId.toHexString(),
+    authorName,
     parentReplyId: input.parentReplyId || null,
     body: input.body,
     status: "active" as const,
@@ -661,25 +723,19 @@ export async function createForumReply(
     createdAt: now,
     updatedAt: now,
   };
-
-  const result = await db.collection("forum_replies").insertOne(doc);
-
-  // Update topic reply count and timestamp
-  if (ObjectId.isValid(input.topicId)) {
-    await db.collection("forum_topics").updateOne(
-      { _id: new ObjectId(input.topicId), companyId: cId },
-      { $inc: { repliesCount: 1 }, $set: { lastReplyAt: now, updatedAt: now } }
-    );
-  }
-
+  const result = await ctx.db.collection("forum_replies").insertOne(doc);
+  await ctx.db
+    .collection("forum_topics")
+    .updateOne({ _id: topicId, companyId: ctx.companyId }, { $inc: { repliesCount: 1 }, $set: { lastReplyAt: now, updatedAt: now } });
+  await audit(ctx, "community.reply.created", "community_topic", input.topicId);
   return {
     id: result.insertedId.toString(),
-    companyId: cId.toString(),
+    companyId: ctx.companyId.toString(),
     topicId: input.topicId,
-    authorUserId: author.id,
-    authorName: author.name,
-    parentReplyId: input.parentReplyId || null,
-    body: input.body,
+    authorUserId: doc.authorUserId,
+    authorName,
+    parentReplyId: doc.parentReplyId,
+    body: doc.body,
     status: "active",
     upvotesCount: 0,
     createdAt: now.toISOString(),
@@ -692,12 +748,13 @@ export async function createForumReply(
 // ============================================================================
 
 export async function getComments(
-  companyId: string,
+  ctx: WorkspaceContext,
   targetType: CommentTargetType,
   targetId: string
 ): Promise<Comment[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const docs = await db
     .collection("comments")
@@ -724,19 +781,17 @@ export async function getComments(
   }));
 }
 
-export async function createComment(
-  companyId: string,
-  input: CreateCommentInput,
-  author: { id: string; name: string }
-): Promise<Comment> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+export async function createComment(ctx: WorkspaceContext, input: CreateCommentInput, authorName: string): Promise<Comment> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
+  const collection = input.targetType === "blog_post" ? "blog_posts" : "forum_topics";
+  const target = await ctx.db.collection(collection).findOne({ _id: objectId(input.targetId, "The item you commented on"), companyId: ctx.companyId }, { projection: { _id: 1 } });
+  if (!target) throw new AppError("NOT_FOUND", "The item you commented on was not found.");
 
   const now = new Date();
   const doc = {
-    companyId: cId,
-    authorUserId: author.id,
-    authorName: author.name,
+    companyId: ctx.companyId,
+    authorUserId: ctx.userId.toHexString(),
+    authorName,
     targetType: input.targetType,
     targetId: input.targetId,
     body: input.body,
@@ -744,14 +799,12 @@ export async function createComment(
     createdAt: now,
     updatedAt: now,
   };
-
-  const result = await db.collection("comments").insertOne(doc);
-
+  const result = await ctx.db.collection("comments").insertOne(doc);
   return {
     id: result.insertedId.toString(),
-    companyId: cId.toString(),
-    authorUserId: author.id,
-    authorName: author.name,
+    companyId: ctx.companyId.toString(),
+    authorUserId: doc.authorUserId,
+    authorName,
     targetType: input.targetType,
     targetId: input.targetId,
     body: input.body,
@@ -761,16 +814,17 @@ export async function createComment(
   };
 }
 
-export async function deleteComment(companyId: string, commentId: string): Promise<boolean> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+/** Authors may remove their own comment; removing anyone else's is moderation and needs the administrator permission. */
+export async function deleteComment(ctx: WorkspaceContext, commentId: string): Promise<boolean> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
   if (!ObjectId.isValid(commentId)) return false;
-
-  const result = await db.collection("comments").deleteOne({
-    _id: new ObjectId(commentId),
-    companyId: cId,
-  });
-
+  const filter: Document = { _id: new ObjectId(commentId), companyId: ctx.companyId };
+  if (!can(ctx, PERMISSIONS.COMMUNITY_ADMIN)) {
+    assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
+    filter.authorUserId = ctx.userId.toHexString();
+  }
+  const result = await ctx.db.collection("comments").deleteOne(filter);
+  if (result.deletedCount > 0) await audit(ctx, "community.comment.deleted", "community_comment", commentId);
   return result.deletedCount > 0;
 }
 
@@ -778,91 +832,37 @@ export async function deleteComment(companyId: string, commentId: string): Promi
 // LIVE SUPPORT CHAT
 // ============================================================================
 
-export async function getChatConversations(
-  companyId: string,
-  statusFilter?: string
-): Promise<ChatConversation[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
-
-  const query: Filter<Document> = { companyId: cId };
-  if (statusFilter && statusFilter !== "all") {
-    query.status = statusFilter;
-  }
-
-  const docs = await db
-    .collection("chat_conversations")
-    .find(query)
-    .sort({ lastMessageAt: -1 })
-    .toArray();
-
-  return docs.map((doc) => ({
-    id: doc._id.toString(),
-    companyId: doc.companyId.toString(),
-    visitorUserId: doc.visitorUserId as string | undefined,
-    visitorSessionId: doc.visitorSessionId as string,
-    visitorName: doc.visitorName as string,
-    visitorEmail: doc.visitorEmail as string | undefined,
-    status: doc.status as "open" | "assigned" | "closed",
-    channel: doc.channel as "web_widget" | "internal_support",
-    assignedToUserId: doc.assignedToUserId as string | undefined,
-    assignedToName: doc.assignedToName as string | undefined,
-    startedAt: new Date(doc.startedAt).toISOString(),
-    closedAt: doc.closedAt ? new Date(doc.closedAt).toISOString() : undefined,
-    lastMessageAt: new Date(doc.lastMessageAt || doc.startedAt).toISOString(),
-    unreadCount: doc.unreadCount || 0,
-  }));
+export async function getChatConversations(ctx: WorkspaceContext, statusFilter?: string): Promise<ChatConversation[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const query: Filter<Document> = { companyId: ctx.companyId };
+  if (!can(ctx, PERMISSIONS.COMMUNITY_SUPPORT)) query.visitorUserId = ctx.userId.toHexString();
+  if (statusFilter && statusFilter !== "all") query.status = statusFilter;
+  const docs = await ctx.db.collection("chat_conversations").find(query).sort({ lastMessageAt: -1 }).toArray();
+  return docs.map(mapConversation);
 }
 
-export async function getChatConversationById(
-  companyId: string,
-  conversationId: string
-): Promise<ChatConversation | null> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
-
+export async function getChatConversationById(ctx: WorkspaceContext, conversationId: string): Promise<ChatConversation | null> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
   if (!ObjectId.isValid(conversationId)) return null;
-
-  const doc = await db.collection("chat_conversations").findOne({
-    _id: new ObjectId(conversationId),
-    companyId: cId,
-  });
-
-  if (!doc) return null;
-
-  return {
-    id: doc._id.toString(),
-    companyId: doc.companyId.toString(),
-    visitorUserId: doc.visitorUserId as string | undefined,
-    visitorSessionId: doc.visitorSessionId as string,
-    visitorName: doc.visitorName as string,
-    visitorEmail: doc.visitorEmail as string | undefined,
-    status: doc.status as "open" | "assigned" | "closed",
-    channel: doc.channel as "web_widget" | "internal_support",
-    assignedToUserId: doc.assignedToUserId as string | undefined,
-    assignedToName: doc.assignedToName as string | undefined,
-    startedAt: new Date(doc.startedAt).toISOString(),
-    closedAt: doc.closedAt ? new Date(doc.closedAt).toISOString() : undefined,
-    lastMessageAt: new Date(doc.lastMessageAt || doc.startedAt).toISOString(),
-    unreadCount: doc.unreadCount || 0,
-  };
+  try {
+    return mapConversation(await loadConversation(ctx, conversationId));
+  } catch (error) {
+    if (error instanceof AppError && error.code === "NOT_FOUND") return null;
+    throw error;
+  }
 }
 
 export async function startChatConversation(
-  companyId: string,
-  input: StartChatInput,
-  visitorUserId?: string
+  ctx: WorkspaceContext,
+  input: StartChatInput
 ): Promise<{ conversation: ChatConversation; firstMessage: ChatMessage }> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
-
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
   const now = new Date();
-  const sessionId = `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-
+  const visitorUserId = ctx.userId.toHexString();
   const convDoc = {
-    companyId: cId,
-    visitorUserId: visitorUserId || undefined,
-    visitorSessionId: sessionId,
+    companyId: ctx.companyId,
+    visitorUserId,
+    visitorSessionId: `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     visitorName: input.visitorName,
     visitorEmail: input.visitorEmail || undefined,
     status: "open" as const,
@@ -871,151 +871,83 @@ export async function startChatConversation(
     lastMessageAt: now,
     unreadCount: 1,
   };
-
-  const convResult = await db.collection("chat_conversations").insertOne(convDoc);
-  const conversationId = convResult.insertedId.toString();
-
-  // Add initial message
+  const convResult = await ctx.db.collection("chat_conversations").insertOne(convDoc);
+  const conversationId = convResult.insertedId.toHexString();
   const msgDoc = {
-    companyId: cId,
+    companyId: ctx.companyId,
     conversationId,
-    senderUserId: visitorUserId || undefined,
+    senderUserId: visitorUserId,
     senderType: "visitor" as const,
     senderName: input.visitorName,
     body: input.initialMessage,
     messageType: "text" as const,
     sentAt: now,
   };
-
-  const msgResult = await db.collection("chat_messages").insertOne(msgDoc);
-
-  const conversation: ChatConversation = {
-    id: conversationId,
-    companyId: cId.toString(),
-    visitorUserId,
-    visitorSessionId: sessionId,
-    visitorName: input.visitorName,
-    visitorEmail: input.visitorEmail || undefined,
-    status: "open",
-    channel: input.channel,
-    startedAt: now.toISOString(),
-    lastMessageAt: now.toISOString(),
-    unreadCount: 1,
-  };
-
-  const firstMessage: ChatMessage = {
-    id: msgResult.insertedId.toString(),
-    companyId: cId.toString(),
-    conversationId,
-    senderUserId: visitorUserId,
-    senderType: "visitor",
-    senderName: input.visitorName,
-    body: input.initialMessage,
-    messageType: "text",
-    sentAt: now.toISOString(),
-  };
-
-  return { conversation, firstMessage };
+  const msgResult = await ctx.db.collection("chat_messages").insertOne(msgDoc);
+  return { conversation: mapConversation({ _id: convResult.insertedId, ...convDoc }), firstMessage: mapMessage({ _id: msgResult.insertedId, ...msgDoc }) };
 }
 
-export async function getChatMessages(
-  companyId: string,
-  conversationId: string,
-  afterTimestamp?: string
-): Promise<ChatMessage[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
-
-  const filter: Filter<Document> = {
-    companyId: cId,
-    conversationId,
-  };
-
-  if (afterTimestamp) {
-    filter.sentAt = { $gt: new Date(afterTimestamp) };
-  }
-
-  const docs = await db
-    .collection("chat_messages")
-    .find(filter)
-    .sort({ sentAt: 1 })
-    .toArray();
-
-  return docs.map((doc) => ({
-    id: doc._id.toString(),
-    companyId: doc.companyId.toString(),
-    conversationId: doc.conversationId as string,
-    senderUserId: doc.senderUserId as string | undefined,
-    senderType: doc.senderType as "visitor" | "agent" | "bot" | "system",
-    senderName: doc.senderName as string,
-    body: doc.body as string,
-    messageType: doc.messageType as "text" | "system" | "faq_answer",
-    sentAt: new Date(doc.sentAt).toISOString(),
-    editedAt: doc.editedAt ? new Date(doc.editedAt).toISOString() : undefined,
-  }));
+export async function getChatMessages(ctx: WorkspaceContext, conversationId: string, afterTimestamp?: string): Promise<ChatMessage[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  await loadConversation(ctx, conversationId);
+  const filter: Filter<Document> = { companyId: ctx.companyId, conversationId };
+  if (afterTimestamp) filter.sentAt = { $gt: new Date(afterTimestamp) };
+  const docs = await ctx.db.collection("chat_messages").find(filter).sort({ sentAt: 1 }).toArray();
+  return docs.map(mapMessage);
 }
 
-export async function sendChatMessage(
-  companyId: string,
-  input: SendChatMessageInput,
-  sender: { id?: string; name: string }
+async function appendMessage(
+  ctx: WorkspaceContext,
+  conversation: Document,
+  message: { senderType: "visitor" | "agent" | "bot" | "system"; senderUserId?: string; senderName: string; body: string; messageType: "text" | "system" | "faq_answer" }
 ): Promise<ChatMessage> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
-
+  if (conversation.status === "closed") throw new AppError("INVALID_TRANSITION", "This conversation is closed.");
   const now = new Date();
-  const doc = {
-    companyId: cId,
-    conversationId: input.conversationId,
-    senderUserId: sender.id || undefined,
-    senderType: input.senderType,
-    senderName: sender.name,
-    body: input.body,
-    messageType: input.messageType,
-    sentAt: now,
-  };
-
-  const result = await db.collection("chat_messages").insertOne(doc);
-
-  // Update conversation last message timestamp
-  if (ObjectId.isValid(input.conversationId)) {
-    await db.collection("chat_conversations").updateOne(
-      { _id: new ObjectId(input.conversationId), companyId: cId },
-      {
-        $set: { lastMessageAt: now },
-        ...(input.senderType === "visitor" ? { $inc: { unreadCount: 1 } } : { $set: { unreadCount: 0 } }),
-      }
-    );
-  }
-
-  return {
-    id: result.insertedId.toString(),
-    companyId: cId.toString(),
-    conversationId: input.conversationId,
-    senderUserId: sender.id,
-    senderType: input.senderType,
-    senderName: sender.name,
-    body: input.body,
-    messageType: input.messageType,
-    sentAt: now.toISOString(),
-  };
+  const doc = { companyId: ctx.companyId, conversationId: conversation._id.toHexString(), senderUserId: message.senderUserId, senderType: message.senderType, senderName: message.senderName, body: message.body, messageType: message.messageType, sentAt: now };
+  const result = await ctx.db.collection("chat_messages").insertOne(doc);
+  await ctx.db.collection("chat_conversations").updateOne(
+    { _id: conversation._id, companyId: ctx.companyId },
+    message.senderType === "visitor" ? { $set: { lastMessageAt: now }, $inc: { unreadCount: 1 } } : { $set: { lastMessageAt: now, unreadCount: 0 } }
+  );
+  return mapMessage({ _id: result.insertedId, ...doc });
 }
 
-export async function closeChatConversation(
-  companyId: string,
-  conversationId: string
-): Promise<boolean> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+/**
+ * Posts a message as the signed-in person. The role in the message comes from the server, never from the request:
+ * the person who started the conversation writes as the visitor, a support agent writes as an agent, and nobody
+ * can post as the bot or the system from here.
+ */
+export async function sendChatMessage(ctx: WorkspaceContext, input: SendChatMessageInput, senderName: string): Promise<ChatMessage> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const conversation = await loadConversation(ctx, input.conversationId);
+  const isVisitor = conversation.visitorUserId === ctx.userId.toHexString();
+  if (!isVisitor) assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_SUPPORT);
+  return appendMessage(ctx, conversation, {
+    senderType: isVisitor ? "visitor" : "agent",
+    senderUserId: ctx.userId.toHexString(),
+    senderName,
+    body: input.body,
+    messageType: "text",
+  });
+}
 
+/** The fallback support bot's reply. Server-side only (never reachable from a request field); needs the support permission. */
+export async function postBotMessage(ctx: WorkspaceContext, conversationId: string, body: string): Promise<ChatMessage> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const conversation = await loadConversation(ctx, conversationId);
+  const isVisitor = conversation.visitorUserId === ctx.userId.toHexString();
+  if (!isVisitor) assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_SUPPORT);
+  return appendMessage(ctx, conversation, { senderType: "bot", senderName: "AnOps Support Bot", body, messageType: "faq_answer" });
+}
+
+export async function closeChatConversation(ctx: WorkspaceContext, conversationId: string): Promise<boolean> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_SUPPORT);
   if (!ObjectId.isValid(conversationId)) return false;
-
-  const now = new Date();
-  const result = await db.collection("chat_conversations").updateOne(
-    { _id: new ObjectId(conversationId), companyId: cId },
-    { $set: { status: "closed", closedAt: now } }
-  );
-
+  // Only an open conversation can be closed, and only once.
+  const result = await ctx.db
+    .collection("chat_conversations")
+    .updateOne({ _id: new ObjectId(conversationId), companyId: ctx.companyId, status: { $ne: "closed" } }, { $set: { status: "closed", closedAt: new Date() } });
+  if (result.modifiedCount > 0) await audit(ctx, "community.chat.closed", "community_chat", conversationId);
   return result.modifiedCount > 0;
 }
 
@@ -1024,11 +956,12 @@ export async function closeChatConversation(
 // ============================================================================
 
 export async function getAISummariesForPost(
-  companyId: string,
+  ctx: WorkspaceContext,
   blogPostId: string
 ): Promise<AISummary[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const docs = await db
     .collection("ai_summaries")
@@ -1050,23 +983,26 @@ export async function getAISummariesForPost(
 }
 
 export async function saveAISummary(
-  companyId: string,
+  ctx: WorkspaceContext,
   data: {
     blogPostId: string;
-    requestedBy: string;
     summary: string;
     bulletPoints: string[];
     modelVersion: string;
   }
 ): Promise<AISummary> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_WRITE);
+  const cId = ctx.companyId;
+  const db = ctx.db;
+
+  const post = await db.collection("blog_posts").findOne({ _id: objectId(data.blogPostId, "Article"), companyId: cId }, { projection: { _id: 1 } });
+  if (!post) throw new AppError("NOT_FOUND", "Article was not found.");
 
   const now = new Date();
   const doc = {
     companyId: cId,
     blogPostId: data.blogPostId,
-    requestedBy: data.requestedBy,
+    requestedBy: ctx.userId.toHexString(),
     summary: data.summary,
     bulletPoints: data.bulletPoints,
     status: "completed" as const,
@@ -1088,7 +1024,7 @@ export async function saveAISummary(
     id: result.insertedId.toString(),
     companyId: cId.toString(),
     blogPostId: data.blogPostId,
-    requestedBy: data.requestedBy,
+    requestedBy: ctx.userId.toHexString(),
     summary: data.summary,
     bulletPoints: data.bulletPoints,
     status: "completed",
@@ -1098,11 +1034,12 @@ export async function saveAISummary(
 }
 
 export async function getAIReplySuggestions(
-  companyId: string,
+  ctx: WorkspaceContext,
   conversationId: string
 ): Promise<AIReplySuggestion[]> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_SUPPORT);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
   const docs = await db
     .collection("ai_reply_suggestions")
@@ -1124,15 +1061,18 @@ export async function getAIReplySuggestions(
 }
 
 export async function saveAIReplySuggestion(
-  companyId: string,
+  ctx: WorkspaceContext,
   data: {
     conversationId: string;
     sourceMessageId?: string;
     suggestedText: string;
   }
 ): Promise<AIReplySuggestion> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_SUPPORT);
+  const cId = ctx.companyId;
+  const db = ctx.db;
+
+  await loadConversation(ctx, data.conversationId);
 
   const now = new Date();
   const doc = {
@@ -1162,11 +1102,17 @@ export async function saveAIReplySuggestion(
 // ============================================================================
 
 export async function getCommunityDashboardStats(
-  companyId: string
+  ctx: WorkspaceContext
 ): Promise<CommunityDashboardStats> {
-  const cId = requireCompanyId(companyId);
-  const db = await getDb();
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const cId = ctx.companyId;
+  const db = ctx.db;
 
+  // What a member may see is what a member may count: read-only members count published articles only, and everyone
+  // but support agents counts only their own conversations.
+  const canWrite = can(ctx, PERMISSIONS.COMMUNITY_WRITE);
+  const postScope: Document = canWrite ? { companyId: cId } : { companyId: cId, status: "published" };
+  const chatScope: Document = can(ctx, PERMISSIONS.COMMUNITY_SUPPORT) ? { companyId: cId } : { companyId: cId, visitorUserId: ctx.userId.toHexString() };
   const [
     totalPosts,
     publishedPosts,
@@ -1177,14 +1123,14 @@ export async function getCommunityDashboardStats(
     totalComments,
     aiSummaries,
   ] = await Promise.all([
-    db.collection("blog_posts").countDocuments({ companyId: cId }),
+    db.collection("blog_posts").countDocuments(postScope),
     db.collection("blog_posts").countDocuments({ companyId: cId, status: "published" }),
-    db.collection("blog_posts").countDocuments({ companyId: cId, status: "draft" }),
+    canWrite ? db.collection("blog_posts").countDocuments({ companyId: cId, status: "draft" }) : Promise.resolve(0),
     db.collection("forum_topics").countDocuments({ companyId: cId }),
     db.collection("forum_replies").countDocuments({ companyId: cId }),
-    db.collection("chat_conversations").countDocuments({ companyId: cId, status: "open" }),
+    db.collection("chat_conversations").countDocuments({ ...chatScope, status: "open" }),
     db.collection("comments").countDocuments({ companyId: cId }),
-    db.collection("ai_summaries").countDocuments({ companyId: cId }),
+    canWrite ? db.collection("ai_summaries").countDocuments({ companyId: cId }) : Promise.resolve(0),
   ]);
 
   return {

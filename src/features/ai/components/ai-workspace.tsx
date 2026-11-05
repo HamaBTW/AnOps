@@ -284,7 +284,7 @@ export function AiWorkspace({ initial }: { initial: AiWorkspaceState }) {
               <div className="my-auto">
                 <h3 className="text-2xl text-[var(--color-text-primary)]">What do you want to get done?</h3>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  Ask in English or French, or type / for commands. Inventory, Purchasing, Manufacturing, Finance and HR are connected: stock, orders, receipts, work orders, customers, invoices, payments and expenses, plus HR: employees, leave, attendance and payroll previews. Marketing is next.
+                  Ask in English or French, or type / for commands. Inventory, Purchasing, Manufacturing, Finance, HR, Marketing and Community are connected: stock, orders, receipts, work orders, customers, invoices, payments, expenses, employees, leave, attendance, payroll previews, campaigns, contacts, and Community articles, forum and support chat.
                 </p>
                 <ul className="mt-5 grid gap-2 sm:grid-cols-2">
                   {SUGGESTIONS.filter((s) => initial.commands.some((c) => c.command === s.command)).slice(0, 4).map((s) => (

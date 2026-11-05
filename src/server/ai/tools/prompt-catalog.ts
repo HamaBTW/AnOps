@@ -62,6 +62,7 @@ const MODULE_WORDS: Record<string, RegExp> = {
   manufacturing: /\b(bom|bill of materials|nomenclature|work orders?|ordres? de fabrication|production|manufactur|fabricat|assembl|materials?|mati[eè]res?|components?)/i,
   hr: /\b(employees?|employ[eé]s?|staff|salar|salaire|payroll|paie|payslips?|fiche de paie|leave|cong[eé]s?|vacation|absence|attendance|pr[eé]sence|department|d[eé]partement|job titles?|poste|hr\b|rh\b|solde|hire|embauche|check.?in)/i,
   marketing: /\b(marketing|campaigns?|campagnes?|audiences?|contacts?|newsletter|templates?|mod[eè]les?|tags?|subscribers?|abonn[eé]s?|unsubscribe|d[eé]sabonn|sms|telegram|social|facebook|email blast|mailing|consent|consentement|segment)/i,
+  community: /\b(community|communaut[eé]|blogs?|articles?|forum|topics?|sujets?|repl(y|ies)|r[eé]ponses?|comments?|commentaires?|chat|support|conversations?|visitors?|visiteurs?|publish|publier|pin\b|[eé]pingl)/i,
   finance: /\b(invoice|factur|customers?|clients?|payments?|paiements?|paid|expenses?|d[eé]penses?|finance|balance|solde|overdue|retard|owes?|revenue|cash|tax|tva|receivable|unpaid|impay|allocate|reconcil)/i,
 };
 

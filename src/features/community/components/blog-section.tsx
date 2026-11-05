@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 
 interface BlogSectionProps {
+  canWrite?: boolean;
+  canAdmin?: boolean;
   initialPosts: BlogPost[];
   categories: ContentCategory[];
   currentUserId?: string;
@@ -30,6 +32,8 @@ export function BlogSection({
   categories,
   currentUserId,
   currentUserName,
+  canWrite = false,
+  canAdmin = false,
 }: BlogSectionProps) {
   const [posts, setPosts] = useState<BlogPost[]>(initialPosts);
   const [selectedCat, setSelectedCat] = useState<string>("all");
@@ -104,6 +108,7 @@ export function BlogSection({
           </div>
         </div>
 
+        {canWrite && (
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -117,6 +122,7 @@ export function BlogSection({
             Write Article
           </button>
         </div>
+        )}
       </div>
 
       {/* Category Filter Pills */}
@@ -163,6 +169,7 @@ export function BlogSection({
               ? "Try adjusting your search keywords or clear filters."
               : "Start drafting knowledge articles, product manuals, or company announcements."}
           </p>
+          {canWrite && (
           <button
             type="button"
             onClick={() => {
@@ -174,6 +181,7 @@ export function BlogSection({
             <Plus size={14} />
             Write First Article
           </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -216,6 +224,7 @@ export function BlogSection({
                   </div>
 
                   <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
+                    {canWrite && (post.status === "draft" || canAdmin) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -227,6 +236,8 @@ export function BlogSection({
                     >
                       <Edit3 size={13} />
                     </button>
+                    )}
+                    {canAdmin && (
                     <button
                       type="button"
                       onClick={() => handleDeletePost(post.id)}
@@ -235,6 +246,7 @@ export function BlogSection({
                     >
                       <Trash2 size={13} />
                     </button>
+                    )}
                   </div>
                 </div>
 
@@ -294,6 +306,7 @@ export function BlogSection({
 
                     <div className="flex items-center gap-1.5">
                       {/* AI Summarizer Button */}
+                      {canWrite && (
                       <button
                         type="button"
                         disabled={isPending || isSummarizingId === post.id}
@@ -304,6 +317,7 @@ export function BlogSection({
                         <Sparkles size={11} />
                         {isSummarizingId === post.id ? "Analyzing..." : "AI Summary"}
                       </button>
+                      )}
 
                       <button
                         type="button"
@@ -330,6 +344,7 @@ export function BlogSection({
         }}
         categories={categories}
         postToEdit={postToEdit}
+        canPublish={canAdmin}
         onSaved={(newPost) => {
           setPosts((prev) => {
             const exists = prev.some((p) => p.id === newPost.id);
@@ -415,6 +430,8 @@ export function BlogSection({
                   targetId={readingPost.id}
                   currentUserId={currentUserId}
                   currentUserName={currentUserName}
+                  canWrite={canWrite}
+                  canAdmin={canAdmin}
                 />
               </div>
             </div>

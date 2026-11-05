@@ -59,6 +59,15 @@ const CEILING: Record<AiModuleKey, Record<AiOperation, Permission | null>> = {
     delete: PERMISSIONS.MARKETING_ADMIN,
     approve: PERMISSIONS.MARKETING_ADMIN,
   },
+  // Drafts follow the operator's real Community permission. Publishing, archiving and pinning (approve) are owner/admin only
+  // through community.admin. Deletion is not available to AI at all, so its cell is never granted.
+  community: {
+    view: PERMISSIONS.COMMUNITY_READ,
+    create: PERMISSIONS.COMMUNITY_WRITE,
+    edit: PERMISSIONS.COMMUNITY_WRITE,
+    delete: PERMISSIONS.COMMUNITY_ADMIN,
+    approve: PERMISSIONS.COMMUNITY_ADMIN,
+  },
   // HR writes are owner/admin only, as in the HR server actions. hr.manage is also held by managers, so it is not the ceiling.
   hr: {
     view: PERMISSIONS.HR_READ,

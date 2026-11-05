@@ -86,13 +86,13 @@ describe("tool registry guards", () => {
     expect(() => createToolRegistry([defineTool({ ...base, name: "Bad Name", input: z.object({}) })])).toThrow(/Invalid/);
   });
 
-  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing, Finance, HR and Marketing tools", () => {
+  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing, Finance, HR, Marketing and Community tools", () => {
     const names = aiToolRegistry.all().map((t) => t.name);
     expect(names.slice(0, CORE_TOOLS.length)).toEqual(CORE_TOOLS.map((t) => t.name));
-    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance", "hr", "marketing"].includes(t.module))).toBe(true);
-    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance|hr|marketing)_/.test(n))).toBe(true);
+    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance", "hr", "marketing", "community"].includes(t.module))).toBe(true);
+    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance|hr|marketing|community)_/.test(n))).toBe(true);
     // CRM and the rest have no AI tools yet: nothing may claim them.
-    expect(names.some((n) => /crm|sales|community|company/.test(n))).toBe(false);
+    expect(names.some((n) => /crm|sales|company/.test(n))).toBe(false);
   });
 
   it("every Purchasing and Manufacturing write names its record in the confirmation, and money or stock movers are typed or sensitive", () => {
@@ -164,6 +164,37 @@ describe("tool registry guards", () => {
     expect(roleAllows(permissionsForRole("viewer"), "marketing", "create")).toBe(false);
   });
 
+  it("Community: nothing deletes, posts as the bot or the system, edits live content, seeds demo data or touches Company members", () => {
+    const cm = aiToolRegistry.all().filter((t) => t.module === "community");
+    expect(cm.length).toBeGreaterThan(10);
+    expect(cm.map((t) => t.name).filter((n) => /delete|remove|bot|system|seed|demo|member|role|invite/.test(n))).toEqual([]);
+    expect(commandRegistry.all().filter((c) => c.module === "community").map((c) => c.name).filter((n) => /delete|remove|bot|system|seed|demo|member|role/.test(n))).toEqual([]);
+    for (const t of cm.filter((x) => x.kind === "read")) expect(t.risk, t.name).toBe("low");
+    // The sender's role is never an input: no tool takes a sender type, a message type, an author, a visitor email or a pinned flag on creation.
+    const schemas = JSON.stringify(cm.map((t) => z.toJSONSchema(t.input, { io: "input", unrepresentable: "any" })));
+    expect(schemas).not.toMatch(/senderType|messageType|authorName|authorUserId|visitorEmail|isPinned"/);
+    // Publishing, archiving and pinning are owner/admin only and have no AI draft; support tools need the support permission.
+    for (const n of ["community_publish_post", "community_archive_post", "community_pin_topic"]) {
+      const t = aiToolRegistry.get(n)!;
+      expect([t.permission, t.operation, t.kind], n).toEqual([PERMISSIONS.COMMUNITY_ADMIN, "approve", "write"]);
+      expect(commandRegistry.byDraftTool(n), n).toBeUndefined();
+    }
+    for (const n of ["community_list_conversations", "community_get_conversation", "community_send_support_reply", "community_close_conversation"]) expect(aiToolRegistry.get(n)!.permission, n).toBe(PERMISSIONS.COMMUNITY_SUPPORT);
+    // Editing is for drafts only: the update tool is the only edit-grant article tool.
+    expect(cm.filter((t) => t.kind === "write").map((t) => t.name)).toEqual(expect.arrayContaining(["community_create_post", "community_update_post"]));
+    expect(commandRegistry.get("publishpost")?.permission).toBe(PERMISSIONS.COMMUNITY_ADMIN);
+  });
+
+  it("Community ceiling: operators draft but never hold the approve or delete cells; viewers only read", () => {
+    const operator = permissionsForRole("operator");
+    for (const op of ["view", "create", "edit"] as const) expect(roleAllows(operator, "community", op), op).toBe(true);
+    for (const op of ["delete", "approve"] as const) expect(roleAllows(operator, "community", op), op).toBe(false);
+    for (const op of ["delete", "approve"] as const) expect(roleAllows(permissionsForRole("admin"), "community", op), op).toBe(true);
+    const viewer = permissionsForRole("viewer");
+    expect(roleAllows(viewer, "community", "view")).toBe(true);
+    for (const op of ["create", "edit", "delete", "approve"] as const) expect(roleAllows(viewer, "community", op), op).toBe(false);
+  });
+
   it("HR writes are beyond a manager's role ceiling: a grant cannot be saved for them", () => {
     const manager = permissionsForRole("operator");
     expect(roleAllows(manager, "hr", "view")).toBe(true);
@@ -186,8 +217,8 @@ describe("AI-assisted entry declarations", () => {
   it("every draft-capable command ends in a registered write tool of the same module, keeps a manual step, and marks its critical fields", () => {
     const drafts = commandRegistry.all().filter((c) => c.draft);
     expect(drafts.map((c) => c.name).sort()).toEqual([
-      "adjust", "adjustleave", "allocate", "editaudience", "editbom", "editcampaign", "editcategory", "editcontact", "editcustomer", "editdepartment", "editemployee", "editjobtitle", "editorder", "editproduct", "editsocialpost", "editsupplier", "edittag", "edittemplate", "editwarehouse", "genreplenishment", "issue", "newaudience", "newbom", "newcampaign", "newcategory",
-      "newcontact", "newcustomer", "newdepartment", "newexpense", "newexpensecategory", "newinvoice", "newjobtitle", "neworder", "newproduct", "newsocialpost", "newsupplier", "newtag", "newtemplate", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "submitleave", "transfer",
+      "adjust", "adjustleave", "allocate", "editaudience", "editbom", "editcampaign", "editcategory", "editcontact", "editcustomer", "editdepartment", "editemployee", "editjobtitle", "editorder", "editpost", "editproduct", "editsocialpost", "editsupplier", "edittag", "edittemplate", "editwarehouse", "genreplenishment", "issue", "newaudience", "newbom", "newcampaign", "newcategory",
+      "newcontact", "newcustomer", "newdepartment", "newexpense", "newexpensecategory", "newinvoice", "newjobtitle", "neworder", "newpost", "newproduct", "newsocialpost", "newsupplier", "newtag", "newtemplate", "newtopic", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "replytopic", "submitleave", "supportreply", "transfer",
     ]);
     for (const def of drafts) {
       const tool = aiToolRegistry.get(def.draft!.tool);

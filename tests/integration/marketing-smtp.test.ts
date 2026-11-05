@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createHarness, parsed, type TestHarness } from "../helpers/workspace";
 import {
@@ -144,6 +144,9 @@ async function deliveryFor(campaignId: string, contactId: string): Promise<Deliv
 }
 
 beforeAll(async () => {
+  // These tests drive the real dispatch engine with fake providers and no recipient allowlist. Outside production the central
+  // policy refuses every destination (see marketing-allowlist.test.ts), so they run as a production deployment.
+  vi.stubEnv("NODE_ENV", "production");
   h = await createHarness();
   owner = h.ctx("owner");
   approver = { ...h.ctx("owner"), userId: new ObjectId() };
@@ -152,6 +155,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  vi.unstubAllEnvs();
   await h.cleanup();
 });
 

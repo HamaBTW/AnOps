@@ -50,12 +50,14 @@ const CEILING: Record<AiModuleKey, Record<AiOperation, Permission | null>> = {
     delete: PERMISSIONS.FINANCE_CUSTOMER_MANAGE,
     approve: PERMISSIONS.FINANCE_EXPENSE_APPROVE,
   },
+  // Drafts follow the manager's real marketing permissions. Approving and scheduling a campaign, and anything destructive,
+  // is owner/admin only through marketing.admin (managers hold marketing.manage permissions but never approve or dispatch).
   marketing: {
     view: PERMISSIONS.MARKETING_READ,
     create: PERMISSIONS.MARKETING_CONTACT_MANAGE,
     edit: PERMISSIONS.MARKETING_CONTACT_MANAGE,
-    delete: PERMISSIONS.MARKETING_CONTACT_MANAGE,
-    approve: PERMISSIONS.MARKETING_CAMPAIGN_APPROVE,
+    delete: PERMISSIONS.MARKETING_ADMIN,
+    approve: PERMISSIONS.MARKETING_ADMIN,
   },
   // HR writes are owner/admin only, as in the HR server actions. hr.manage is also held by managers, so it is not the ceiling.
   hr: {

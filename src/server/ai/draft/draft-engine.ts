@@ -140,6 +140,7 @@ function systemPrompt(spec: DraftSpec, g: Grounding): string {
     'Example request: "Add a red cotton t-shirt, SKU TS-RED, buy at 4, sell at 9". Example values: {"name":{"value":"Red cotton t-shirt","basis":"stated","evidence":"red cotton t-shirt"},"sku":{"value":"TS-RED","basis":"stated","evidence":"SKU TS-RED"},"cost":{"value":4,"basis":"stated","evidence":"buy at 4"},"salePrice":{"value":9,"basis":"stated","evidence":"sell at 9"}}',
     "",
     "10. Go through EVERY field and every item the request mentions before answering. If the request lists items with quantities, each item MUST appear in \"lines\". If it gives a date, a name or a number for a field, include that field.",
+    ...(spec.guidance ? [`12. ${spec.guidance}`] : []),
     ...(spec.lines
       ? [
           `11. Line items go in "lines", never in "values": [{"ref":"words naming the item, its name or SKU, never an id","values":{"<column>":{"value":...,"basis":"stated","evidence":"exact words"}},"remove":true?}]. Columns: ${(g.fields.find((f) => f.name === spec.lines!.field)?.lines?.columns ?? []).filter((c) => c.kind !== "readonly").map((c) => c.name).join(", ")}. Quantities and prices must be stated by the person.`,

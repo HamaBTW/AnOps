@@ -127,6 +127,9 @@ async function expectCode(promise: Promise<unknown>, code: string) {
 }
 
 beforeAll(async () => {
+  // These tests drive the real dispatch engine with fake providers and no recipient allowlist. Outside production the central
+  // policy refuses every destination (see marketing-allowlist.test.ts), so they run as a production deployment.
+  vi.stubEnv("NODE_ENV", "production");
   h = await createHarness();
   owner = h.ctx("owner");
   approver = { ...h.ctx("owner"), userId: new ObjectId() };
@@ -134,7 +137,10 @@ beforeAll(async () => {
   viewer = { ...h.ctx("viewer"), userId: new ObjectId() };
   other = h.otherTenant("owner");
 });
-afterAll(async () => h.cleanup());
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await h.cleanup();
+});
 afterEach(() => {
   calls = [];
   respond = () => json(200, { ok: true, result: { message_id: nextMessageId() } });

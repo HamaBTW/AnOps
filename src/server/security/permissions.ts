@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   MARKETING_SOCIAL_MANAGE: "marketing.social.manage",
   MARKETING_SOCIAL_PUBLISH: "marketing.social.publish",
   MARKETING_AI_GENERATE: "marketing.ai.generate",
+  /** Approvals and sends made through the AI Command Center: owners and admins only. The ceiling for AI approve and delete cells. */
+  MARKETING_ADMIN: "marketing.admin",
   /** Owner/admin only. Using AI needs no role permission: the company grant plus each cell's own module permission is the gate. */
   AI_ACCESS_MANAGE: "ai.access.manage",
   AI_USAGE_VIEW: "ai.usage.view",

@@ -69,6 +69,8 @@ export type DraftSpec = {
   noun: string;
   /** Overrides the default titles for actions that are not plain create/edit, for example "Receive stock". */
   action?: string;
+  /** Extra instructions for the model about this kind of record (for example, that it should write the message text itself). */
+  guidance?: string;
   /** One example sentence shown to the person. */
   examples: string[];
   /** The write tool this ends in. Lets a natural-language chat request land in the same draft card. */

@@ -86,13 +86,13 @@ describe("tool registry guards", () => {
     expect(() => createToolRegistry([defineTool({ ...base, name: "Bad Name", input: z.object({}) })])).toThrow(/Invalid/);
   });
 
-  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing, Finance and HR tools", () => {
+  it("the production registry passes its own checks and exposes only Core, Inventory, Purchasing, Manufacturing, Finance, HR and Marketing tools", () => {
     const names = aiToolRegistry.all().map((t) => t.name);
     expect(names.slice(0, CORE_TOOLS.length)).toEqual(CORE_TOOLS.map((t) => t.name));
-    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance", "hr"].includes(t.module))).toBe(true);
-    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance|hr)_/.test(n))).toBe(true);
-    // Marketing, CRM and the rest have no AI tools yet: nothing may claim them.
-    expect(names.some((n) => /marketing|crm|sales|community|company/.test(n))).toBe(false);
+    expect(aiToolRegistry.all().every((t) => ["core", "inventory", "purchasing", "manufacturing", "finance", "hr", "marketing"].includes(t.module))).toBe(true);
+    expect(names.every((n) => n === "show_my_access" || /^(inventory|purchasing|manufacturing|finance|hr|marketing)_/.test(n))).toBe(true);
+    // CRM and the rest have no AI tools yet: nothing may claim them.
+    expect(names.some((n) => /crm|sales|community|company/.test(n))).toBe(false);
   });
 
   it("every Purchasing and Manufacturing write names its record in the confirmation, and money or stock movers are typed or sensitive", () => {
@@ -136,6 +136,34 @@ describe("tool registry guards", () => {
     for (const tool of ["hr_approve_leave_request", "hr_reject_leave_request", "hr_cancel_leave_request"]) expect(commandRegistry.byDraftTool(tool), tool).toBeUndefined();
   });
 
+  it("Marketing: nothing sends, publishes, grants consent or reaches a provider; sending is owner/admin only and typed", () => {
+    const mk = aiToolRegistry.all().filter((t) => t.module === "marketing");
+    const writes = mk.filter((t) => t.kind === "write");
+    for (const t of writes) expect(t.prepare, t.name).toBeTypeOf("function");
+    expect(writes.map((t) => t.name).filter((n) => /consent|delete|telegram|publish|send_now|sendnow|credential|token|webhook|integration|dispatch/.test(n))).toEqual([]);
+    expect(writes.map((t) => t.name).filter((n) => /schedule/.test(n))).toEqual(["marketing_schedule_campaign"]);
+    for (const n of ["marketing_approve_campaign", "marketing_schedule_campaign", "marketing_cancel_campaign"]) {
+      const t = aiToolRegistry.get(n)!;
+      expect(t.permission, n).toBe(PERMISSIONS.MARKETING_ADMIN);
+      expect(t.operation, n).toBe("approve");
+      expect(["financial", "destructive"], n).toContain(t.risk);
+    }
+    for (const t of mk.filter((x) => x.kind === "read")) expect(t.risk, t.name).toBe("low");
+    // No tool accepts a credential, a token or a consent value.
+    expect(JSON.stringify(mk.map((t) => z.toJSONSchema(t.input, { io: "input", unrepresentable: "any" })))).not.toMatch(/consent":\{|botToken|apiKey|password|secret|webhook|chatId/i);
+    for (const tool of ["marketing_approve_campaign", "marketing_schedule_campaign", "marketing_cancel_campaign", "marketing_submit_campaign"]) expect(commandRegistry.byDraftTool(tool), tool).toBeUndefined();
+    expect(commandRegistry.get("schedulecampaign")?.permission).toBe(PERMISSIONS.MARKETING_ADMIN);
+    expect(commandRegistry.all().filter((c) => c.module === "marketing").map((c) => c.name).filter((n) => /consent|delete|telegram|publish|sendnow|send/.test(n.replace("sendingsetup", "")))).toEqual([]);
+  });
+
+  it("Marketing ceiling: managers keep their real draft permissions but can never hold the approve or delete cells", () => {
+    const manager = permissionsForRole("operator");
+    for (const op of ["view", "create", "edit"] as const) expect(roleAllows(manager, "marketing", op), op).toBe(true);
+    for (const op of ["delete", "approve"] as const) expect(roleAllows(manager, "marketing", op), op).toBe(false);
+    for (const op of ["delete", "approve"] as const) expect(roleAllows(permissionsForRole("admin"), "marketing", op), op).toBe(true);
+    expect(roleAllows(permissionsForRole("viewer"), "marketing", "create")).toBe(false);
+  });
+
   it("HR writes are beyond a manager's role ceiling: a grant cannot be saved for them", () => {
     const manager = permissionsForRole("operator");
     expect(roleAllows(manager, "hr", "view")).toBe(true);
@@ -158,8 +186,8 @@ describe("AI-assisted entry declarations", () => {
   it("every draft-capable command ends in a registered write tool of the same module, keeps a manual step, and marks its critical fields", () => {
     const drafts = commandRegistry.all().filter((c) => c.draft);
     expect(drafts.map((c) => c.name).sort()).toEqual([
-      "adjust", "adjustleave", "allocate", "editbom", "editcategory", "editcustomer", "editdepartment", "editemployee", "editjobtitle", "editorder", "editproduct", "editsupplier", "editwarehouse", "genreplenishment", "issue", "newbom", "newcategory",
-      "newcustomer", "newdepartment", "newexpense", "newexpensecategory", "newinvoice", "newjobtitle", "neworder", "newproduct", "newsupplier", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "submitleave", "transfer",
+      "adjust", "adjustleave", "allocate", "editaudience", "editbom", "editcampaign", "editcategory", "editcontact", "editcustomer", "editdepartment", "editemployee", "editjobtitle", "editorder", "editproduct", "editsocialpost", "editsupplier", "edittag", "edittemplate", "editwarehouse", "genreplenishment", "issue", "newaudience", "newbom", "newcampaign", "newcategory",
+      "newcontact", "newcustomer", "newdepartment", "newexpense", "newexpensecategory", "newinvoice", "newjobtitle", "neworder", "newproduct", "newsocialpost", "newsupplier", "newtag", "newtemplate", "newwarehouse", "newworkorder", "receive", "receivegoods", "recordpayment", "submitleave", "transfer",
     ]);
     for (const def of drafts) {
       const tool = aiToolRegistry.get(def.draft!.tool);

@@ -5,6 +5,7 @@ import { isStillEligible } from "@/server/marketing/eligibility";
 import { getAppUrl } from "@/config/env";
 import { createUnsubscribeToken } from "@/server/marketing/unsubscribe-token";
 import { companyName } from "@/server/marketing/common";
+import { isAllowlistedDestination } from "@/server/marketing/config";
 import { renderMessage } from "@/server/marketing/message";
 import { ProviderError, getConfiguredProviders, type MessageProviders, type MessageProvider } from "@/server/marketing/providers";
 import { claimNextJob, finishJob, type JobOutcome } from "@/server/marketing/jobs";
@@ -279,6 +280,16 @@ async function sendDelivery(
     await deliveries.updateOne(
       { _id: delivery._id },
       { $set: { status: "suppressed", exclusionReason: eligibility.reason, updatedAt: now } }
+    );
+    return;
+  }
+
+  // One gate for every channel and every provider, before any request is built. The adapters enforce the same list as a
+  // second line of defence; this one cannot be bypassed by a provider that forgets to.
+  if (!isAllowlistedDestination(campaign.channel, eligibility.destination)) {
+    await deliveries.updateOne(
+      { _id: delivery._id },
+      { $set: { status: "failed", failedAt: new Date(), lastErrorCode: "NOT_ALLOWLISTED", nextAttemptAt: null, updatedAt: new Date() } }
     );
     return;
   }

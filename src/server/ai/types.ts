@@ -5,9 +5,28 @@ import "server-only";
  * Every provider adapter must implement the AiProvider interface.
  */
 
+/** A tool call requested by a model, normalized across providers. `arguments` is a JSON string. */
+export type AiToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+
+/** A tool offered to the model. `parameters` is a JSON schema object. */
+export type AiToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+};
+
 export type AiMessage = {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Assistant turns only: the tool calls the model asked for. */
+  toolCalls?: AiToolCall[];
+  /** Tool turns only: the call this result answers, and the tool's name (Gemini needs the name). */
+  toolCallId?: string;
+  toolName?: string;
 };
 
 export type AiCompletionOptions = {
@@ -27,11 +46,10 @@ export type AiCompletionOptions = {
    * If set, AiMaster routes to this provider first.
    */
   provider?: string;
-  /**
-   * Ask the provider for JSON output (Groq JSON mode). Only the Groq adapter honours it;
-   * other adapters ignore it, so callers that need JSON must pin `provider: "groq"`.
-   */
+  /** Ask the provider for JSON output. Callers must still validate the result. */
   jsonObject?: boolean;
+  /** Tools the model may call. Results come back in `AiCompletionResult.toolCalls`. */
+  tools?: AiToolDefinition[];
 };
 
 export type AiCompletionResult = {
@@ -49,6 +67,28 @@ export type AiCompletionResult = {
   };
   /** Optional metadata attached by agent hooks or context */
   metadata?: Record<string, unknown>;
+  /** Tool calls the model requested, if any. `text` may be empty when this is set. */
+  toolCalls?: AiToolCall[];
+};
+
+/** Tasks with their own provider order. See `src/server/ai/routing.ts`. */
+export type AiTaskType = "copilot_chat" | "advisor_json" | "policy_qa";
+
+export type AiChatOptions = AiCompletionOptions & {
+  taskType: AiTaskType;
+  /** Per-attempt ceiling in milliseconds. */
+  timeoutMs?: number;
+};
+
+export type AiProviderFallback = {
+  provider: string;
+  reason: "timeout" | "rate_limited" | "invalid_response" | "provider_error";
+};
+
+export type AiChatResult = AiCompletionResult & {
+  latencyMs: number;
+  /** Providers that failed before this one answered. Reasons never carry provider text. */
+  fallbacks: AiProviderFallback[];
 };
 
 /**

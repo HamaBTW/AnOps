@@ -16,3 +16,21 @@ export function groqApiKeyList(): string | undefined {
 export function groqModelOverride(): string | undefined {
   return process.env.GROQ_MODEL?.trim() || undefined;
 }
+
+function parseProviderList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Optional provider order for a task, e.g. `AI_ROUTE_COPILOT_CHAT=groq,gemini`. Undefined uses the default. */
+export function aiRouteOverride(taskType: string): string[] | undefined {
+  const list = parseProviderList(process.env[`AI_ROUTE_${taskType.toUpperCase()}`]);
+  return list.length ? list : undefined;
+}
+
+/** Providers skipped by task routing, e.g. `AI_DISABLED_PROVIDERS=groq`. Used to rehearse a provider outage. */
+export function aiDisabledProviders(): string[] {
+  return parseProviderList(process.env.AI_DISABLED_PROVIDERS);
+}

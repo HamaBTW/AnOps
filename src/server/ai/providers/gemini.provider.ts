@@ -1,8 +1,9 @@
 import "server-only";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { Content, FunctionDeclaration, FunctionDeclarationSchema, Tool } from "@google/generative-ai";
 import { KeyPool } from "@/server/ai/key-pool";
-import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
+import type { AiMessage, AiProvider, AiCompletionOptions, AiCompletionResult, AiToolDefinition } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
 /**
@@ -67,22 +68,15 @@ export class GeminiProvider implements AiProvider {
           generationConfig: {
             maxOutputTokens: options.maxTokens ?? 1024,
             temperature: options.temperature ?? 0.7,
+            ...(options.jsonObject ? { responseMimeType: "application/json" } : {}),
           },
         });
 
         // Separate system prompt from the conversation
         const systemMsg = options.messages.find((m) => m.role === "system");
-        const conversationMsgs = options.messages.filter((m) => m.role !== "system");
 
-        // Build Gemini history (all turns except the last user message)
-        const history = conversationMsgs.slice(0, -1).map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        }));
-
-        // System instruction (injected as a preamble if the model supports it)
-        const chat = gemModel.startChat({
-          history,
+        const result = await gemModel.generateContent({
+          contents: toGeminiContents(options.messages),
           ...(systemMsg
             ? {
                 systemInstruction: {
@@ -91,14 +85,18 @@ export class GeminiProvider implements AiProvider {
                 },
               }
             : {}),
+          ...(options.tools?.length ? { tools: toGeminiTools(options.tools) } : {}),
         });
-
-        const lastUserMsg = conversationMsgs[conversationMsgs.length - 1]?.content ?? "";
-        const result = await chat.sendMessage(lastUserMsg);
         const text = result.response.text();
+        const toolCalls = result.response.functionCalls()?.map((call, index) => ({
+          id: `gemini-call-${index}`,
+          name: call.name,
+          arguments: JSON.stringify(call.args ?? {}),
+        }));
 
         return {
           text,
+          ...(toolCalls?.length ? { toolCalls } : {}),
           provider: this.name,
           model,
           // Gemini SDK returns usage in usageMetadata
@@ -143,4 +141,76 @@ export class GeminiProvider implements AiProvider {
       true
     );
   }
+}
+
+/** Maps normalized messages to Gemini turns. Consecutive tool results share one "function" turn, as Gemini requires. */
+function toGeminiContents(messages: AiMessage[]): Content[] {
+  const contents: Content[] = [];
+  for (const m of messages) {
+    if (m.role === "system") continue;
+    if (m.role === "tool") {
+      const part = { functionResponse: { name: m.toolName ?? "", response: { result: m.content } } };
+      const last = contents[contents.length - 1];
+      if (last?.role === "function") last.parts.push(part);
+      else contents.push({ role: "function", parts: [part] });
+      continue;
+    }
+    if (m.role === "assistant") {
+      contents.push({
+        role: "model",
+        parts: [
+          ...(m.content ? [{ text: m.content }] : []),
+          ...(m.toolCalls ?? []).map((call) => ({
+            functionCall: { name: call.name, args: parseArgs(call.arguments) },
+          })),
+        ],
+      });
+      continue;
+    }
+    contents.push({ role: "user", parts: [{ text: m.content }] });
+  }
+  return contents;
+}
+
+function parseArgs(json: string): object {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function toGeminiTools(tools: AiToolDefinition[]): Tool[] {
+  const functionDeclarations: FunctionDeclaration[] = tools.map((tool) => {
+    const parameters = toGeminiSchema(tool.parameters);
+    const hasProperties = Object.keys((parameters.properties as object | undefined) ?? {}).length > 0;
+    return {
+      name: tool.name,
+      description: tool.description,
+      // Gemini rejects an object schema with no properties, so a no-argument tool omits it.
+      ...(hasProperties ? { parameters: parameters as unknown as FunctionDeclarationSchema } : {}),
+    };
+  });
+  return [{ functionDeclarations }];
+}
+
+/** Gemini accepts only part of JSON schema: keep type, description, enum, items, properties and required. */
+function toGeminiSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of ["type", "description", "enum", "required"]) {
+    if (schema[key] !== undefined) out[key] = schema[key];
+  }
+  if (schema.items && typeof schema.items === "object") {
+    out.items = toGeminiSchema(schema.items as Record<string, unknown>);
+  }
+  if (schema.properties && typeof schema.properties === "object") {
+    out.properties = Object.fromEntries(
+      Object.entries(schema.properties as Record<string, Record<string, unknown>>).map(([name, value]) => [
+        name,
+        toGeminiSchema(value),
+      ])
+    );
+  }
+  return out;
 }

@@ -1,84 +1,114 @@
 "use server";
 
-import { requireAuthUser } from "@/server/auth/rbac";
-import { HRAssistantAgent } from "@/features/hr/ai/hr-assistant.agent";
-import type { AgentMessage, AgentResponse } from "@/server/ai/base-agent";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requireAuthUser, type CurrentAuthContext } from "@/server/auth/rbac";
+import { consumeRateLimit } from "@/server/security/rate-limit";
+import { cancelPendingAction, confirmPendingAction } from "@/server/services/hr-ai.service";
+import { runCopilotTurn } from "@/features/hr/ai/hr-copilot";
+import type { ToolContext } from "@/features/hr/ai/tool-registry";
+import type { AiActionResult, ConfirmationCard, CopilotSources } from "@/features/hr/ai/types";
+
+const CHAT_LIMIT_PER_MINUTE = 20;
+const UNAVAILABLE = "AI is temporarily unavailable. Please try again.";
 
 const chatSchema = z.object({
-  userMessage: z.string().min(1).max(2000),
-  employeeId: z.string().optional(),
-  /** Model ID to force (e.g. "openai/gpt-oss-120b"). Omit for auto. */
-  model: z.string().optional(),
-  /** Provider to route to (e.g. "groq", "openrouter", "gemini"). Omit for auto. */
-  provider: z.string().optional(),
+  userMessage: z.string().trim().min(1).max(2000),
+  conversationId: z.string().max(64).optional(),
+  uiLanguage: z.string().max(20).optional(),
+  /** Model and provider chosen in the UI selector. Omit for task routing. */
+  model: z.string().max(120).optional(),
+  provider: z.string().max(40).optional(),
   history: z
-    .array(
-      z.object({
-        id: z.string(),
-        role: z.enum(["user", "assistant", "system"]),
-        content: z.string(),
-        timestamp: z.string(),
-        metadata: z.record(z.string(), z.unknown()).optional(),
-      })
-    )
+    .array(z.object({ role: z.string().max(20), content: z.string().max(20_000) }))
+    .max(100)
     .optional()
     .default([]),
 });
 
-type ChatResult =
-  | { ok: true; response: AgentResponse }
+export type CopilotChatResult =
+  | {
+      ok: true;
+      text: string;
+      provider?: string;
+      model?: string;
+      cards: ConfirmationCard[];
+      sources: CopilotSources;
+      balanceCard?: Record<string, unknown>;
+    }
   | { ok: false; error: string };
 
-// Module-level singleton — one agent instance per server lifetime
-const hrAgent = new HRAssistantAgent();
+/** Identity, company and role come from the session only. The client never supplies them. */
+function toolContext(authUser: CurrentAuthContext, conversationId?: string): ToolContext {
+  return {
+    userId: authUser.userId,
+    employeeId: authUser.employee?.id,
+    companyId: authUser.companyId,
+    role: authUser.role,
+    actorName: authUser.employee?.fullName || authUser.email,
+    conversationId,
+  };
+}
 
-/**
- * Server action: chat with the HR Assistant agent.
- *
- * Accepts conversation history for multi-turn context, and an optional
- * model / provider override from the UI provider/model selector.
- */
-export async function chatWithHRAssistantAction(
-  rawData: unknown
-): Promise<ChatResult> {
+export async function chatWithHRAssistantAction(rawData: unknown): Promise<CopilotChatResult> {
   try {
     const authUser = await requireAuthUser();
+    consumeRateLimit(`hr-copilot:${authUser.userId}`, CHAT_LIMIT_PER_MINUTE, 60_000);
 
     const parsed = chatSchema.safeParse(rawData);
     if (!parsed.success) {
       return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
     }
 
-    const { userMessage, employeeId, model, provider, history } = parsed.data;
+    const { userMessage, conversationId, uiLanguage, model, provider, history } = parsed.data;
+    const reply = await runCopilotTurn(toolContext(authUser, conversationId), {
+      message: userMessage,
+      history,
+      uiLanguage,
+      model,
+      provider,
+    });
 
-    // Security: Non-admins cannot query other employee IDs via client payload
-    let effectiveEmployeeId = employeeId;
-    if (!authUser.isAdmin) {
-      effectiveEmployeeId = authUser.employee?.id || employeeId;
-    }
-
-    const response = await hrAgent.chat(
-      history as AgentMessage[],
-      userMessage,
-      {
-        employeeId: effectiveEmployeeId,
-        companyId: authUser.companyId,
-        isAdmin: authUser.isAdmin,
-        userRole: authUser.role,
-        userEmployeeId: authUser.employee?.id,
-        userFullName: authUser.employee?.fullName,
-        userEmail: authUser.email,
-      },
-      model,     // model override — undefined = let AiMaster auto-select
-      provider   // provider override — undefined = let AiMaster auto-select
-    );
-
-    return { ok: true, response };
+    return {
+      ok: true,
+      text: reply.text,
+      provider: reply.provider,
+      model: reply.model,
+      cards: reply.cards,
+      sources: reply.sources,
+      balanceCard: reply.balanceCard,
+    };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "HR Assistant failed to respond.";
-    console.error("[chatWithHRAssistantAction]", err);
-    return { ok: false, error: message };
+    console.error("[chatWithHRAssistantAction]", err instanceof Error ? err.message : "unknown");
+    return { ok: false, error: UNAVAILABLE };
   }
 }
 
+const actionIdSchema = z.string().min(1).max(64);
+
+/** Executes a confirmed action. Takes only its id: the stored, validated payload is what runs. */
+export async function confirmAiActionAction(actionId: unknown): Promise<AiActionResult> {
+  try {
+    const authUser = await requireAuthUser();
+    const id = actionIdSchema.safeParse(actionId);
+    if (!id.success) return { ok: false, error: "Action not found." };
+    const result = await confirmPendingAction(id.data, toolContext(authUser));
+    if (result.ok) revalidatePath("/hr");
+    return result;
+  } catch (err) {
+    console.error("[confirmAiActionAction]", err instanceof Error ? err.name : "unknown");
+    return { ok: false, error: "The action could not be completed. Please try again." };
+  }
+}
+
+export async function cancelAiActionAction(actionId: unknown): Promise<AiActionResult> {
+  try {
+    const authUser = await requireAuthUser();
+    const id = actionIdSchema.safeParse(actionId);
+    if (!id.success) return { ok: false, error: "Action not found." };
+    return await cancelPendingAction(id.data, toolContext(authUser));
+  } catch (err) {
+    console.error("[cancelAiActionAction]", err instanceof Error ? err.name : "unknown");
+    return { ok: false, error: "The action could not be cancelled. Please try again." };
+  }
+}

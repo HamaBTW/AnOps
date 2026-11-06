@@ -3,6 +3,7 @@ import type { Db, IndexDescription } from "mongodb";
 import { COLLECTIONS } from "@/server/db/documents";
 import { AppError } from "@/shared/lib/errors";
 import { MARKETING_INDEXES } from "@/server/marketing/indexes";
+import { HR_AI_INDEXES } from "@/server/services/hr-ai.indexes";
 
 /**
  * Index definitions for every company-scoped collection (HR, inventory, purchasing, manufacturing),
@@ -93,6 +94,7 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, status: 1, createdAt: -1 }, name: "wo_status_time" },
   ],
   ...MARKETING_INDEXES,
+  ...HR_AI_INDEXES,
 };
 
 const initialized = new WeakMap<Db, Promise<void>>();

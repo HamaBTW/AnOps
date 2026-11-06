@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, useEffect } from "react";
+import { Fragment, useState, useTransition, useMemo, useEffect } from "react";
 import {
   Calendar,
   Plus,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { Employee, LeaveRequest, LeaveBalance, LeaveStatus, SoldeDeConge } from "@/features/hr/types";
 import { getAgeCategory } from "@/features/hr/utils/date-utils";
+import { AdvisorCard } from "./advisor-card";
 import { LeaveRequestModal } from "./leave-request-modal";
 import { LeaveHistoryModal } from "./leave-history-modal";
 import { ManualAdjustmentModal } from "./manual-adjustment-modal";
@@ -553,7 +554,8 @@ export function LeaveSection({
                   const isApproved = req.status === "approved";
 
                   return (
-                    <tr key={req.id} className="hover:bg-[var(--color-bg-subtle)]/50 transition-colors">
+                    <Fragment key={req.id}>
+                    <tr className="hover:bg-[var(--color-bg-subtle)]/50 transition-colors">
                       {/* Employee */}
                       <td className="px-4 py-3.5">
                         <div className="font-bold text-[var(--color-text-primary)]">
@@ -651,6 +653,14 @@ export function LeaveSection({
                       </td>
 
                     </tr>
+                    {isPendingStatus && isAdmin && (
+                      <tr>
+                        <td colSpan={6} className="px-4 pb-3 pt-0">
+                          <AdvisorCard requestId={req.id} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
               )}
@@ -744,6 +754,8 @@ export function LeaveSection({
                     </div>
                   )}
 
+                  {isPendingStatus && isAdmin && <AdvisorCard requestId={req.id} />}
+
                   {/* Actions on Mobile — admin only */}
                   {isPendingStatus && isAdmin ? (
                     <div className="grid grid-cols-2 gap-2 pt-1">
@@ -834,6 +846,8 @@ export function LeaveSection({
                     </div>
                   )}
                 </div>
+
+                <AdvisorCard requestId={requestToReview.id} defaultOpen />
 
                 {reviewAction === "approve" && (
                   <div>

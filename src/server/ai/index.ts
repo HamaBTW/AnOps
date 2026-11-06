@@ -3,7 +3,8 @@ import "server-only";
 import { GroqProvider } from "@/server/ai/providers/groq.provider";
 import { OpenRouterProvider } from "@/server/ai/providers/openrouter.provider";
 import { GeminiProvider } from "@/server/ai/providers/gemini.provider";
-import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
+import { routeChat } from "@/server/ai/routing";
+import type { AiProvider, AiChatOptions, AiChatResult, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
 /**
@@ -121,6 +122,16 @@ class AiMaster {
   }
 
   /**
+   * Task-routed completion with tool calling and a normalized result.
+   * Each task type has its own provider order (see `src/server/ai/routing.ts`).
+   *
+   * @throws Error when every provider in the task's chain fails.
+   */
+  chat(options: AiChatOptions): Promise<AiChatResult> {
+    return routeChat(this.providers, options);
+  }
+
+  /**
    * Convenience: quick single-turn prompt.
    *
    * @example
@@ -156,4 +167,13 @@ class AiMaster {
 export const ai = new AiMaster();
 
 // Re-export types for convenience
-export type { AiCompletionOptions, AiCompletionResult, AiMessage } from "@/server/ai/types";
+export type {
+  AiChatOptions,
+  AiChatResult,
+  AiCompletionOptions,
+  AiCompletionResult,
+  AiMessage,
+  AiTaskType,
+  AiToolCall,
+  AiToolDefinition,
+} from "@/server/ai/types";

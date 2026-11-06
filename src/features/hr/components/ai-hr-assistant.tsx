@@ -1,65 +1,64 @@
 "use client";
 
-import { Sparkles, ShieldCheck, BookOpen, X, Calendar, Plus } from "lucide-react";
+import { Sparkles, ShieldCheck, BookOpen, X, Calendar, Plus, History } from "lucide-react";
+import Link from "next/link";
 import { AgentChatPanel } from "@/shared/components/ai/agent-chat-panel";
 import type { ChatMessage } from "@/shared/components/ai/agent-chat-panel";
 import { chatWithHRAssistantAction } from "@/features/hr/actions/hr-assistant.action";
 import { COMPANY_POLICIES } from "@/features/hr/policies/company-policies";
-import type { Employee } from "@/features/hr/types";
+import { ConfirmationCard, SourcesLine } from "@/features/hr/components/copilot-cards";
+import type { ConfirmationCard as ConfirmationCardData, CopilotSources } from "@/features/hr/ai/types";
 import { useState } from "react";
 import { Portal } from "@/shared/components/ui/portal";
 
 type AIHRAssistantProps = {
-  currentEmployee?: Employee | null;
-  employees: Employee[];
   userRole?: "employee" | "manager" | "hr_admin";
   /** Callback to switch tabs in the HR portal */
   onNavigateTab?: (tab: "employees" | "leave" | "attendance" | "payroll" | "ai") => void;
   /** Callback to directly open the new leave request modal */
   onOpenLeaveRequest?: () => void;
+  /** Reloads HR data after a confirmed action */
+  onDataChanged?: () => void;
 };
 
 const SUGGESTED_PROMPTS_EMPLOYEE = [
-  "How many leave days do I have left in my leave balance?",
-  "Explain how my Solde de Congé is counted step-by-step",
-  "How is unpaid leave deducted from my salary in payroll?",
+  "How many days do I have left?",
+  "Book 3 days of annual leave starting next Monday",
+  "Show my leave requests",
+  "Is unpaid leave deducted from my salary?",
   "What happens to my unused leave if I leave the company?",
-  "What is the sick leave procedure?",
 ];
 
 const SUGGESTED_PROMPTS_ADMIN = [
-  "Explain how Solde de Congé is counted step-by-step",
-  "What is Sarah Ben Salem's leave balance and history?",
-  "How is unpaid leave deducted in payroll?",
-  "Check Karim Mansour's unconsumed leave",
-  "What happens to unused leave on employee departure?",
+  "Who is absent today?",
+  "Show pending leave requests",
+  "Preview payroll for this month",
+  "Who is on leave next week?",
+  "How is Solde de congé calculated?",
 ];
 
-const WELCOME_MESSAGE = `Hello! I'm your **AnOps HR Assistant** — powered by AI with real-time access to your company policies and **Leave Balance** ledger.
+const WELCOME_MESSAGE = `Hello! I'm your **AnOps HR Copilot**. I work from your company policies and live HR data, in English, French, Arabic or Derja.
 
-I can help you with:
-- 🌴 **Leave Balance** — your real-time breakdown (Earned, Taken, Reserved, Available) & Tunisian Labour Code (Art. 113-114)
-- 💰 **Payroll & Deductions** — net salary formula & unpaid leave calculations
-- ⏱️ **Attendance & Punch** — working hours, flex arrival (8:30-9:30 AM), and punctuality
-- 📋 **Policies & Departures** — sick leave, family events, and unused leave compensation
+I can:
+- 🌴 Explain your **Solde de congé** and how it is calculated
+- 📝 **Prepare a leave request or cancellation**. Nothing is submitted until you click Confirm
+- 💰 Explain **payroll and deductions**
+- 📋 Answer questions on **HR policies**
 
-What would you like to know?`;
+What would you like to do?`;
 
 /**
- * AI HR Assistant panel — uses AgentChatPanel (shared UI) wired to
- * HRAssistantAgent (extends BaseAgent) via chatWithHRAssistantAction.
+ * AI HR Copilot panel: AgentChatPanel (shared UI) wired to the copilot via chatWithHRAssistantAction.
+ * Identity and role are decided on the server; the props here only choose what to display.
  */
 export function AIHRAssistant({
-  currentEmployee,
-  employees,
   userRole = "employee",
   onNavigateTab,
   onOpenLeaveRequest,
+  onDataChanged,
 }: AIHRAssistantProps) {
   const isAdmin = userRole === "hr_admin";
-  const [activeEmployeeId, setActiveEmployeeId] = useState(
-    currentEmployee?.id ?? employees[0]?.id ?? ""
-  );
+  const [conversationId] = useState(() => `hr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [selectedPolicyId, setSelectedPolicyId] = useState(COMPANY_POLICIES[0]?.id ?? "");
 
@@ -90,50 +89,37 @@ export function AIHRAssistant({
   ) => {
     const result = await chatWithHRAssistantAction({
       userMessage: userText,
-      employeeId: activeEmployeeId,
+      conversationId,
+      uiLanguage: typeof navigator === "undefined" ? undefined : navigator.language,
       model: selectedModel || undefined,
       provider: selectedProvider || undefined,
-      history: history.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-        metadata: m.metadata,
-      })),
+      // The last entry is the message being sent. Earlier cards and metadata are not sent back.
+      history: history.slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content })),
     });
 
     if (!result.ok) {
-      throw new Error(result.error);
+      return { text: result.error };
     }
 
     return {
-      text: result.response.message.content,
-      metadata: result.response.message.metadata,
-      provider: result.response.provider,
-      model: result.response.model,
+      text: result.text,
+      metadata: { cards: result.cards, sources: result.sources, balanceCard: result.balanceCard },
+      provider: result.provider,
+      model: result.model,
     };
   };
 
   const toolbar = (
     <div className="flex items-center gap-2">
-      {/* Employee context switcher — HR Admin only */}
-      {isAdmin && employees.length > 1 && (
-        <div className="flex items-center gap-1.5">
-          <label className="text-[11px] font-bold text-[var(--color-text-secondary)]">
-            Context:
-          </label>
-          <select
-            value={activeEmployeeId}
-            onChange={(e) => setActiveEmployeeId(e.target.value)}
-            className="min-h-[34px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-action-primary)]"
-          >
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.fullName}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* AI audit trail: HR Admin only, also enforced by the page */}
+      {isAdmin && (
+        <Link
+          href="/hr/ai-activity"
+          className="flex min-h-[36px] items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] transition-colors shadow-xs"
+        >
+          <History className="h-3.5 w-3.5" />
+          AI Activity
+        </Link>
       )}
 
       {/* Policy library button */}
@@ -151,29 +137,27 @@ export function AIHRAssistant({
   return (
     <>
       <AgentChatPanel
-        agentName="HR Policy & Leave Assistant"
+        agentName="HR Copilot"
         agentDescription={
           <span className="flex items-center gap-1">
             <ShieldCheck className="h-3.5 w-3.5 text-[var(--color-status-success)]" />
-            Answers grounded in company policies and your real-time HR data
+            Grounded in company policies and live HR data. You confirm every change.
           </span> as unknown as string
         }
         agentIcon={<Sparkles className="h-4 w-4" />}
         welcomeMessage={WELCOME_MESSAGE}
         suggestedPrompts={suggestedPrompts}
-        inputPlaceholder="Ask about leave balance, salary deductions, working hours…"
-        thinkingText="Checking HR policies and personnel records…"
+        inputPlaceholder="Ask a question, or say: Book 3 days starting next Monday…"
+        thinkingText="Checking HR policies and records…"
         toolbar={toolbar}
         onAction={handleAction}
         onSendMessage={handleSend}
         renderMetadataCard={(metadata) => {
-          // Leave balance card
-          if (
-            metadata.type === "leave_balance" &&
-            metadata.data &&
-            typeof metadata.data === "object"
-          ) {
-            const d = metadata.data as Record<string, unknown>;
+          const cards = (metadata.cards ?? []) as ConfirmationCardData[];
+          const sources = metadata.sources as CopilotSources | undefined;
+          const balanceCard = () => {
+            if (!metadata.balanceCard) return null;
+            const d = metadata.balanceCard as Record<string, unknown>;
             const employeeName = typeof d.employeeName === "string" ? d.employeeName : undefined;
             const earned = Number(d.earned ?? d.allowance ?? 0);
             const taken = Number(d.taken ?? d.usedPaidDays ?? d.used ?? 0);
@@ -200,11 +184,11 @@ export function AIHRAssistant({
                     <span className="text-[9px] text-[var(--color-text-secondary)] font-medium block">Taken</span>
                     <div className="font-bold text-xs text-[var(--color-text-secondary)]">{taken}d</div>
                   </div>
-                  <div className="p-1.5 rounded-md bg-amber-500/10 border border-amber-500/20">
-                    <span className="text-[9px] text-amber-700 font-bold block">Reserved</span>
-                    <div className="font-bold text-xs text-amber-800">{reserved}d</div>
+                  <div className="p-1.5 rounded-md bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)]">
+                    <span className="text-[9px] text-[var(--color-warning-text)] font-bold block">Reserved</span>
+                    <div className="font-bold text-xs text-[var(--color-warning-text)]">{reserved}d</div>
                   </div>
-                  <div className="p-1.5 rounded-md bg-[var(--color-status-success)]/10 border border-[var(--color-status-success)]/20">
+                  <div className="p-1.5 rounded-md bg-[var(--color-status-success-bg)]">
                     <span className="text-[9px] font-bold text-[var(--color-status-success)] block">Available</span>
                     <div className="font-black text-xs text-[var(--color-status-success)]">{available}d</div>
                   </div>
@@ -237,8 +221,17 @@ export function AIHRAssistant({
                 </div>
               </div>
             );
-          }
-          return null;
+          };
+
+          return (
+            <div className="space-y-2.5">
+              {cards.map((card) => (
+                <ConfirmationCard key={card.actionId} card={card} onConfirmed={onDataChanged} />
+              ))}
+              {balanceCard()}
+              {sources && <SourcesLine sources={sources} />}
+            </div>
+          );
         }}
       />
 

@@ -559,6 +559,64 @@ async function run() {
     updatedAt: new Date(),
   });
 
+  // Approval Advisor demo. Youssef's pending November leave overlaps Hedi, his only colleague in Product & Design:
+  // an approved reservation for Hedi makes that request "Review".
+  const hediOverlapId = new ObjectId();
+  await db.collection("leave_requests").insertOne({
+    _id: hediOverlapId,
+    companyId: cId,
+    employeeId: empMap["hedi.bouazizi@demo.anops.tn"].id,
+    employeeName: empMap["hedi.bouazizi@demo.anops.tn"].fullName,
+    departmentName: empMap["hedi.bouazizi@demo.anops.tn"].departmentName,
+    leaveType: "annual",
+    leaveTypeId: typeMap["CP"],
+    isPaid: true,
+    startDate: "2026-11-23",
+    endDate: "2026-11-24",
+    days: 2,
+    reason: "Family visit",
+    status: "approved",
+    reviewedBy: "HR Administrator",
+    reviewedAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await db.collection("leave_transactions").insertOne({
+    companyId: cId,
+    employeeId: empMap["hedi.bouazizi@demo.anops.tn"].id,
+    employeeName: empMap["hedi.bouazizi@demo.anops.tn"].fullName,
+    leaveTypeId: typeMap["CP"],
+    leaveTypeCode: "CP",
+    transactionType: "RESERVATION",
+    days: 2,
+    effectiveDate: "2026-11-23",
+    referenceId: hediOverlapId.toString(),
+    description: "Reservation for approved leave (2026-11-23 → 2026-11-24)",
+    createdBy: "HR Administrator",
+    createdAt: new Date(),
+  });
+
+  // Tarek's December request is far above his balance, so the advisor shows "Blocked".
+  // Ines's request is otherwise fine; her attendance gap (seeded below) makes it "Review".
+  await db.collection("leave_requests").insertMany(
+    [
+      { emp: empMap["tarek.ayari@demo.anops.tn"], startDate: "2026-12-14", endDate: "2027-01-22", days: 28, reason: "Extended year-end travel" },
+      { emp: empMap["ines.benamor@demo.anops.tn"], startDate: "2026-12-03", endDate: "2026-12-03", days: 1, reason: "Personal appointment" },
+    ].map(({ emp, ...fields }) => ({
+      companyId: cId,
+      employeeId: emp.id,
+      employeeName: emp.fullName,
+      departmentName: emp.departmentName,
+      leaveType: "annual",
+      leaveTypeId: typeMap["CP"],
+      isPaid: true,
+      status: "pending",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...fields,
+    }))
+  );
+
   // Karim: Spring leave (March, 2d) -> leaves 10d unconsumed ready for offboarding demo
   await recordTakenLeave(karim, "CP", "2026-03-12", "2026-03-13", 2, "Personal time off");
 
@@ -703,24 +761,50 @@ async function run() {
     employeeId: { $in: Object.values(empMap).map((e) => e.id) },
   });
 
-  const recentDates = ["2026-11-02", "2026-11-03"];
+  // Working days of the last 45 days, so the Approval Advisor has real attendance to read.
+  const seededHolidays = new Set(
+    (await db.collection("public_holidays").find({ companyId: cId }).toArray()).map((h) => h.date)
+  );
+  const recentDates = [];
+  for (let back = 45; back >= 1; back--) {
+    const day = new Date(Date.now() - back * 86_400_000);
+    const ymd = day.toISOString().slice(0, 10);
+    if (day.getUTCDay() !== 0 && day.getUTCDay() !== 6 && !seededHolidays.has(ymd)) recentDates.push(ymd);
+  }
+
+  const leaveDocs = await db
+    .collection("leave_requests")
+    .find({ companyId: cId, status: { $in: ["approved", "taken"] } }, { projection: { employeeId: 1, startDate: 1, endDate: 1 } })
+    .toArray();
+  const onLeave = (empId, date) =>
+    leaveDocs.some((l) => l.employeeId === empId && l.startDate <= date && l.endDate >= date);
+
+  // Advisor demo: Ines misses recent days with no approved leave, and Tarek often arrives after the flex window.
+  const absentDays = new Map([[ines.id, new Set(recentDates.slice(-8, -3))]]);
+  const lateDays = new Map([[tarek.id, new Set(recentDates.slice(-6))]]);
+
+  const attendanceDocs = [];
   for (const rDate of recentDates) {
     for (const emp of Object.values(empMap)) {
-      await db.collection("attendance").insertOne({
+      if (rDate < emp.hireDate || onLeave(emp.id, rDate) || absentDays.get(emp.id)?.has(rDate)) continue;
+      // 08:30Z is 09:30 in Tunis, the end of the flex window. 09:15Z is 10:15, so late.
+      const checkIn = lateDays.get(emp.id)?.has(rDate) ? `${rDate}T09:15:00Z` : `${rDate}T08:30:00Z`;
+      attendanceDocs.push({
         companyId: cId,
         employeeId: emp.id,
         employeeName: emp.fullName,
         departmentName: emp.departmentName,
         date: rDate,
-        checkIn: new Date(`${rDate}T08:30:00Z`),
+        checkIn: new Date(checkIn),
         checkOut: new Date(`${rDate}T17:30:00Z`),
         hoursWorked: 8.5,
         status: "checked_out",
-        createdAt: new Date(`${rDate}T08:30:00Z`),
+        createdAt: new Date(checkIn),
         updatedAt: new Date(`${rDate}T17:30:00Z`),
       });
     }
   }
+  await db.collection("attendance").insertMany(attendanceDocs);
   console.log("   ✓ Generated attendance check-in/out logs for all active staff.");
 
   console.log("\n========================================================");

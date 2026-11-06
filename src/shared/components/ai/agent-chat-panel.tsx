@@ -180,6 +180,10 @@ function renderMarkdown(text: string): string {
     return `__CODE_BLOCK_${idx}__`;
   });
 
+  // Model and user text is untrusted and ends up in innerHTML, so it must not be able to open tags or attributes.
+  // ">" stays as is: it cannot open anything, and blockquotes below rely on it.
+  out = out.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
   // 2. Convert LaTeX display math blocks: \[ ... \] or $$ ... $$
   out = out.replace(/(?:\\\[|\$\$)([\s\S]*?)(?:\\\]|\$\$)/g, (_, math) => {
     const clean = cleanLatex(math);
@@ -529,6 +533,7 @@ export function AgentChatPanel({
                     )}
                   >
                     <div
+                      dir="auto"
                       className="prose prose-xs dark:prose-invert max-w-none"
                       onClick={(e) => {
                         const link = (e.target as HTMLElement).closest("a[data-action]");

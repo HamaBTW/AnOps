@@ -1493,13 +1493,28 @@ export async function getLeaveRequests(
   }));
 }
 
-export async function createLeaveRequest(data: LeaveRequestInput, companyId: string): Promise<LeaveRequest> {
+export type LeaveAssessment = {
+  days: number;
+  isPaid: boolean;
+  holidaysInRange: string[];
+  /** Null for unpaid leave, which does not touch the balance. */
+  balanceBefore: number | null;
+  balanceAfter: number | null;
+  /** Rule violations, most fundamental first. Empty means the request can be submitted. */
+  errors: string[];
+};
+
+/**
+ * Read-only check of a leave request: working days, overlap and balance.
+ * The single source of these rules: `createLeaveRequest` and the HR Copilot both use it.
+ */
+export async function assessLeaveRequest(
+  data: Pick<LeaveRequestInput, "employeeId" | "leaveType" | "leaveTypeId" | "startDate" | "endDate" | "halfDayOption" | "isPaid">,
+  companyId: string
+): Promise<LeaveAssessment> {
   const db = await getDb();
   const cId = requireCompanyId(companyId);
-  const emp = await getEmployeeById(data.employeeId, companyId);
-  if (!emp) {
-    throw new Error("Employee not found.");
-  }
+  const errors: string[] = [];
 
   // Public holidays exclusion
   const holidays = await getPublicHolidays(companyId);
@@ -1507,7 +1522,7 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
 
   const days = calculateLeaveDays(data.startDate, data.endDate, holidayDates, data.halfDayOption);
   if (days <= 0) {
-    throw new Error("Calculated duration cannot be zero working days.");
+    errors.push("Calculated duration cannot be zero working days.");
   }
 
   // Check overlapping requests
@@ -1519,7 +1534,7 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
   });
 
   if (overlap) {
-    throw new Error(
+    errors.push(
       `An existing ${overlap.status} leave request already overlaps with dates ${data.startDate} to ${data.endDate}.`
     );
   }
@@ -1531,14 +1546,41 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
     if (lt) isPaid = Boolean(lt.isPaid);
   }
 
+  let balanceBefore: number | null = null;
+  let balanceAfter: number | null = null;
   if (isPaid) {
     const currentYear = new Date(data.startDate).getFullYear();
     const solde = await getSoldeDeConge(data.employeeId, currentYear, companyId);
+    balanceBefore = solde.available;
+    balanceAfter = Math.round((solde.available - days) * 100) / 100;
     if (days > solde.available) {
-      throw new Error(
+      errors.push(
         `Requested duration (${days} days) exceeds available Solde de congé (${solde.available} days available of ${solde.earned} earned). Submit as unpaid leave or reduce duration.`
       );
     }
+  }
+
+  return {
+    days,
+    isPaid,
+    holidaysInRange: holidayDates.filter((date) => date >= data.startDate && date <= data.endDate),
+    balanceBefore,
+    balanceAfter,
+    errors,
+  };
+}
+
+export async function createLeaveRequest(data: LeaveRequestInput, companyId: string): Promise<LeaveRequest> {
+  const db = await getDb();
+  const cId = requireCompanyId(companyId);
+  const emp = await getEmployeeById(data.employeeId, companyId);
+  if (!emp) {
+    throw new Error("Employee not found.");
+  }
+
+  const { days, isPaid, errors } = await assessLeaveRequest(data, companyId);
+  if (errors.length > 0) {
+    throw new Error(errors[0]);
   }
 
   const doc = {

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
+import { fromOpenAiToolCalls, toOpenAiMessages, toOpenAiTools } from "@/server/ai/openai-wire";
 
 /**
  * Free models available on OpenRouter (identified by the ":free" suffix).
@@ -53,9 +54,14 @@ export class OpenRouterProvider implements AiProvider {
 
     const body = {
       model,
-      messages: options.messages,
+      messages: toOpenAiMessages(options.messages),
       max_tokens: options.maxTokens ?? 1024,
       temperature: options.temperature ?? 0.7,
+      ...(options.jsonObject ? { response_format: { type: "json_object" } } : {}),
+      // require_parameters makes OpenRouter pick an endpoint that really supports tool calling.
+      ...(options.tools?.length
+        ? { tools: toOpenAiTools(options.tools), tool_choice: "auto", provider: { require_parameters: true } }
+        : {}),
     };
 
     let response: Response;
@@ -99,14 +105,21 @@ export class OpenRouterProvider implements AiProvider {
     }
 
     const json = await response.json() as {
-      choices: Array<{ message: { content: string } }>;
+      choices: Array<{
+        message: {
+          content: string | null;
+          tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+        };
+      }>;
       model?: string;
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
 
     const text = json.choices?.[0]?.message?.content ?? "";
+    const toolCalls = fromOpenAiToolCalls(json.choices?.[0]?.message?.tool_calls);
     return {
       text,
+      ...(toolCalls ? { toolCalls } : {}),
       provider: this.name,
       model: json.model ?? model,
       usage: {

@@ -56,3 +56,4 @@ Open [http://localhost:3000](http://localhost:3000) to view the platform.
 - [Roles & Permissions Matrix](docs/ROLES_AND_PERMISSIONS.md)
 - [Design System & Tokens](docs/design-system.md)
 - [Agent & Engineering Rules](ai_agent_rules.md)
+- [HR AI Copilot & Approval Advisor](docs/HR_AI_COPILOT.md)

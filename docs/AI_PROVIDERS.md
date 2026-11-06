@@ -164,6 +164,30 @@ interface AiProvider {
 
 ---
 
+## Task routing and tool calling
+
+Use `ai.chat()` when you need tool calling or a task-specific provider order:
+
+```typescript
+const result = await ai.chat({
+  taskType: "copilot_chat", // or "advisor_json", "policy_qa"
+  messages,
+  tools,            // optional: { name, description, parameters (JSON schema) }[]
+  jsonObject: true, // optional: ask for JSON. Always validate the output.
+});
+// result: text, toolCalls, provider, model, usage, latencyMs, fallbacks
+```
+
+| Task | Provider order | Override with |
+|---|---|---|
+| `copilot_chat` | Groq → OpenRouter → Gemini | `AI_ROUTE_COPILOT_CHAT` |
+| `advisor_json` | Gemini → Groq → OpenRouter | `AI_ROUTE_ADVISOR_JSON` |
+| `policy_qa` | Gemini → Groq → OpenRouter | `AI_ROUTE_POLICY_QA` |
+
+Timeouts (25s), 429/5xx, empty responses and malformed tool arguments move to the next provider, with at most one retry per provider. `AI_DISABLED_PROVIDERS=groq` skips a provider, to rehearse an outage. Gemini 2.5 counts hidden thinking against `maxTokens`, so leave a generous limit (2000) or JSON gets truncated.
+
+---
+
 ## Error Handling
 
 The master throws a plain `Error` only if **all** configured providers fail:

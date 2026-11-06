@@ -202,6 +202,17 @@ export async function cancelLeaveRequestAction(
 ): Promise<ActionResult<LeaveRequest>> {
   try {
     const authUser = await requireAuthUser();
+
+    // HR admins may cancel any request in their company. Everyone else, only their own.
+    if (!authUser.isAdmin) {
+      const ownRequests = authUser.employee
+        ? await getLeaveRequests({ employeeId: authUser.employee.id }, authUser.companyId)
+        : [];
+      if (!ownRequests.some((r) => r.id === requestId)) {
+        return { error: "Forbidden: You may only cancel your own leave requests." };
+      }
+    }
+
     const actorName = authUser.employee?.fullName || authUser.email;
     const cancelled = await cancelLeaveRequest(requestId, reason, actorName, authUser.companyId);
     revalidatePath("/hr");

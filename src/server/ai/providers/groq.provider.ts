@@ -4,6 +4,7 @@ import Groq from "groq-sdk";
 import type { ChatCompletion } from "groq-sdk/resources/chat/completions";
 import { KeyPool } from "@/server/ai/key-pool";
 import { groqApiKeyList } from "@/server/ai/config";
+import { fromOpenAiToolCalls, toOpenAiMessages, toOpenAiTools } from "@/server/ai/openai-wire";
 import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
@@ -27,7 +28,8 @@ const BACKOFF_BASE_MS = 300;
 const DEFAULT_MAX_TOKENS = 1024;
 const DEFAULT_TEMPERATURE = 0.7;
 
-type ChatResult = { text: string; model: string; usage: AiCompletionResult["usage"] };
+type ChatResult = Pick<AiCompletionResult, "text" | "model" | "usage" | "toolCalls">;
+type GroqCreateParams = Parameters<Groq["chat"]["completions"]["create"]>[0];
 
 export class GroqProvider implements AiProvider {
   readonly name = "Groq";
@@ -71,7 +73,7 @@ export class GroqProvider implements AiProvider {
 
       let response: ChatCompletion;
       try {
-        response = await client.chat.completions.create(buildRequest(model, options));
+        response = (await client.chat.completions.create(buildRequest(model, options))) as ChatCompletion;
       } catch (err: unknown) {
         const status = errorStatus(err);
 
@@ -94,7 +96,7 @@ export class GroqProvider implements AiProvider {
         if (status === 404 && model !== FREE_MODELS[0]) {
           console.warn(`[Groq] Model "${model}" not found (404), recovering with ${FREE_MODELS[0]}`);
           try {
-            const fallback = await client.chat.completions.create(buildRequest(FREE_MODELS[0], options));
+            const fallback = (await client.chat.completions.create(buildRequest(FREE_MODELS[0], options))) as ChatCompletion;
             return { ...toResult(fallback, FREE_MODELS[0]), provider: this.name };
           } catch (fallbackErr: unknown) {
             throw new AiProviderError(this.name, `API error (HTTP ${errorStatus(fallbackErr) ?? "unknown"})`, false);
@@ -112,24 +114,28 @@ export class GroqProvider implements AiProvider {
   }
 }
 
-function buildRequest(model: string, options: AiCompletionOptions) {
+function buildRequest(model: string, options: AiCompletionOptions): GroqCreateParams {
   return {
     model,
-    messages: options.messages,
+    messages: toOpenAiMessages(options.messages),
     max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: options.temperature ?? DEFAULT_TEMPERATURE,
     ...(options.jsonObject ? { response_format: { type: "json_object" as const } } : {}),
-  };
+    ...(options.tools?.length ? { tools: toOpenAiTools(options.tools), tool_choice: "auto" as const } : {}),
+  } as GroqCreateParams;
 }
 
 /** Validates the provider response before it is trusted. A malformed response is a non-retryable failure. */
 function toResult(response: ChatCompletion, model: string): ChatResult {
-  const content = response.choices?.[0]?.message?.content;
-  if (typeof content !== "string") {
+  const message = response.choices?.[0]?.message;
+  const toolCalls = fromOpenAiToolCalls(message?.tool_calls);
+  const content = message?.content;
+  if (typeof content !== "string" && !toolCalls) {
     throw new AiProviderError("Groq", "Malformed response: no message content", false);
   }
   return {
-    text: content,
+    text: content ?? "",
+    ...(toolCalls ? { toolCalls } : {}),
     model,
     usage: {
       promptTokens: response.usage?.prompt_tokens,

@@ -328,9 +328,8 @@ export function HRDashboardClient({
 
       {activeTab === "ai" && (
         <AIHRAssistant
-          currentEmployee={currentEmployee}
-          employees={initialEmployees}
           userRole={userRole}
+          onDataChanged={handleRefresh}
           onNavigateTab={setActiveTab}
           onOpenLeaveRequest={() => {
             setActiveTab("leave");

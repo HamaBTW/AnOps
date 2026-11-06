@@ -230,6 +230,10 @@ Roles are evaluated strictly within the context of the user's **Active Company**
 | :--- | :---: | :---: | :---: | :--- |
 | Ask HR policy and labor regulation questions | ✅ **CAN** | ✅ **CAN** | ✅ **CAN** | Available to all authenticated team members |
 | View company policies (Leave, Attendance, Code of Conduct) | ✅ **CAN** | ✅ **CAN** | ✅ **CAN** | Grounded in `COMPANY_POLICIES` |
+| Draft or cancel **own** leave through the copilot | ✅ **CAN** | ✅ **CAN** | ✅ **CAN** | Requires clicking Confirm. A new request is still `pending` |
+| Copilot company tools (who is absent, pending requests, team calendar, employee balance, payroll preview) | ✅ **CAN** | ❌ CANNOT | ❌ CANNOT | Tools are not sent to the model for other roles |
+| Approval Advisor card | ✅ **CAN** | ❌ CANNOT | ❌ CANNOT | Advisory only, enforced by the route handler |
+| AI Activity audit page | ✅ **CAN** | ❌ CANNOT | ❌ CANNOT | Company-scoped, append-only |
 
 ---
 

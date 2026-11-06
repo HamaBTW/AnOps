@@ -50,3 +50,18 @@ export function searchPolicies(query: string, limit = 2): PolicySection[] {
     .slice(0, limit)
     .map((hit) => hit.section);
 }
+
+/** Words that appear across every policy, so they say nothing about which one a question is about. */
+const GENERIC_TERMS = new Set(
+  "leave request requests pending policy policies days day company employee what when why how the this that with have does can please show tell about happens rule rules conge conges demande jours jour quel quelle comment pourquoi politique".split(" ")
+);
+
+/** The section a question is clearly about: one of its specific words must be in the section's title. Otherwise null. */
+export function clearPolicyMatch(question: string): PolicySection | null {
+  const specific = tokenize(question).filter((term) => !GENERIC_TERMS.has(term));
+  if (specific.length === 0) return null;
+  const [best] = searchPolicies(specific.join(" "), 1);
+  if (!best) return null;
+  const title = tokenize(`${best.source} ${best.section}`);
+  return specific.some((term) => title.includes(term)) ? best : null;
+}

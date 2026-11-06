@@ -14,10 +14,10 @@ import {
   parseModelRecommendation,
   templateRecommendation,
 } from "@/features/hr/ai/advisor-rules";
-import { searchPolicies } from "@/features/hr/ai/policy-search";
+import { clearPolicyMatch, searchPolicies } from "@/features/hr/ai/policy-search";
 import { endDateForWorkingDays } from "@/features/hr/utils/date-utils";
 import { compactToolSchema, compressHistory, compressPolicyText, selectToolsForMessage, truncateAtSentence } from "@/features/hr/ai/context-compression";
-import { draftFailed, matchFastIntent } from "@/features/hr/ai/fast-answers";
+import { draftFailed, isDirectCancelRequest, isPersonalRequest, matchFastIntent } from "@/features/hr/ai/fast-answers";
 import { defineTool, executeTool, toolsForContext, toToolDefinitions, type HrTool, type ToolContext } from "@/features/hr/ai/tool-registry";
 import type { RequestFacts } from "@/features/hr/ai/types";
 
@@ -73,6 +73,38 @@ describe("policy search", () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].section).toMatch(/Departure/);
     expect(searchPolicies("spaceship xylophone")).toEqual([]);
+  });
+});
+
+describe("requests that need an employee record", () => {
+  it("recognises the caller's own leave and pay requests only", () => {
+    for (const text of ["Please cancel my pending leave request.", "How many days do I have left?", "Book 3 days next Monday", "Show my leave requests", "Je veux 3 jours de congé à partir de lundi prochain"]) {
+      expect(isPersonalRequest(text)).toBe(true);
+    }
+    for (const text of ["Who is absent today?", "Show pending leave requests", "What is Karim's leave balance?", "How do I cancel a leave request?"]) {
+      expect(isPersonalRequest(text)).toBe(false);
+    }
+  });
+});
+
+describe("policy text fallback", () => {
+  it("only matches a question clearly about one policy section", () => {
+    expect(clearPolicyMatch("What happens to unused leave at departure?")?.section).toMatch(/Departure/);
+    expect(clearPolicyMatch("What is the sick leave rule?")).not.toBeNull();
+    for (const text of ["Please cancel my pending leave request.", "leave request", "What is the bonus scheme?"]) {
+      expect(clearPolicyMatch(text)).toBeNull();
+    }
+  });
+});
+
+describe("direct cancel requests", () => {
+  it("matches only a cancel request with no other detail", () => {
+    for (const text of ["Please cancel my pending leave request.", "Cancel my leave request", "cancel my request", "cancel my leave", "Annuler ma demande de congé"]) {
+      expect(isDirectCancelRequest(text)).toBe(true);
+    }
+    for (const text of ["Cancel my leave on December 3", "Cancel Karim's leave request", "Why can't I cancel my request?"]) {
+      expect(isDirectCancelRequest(text)).toBe(false);
+    }
   });
 });
 

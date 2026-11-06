@@ -14,7 +14,7 @@ All prompts have passed in the eval or a live run, except the three marked *unte
    ```bash
    npm run hr:seed-demo
    ```
-3. Create two logins ahead of time, because demo employees have no accounts: one for an employee and one for an admin.
+3. Create two logins ahead of time, because demo employees have no accounts: one for an employee and one for an admin. The employee login's email must match a demo employee (for example `nour.khemir@demo.anops.tn`). Sections 1 to 4 need that login: an owner or admin account with no employee record has no leave of its own, and the copilot will say so.
 4. Rehearse once the day before. On the day, leave a few minutes between runs, because Groq allows about 8,000 tokens a minute and other providers can run out of quota.
 
 ## 1. It knows your data and speaks your language (employee)
@@ -36,7 +36,7 @@ All prompts have passed in the eval or a live run, except the three marked *unte
 | *Click Confirm* | The request appears as pending, still waiting for admin approval |
 | *Send the same prompt again* | Refused, because it overlaps the request you just made |
 | `Book 30 working days of annual leave starting next Monday, ending six weeks later.` | Refused, because the balance is too low, and no card appears |
-| `Please cancel my pending leave request.` | A cancellation card, and nothing changes until you confirm |
+| `Please cancel my pending leave request.` | A cancellation card, and nothing changes until you confirm. With several open requests, it lists them and asks which |
 
 **Say:** "The AI never writes to the database. It proposes, I click, and the server re-checks everything."
 

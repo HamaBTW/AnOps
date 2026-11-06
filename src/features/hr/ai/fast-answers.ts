@@ -122,6 +122,53 @@ export function matchFastIntent(message: string): FastIntent | null {
   return INTENTS.find((intent) => intent.pattern.test(text)) ?? null;
 }
 
+const DIRECT_CANCEL = /^((please|can you|could you) )?cancel my( pending| approved)?( leave)?( request)?( please)?\s*[.?!]*$|^(veuillez |je veux )?annuler? ma demande( de cong[ée]s?)?\s*[.?!]*$/i;
+
+/** "Cancel my leave request", with no date or other detail. The caller's open requests settle what it means. */
+export function isDirectCancelRequest(message: string): boolean {
+  return DIRECT_CANCEL.test(message.trim());
+}
+
+const PERSONAL_LEAVE_ACTION = /^((please|can you|could you) )?(book|reserve|cancel)\b.*\b(my|me|i)\b|^((please|can you|could you) )?book\b|^i (want|need)\b.*\b(leave|days?|off)\b|^je veux\b.*\b(jours?|cong[ée]s?)\b|^n[h7]eb\b/i;
+
+/** Asks about the caller's own leave or pay, which needs an employee record to answer. */
+export function isPersonalRequest(message: string): boolean {
+  const text = message.trim();
+  return isDirectCancelRequest(text) || PERSONAL_LEAVE_ACTION.test(text) || Boolean(matchFastIntent(text)?.tool.startsWith("get_my_"));
+}
+
+export function noEmployeeProfile(lang: ChatLanguage): string {
+  return pick(lang, {
+    en: "Your account has no employee profile in this company, so you have no leave of your own here. Add yourself in the Employees tab with this account's email, or log in with an employee account. To handle other people's requests, use the Time-Off & Leave tab.",
+    fr: "Votre compte n'a pas de fiche employé dans cette entreprise, vous n'avez donc pas de congés ici. Ajoutez-vous dans l'onglet Employees avec l'e-mail de ce compte, ou connectez-vous avec un compte employé. Pour traiter les demandes des autres, utilisez l'onglet Time-Off & Leave.",
+    ar: "لا يوجد لحسابك ملف موظف في هذه الشركة، لذلك ليس لديك إجازات هنا. أضف نفسك في تبويب Employees ببريد هذا الحساب، أو سجّل الدخول بحساب موظف. لمعالجة طلبات الآخرين، استخدم تبويب Time-Off & Leave.",
+    derja: "Compte mte3ek ma3andouch fiche employé fi hedhi la société, donc ma3andekch congés houni. Zid rou7ek fi Employees b nafs l'email, walla odkhel b compte employé. Les demandes mta3 l'o5rin fi Time-Off & Leave.",
+  });
+}
+
+export function noOpenRequests(lang: ChatLanguage): string {
+  return pick(lang, {
+    en: "You have no upcoming leave request that can be cancelled.",
+    fr: "Vous n'avez aucune demande à venir pouvant être annulée.",
+    ar: "ليس لديك أي طلب إجازة قادم يمكن إلغاؤه.",
+    derja: "Ma3andekch 7ata demande jaya tnajem tetlgha.",
+  });
+}
+
+export function whichRequest(
+  lang: ChatLanguage,
+  requests: Array<{ leaveType: string; startDate: string; endDate: string; status: string }>
+): string {
+  const question = pick(lang, {
+    en: "You have several open requests. Which one should I cancel?",
+    fr: "Vous avez plusieurs demandes en cours. Laquelle dois-je annuler ?",
+    ar: "لديك عدة طلبات مفتوحة. أيها تريد إلغاءه؟",
+    derja: "3andek barcha demandes. Ama wa7da n7eb nlghi?",
+  });
+  const rows = requests.map((r) => `- ${r.leaveType}: ${r.startDate} → ${r.endDate}, **${r.status}**`);
+  return [question, ...rows].join("\n");
+}
+
 export function confirmPrompt(lang: ChatLanguage): string {
   return pick(lang, {
     en: "Please review the card and click Confirm. Nothing is submitted until you do.",

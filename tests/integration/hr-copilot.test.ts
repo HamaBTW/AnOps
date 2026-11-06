@@ -418,6 +418,70 @@ describe("human-in-the-loop confirmation", () => {
     expect(reply.cards[0].summary).toContain("3 working day(s)");
   });
 
+  describe("an account with no employee record", () => {
+    it.each(["Please cancel my pending leave request.", "How many days do I have left?", "Book 3 days of annual leave starting next Monday"])(
+      "explains why, with no LLM call: %s",
+      async (message) => {
+        const reply = await copilot.runCopilotTurn(admin, { message });
+        expect(chat).not.toHaveBeenCalled();
+        expect(reply).toMatchObject({ tokens: 0, cards: [] });
+        expect(reply.text).toContain("no employee profile");
+      }
+    );
+
+    it("still answers company questions", async () => {
+      const reply = await copilot.runCopilotTurn(admin, { message: "Show pending leave requests" });
+      expect(reply.text).not.toContain("no employee profile");
+    });
+  });
+
+  it("does not show unrelated policy text for a request to do something when providers are down", async () => {
+    chat.mockRejectedValue(new Error("all providers down"));
+    await expect(copilot.runCopilotTurn(salma, { message: "Cancel my leave on the 20th please" })).rejects.toThrow();
+    await expect(copilot.runCopilotTurn(salma, { message: "What is the bonus scheme?" })).rejects.toThrow();
+  });
+
+  describe("direct cancel request, with no LLM call", () => {
+    const message = "Please cancel my pending leave request.";
+    const book = (ctx: ToolContext, start: string, status?: "approved") =>
+      hr
+        .createLeaveRequest({ employeeId: ctx.employeeId!, leaveType: "unpaid", startDate: start, endDate: start, reason: "Trip", isPaid: false }, companyA)
+        .then((r) => (status ? hr.reviewLeaveRequest({ requestId: r.id, action: "approve" }, "Admin", companyA) : r));
+
+    it("goes straight to the card when one request fits, and changes nothing yet", async () => {
+      await book(salma, nextWeekday(150));
+      const reply = await copilot.runCopilotTurn(salma, { message });
+      expect(chat).not.toHaveBeenCalled();
+      expect(reply).toMatchObject({ tokens: 0 });
+      expect(reply.cards).toHaveLength(1);
+      expect((await leaveRows(salma.employeeId!, companyA))[0].status).toBe("pending");
+
+      expect(await hrAi.confirmPendingAction(reply.cards[0].actionId, salma)).toMatchObject({ ok: true });
+      expect((await leaveRows(salma.employeeId!, companyA))[0].status).toBe("cancelled");
+    });
+
+    it("lists the options when several fit, ignoring approved leave if the user said pending", async () => {
+      const [first, second] = [nextWeekday(160), nextWeekday(170)];
+      await book(salma, first);
+      await book(salma, second);
+      await book(salma, nextWeekday(180), "approved");
+      const reply = await copilot.runCopilotTurn(salma, { message });
+      expect(chat).not.toHaveBeenCalled();
+      expect(reply.cards).toHaveLength(0);
+      expect(reply.text).toContain(first);
+      expect(reply.text).toContain(second);
+      expect(reply.text).not.toContain(nextWeekday(180));
+    });
+
+    it("says so when nothing can be cancelled, and never touches a colleague's request", async () => {
+      await book(karim, nextWeekday(190));
+      const reply = await copilot.runCopilotTurn(salma, { message });
+      expect(chat).not.toHaveBeenCalled();
+      expect(reply.cards).toHaveLength(0);
+      expect(reply.text).toContain("no upcoming leave request");
+    });
+  });
+
   it("cancels only the caller's own, not-yet-started request", async () => {
     const start = nextWeekday(70);
     const own = await hr.createLeaveRequest({ employeeId: salma.employeeId!, leaveType: "annual", startDate: start, endDate: start, reason: "Trip", isPaid: true }, companyA);

@@ -64,10 +64,12 @@ export async function routeChat(providers: AiProvider[], options: AiChatOptions)
         assertUsable(result, provider.name);
         return { ...result, latencyMs: Date.now() - started, fallbacks };
       } catch (err) {
-        const retryable = err instanceof AiProviderError && err.retryable;
-        if (retryable && attempt < ATTEMPTS_PER_PROVIDER) continue;
         const reason = classifyFailure(err);
-        console.warn(`[AiRouter] ${provider.name} failed for ${taskType}: ${reason}`);
+        // A rate limit will not clear in a moment, so that provider is not retried.
+        const retryable = err instanceof AiProviderError && err.retryable && reason !== "rate_limited";
+        if (retryable && attempt < ATTEMPTS_PER_PROVIDER) continue;
+        const detail = err instanceof Error ? err.message.match(/HTTP \d{3}(?:, [a-z0-9_]+)?/i)?.[0] : undefined;
+        console.warn(`[AiRouter] ${provider.name} failed for ${taskType}: ${reason}${detail ? ` (${detail})` : ""}`);
         fallbacks.push({ provider: provider.name, reason });
         break;
       }

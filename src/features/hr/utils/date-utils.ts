@@ -67,6 +67,24 @@ export function getAgeCategory(
   return "adult";
 }
 
+/**
+ * The date on which `workingDays` working days starting at `startDate` are complete,
+ * skipping weekends and the given holidays. Returns `startDate` itself for invalid input.
+ */
+export function endDateForWorkingDays(startDate: string, workingDays: number, holidayDates: string[] = []): string {
+  const day = new Date(`${startDate}T12:00:00Z`);
+  if (Number.isNaN(day.getTime()) || workingDays < 1) return startDate;
+  let counted = 0;
+  let current = startDate;
+  while (counted < workingDays) {
+    current = day.toISOString().slice(0, 10);
+    const weekday = day.getUTCDay();
+    if (weekday !== 0 && weekday !== 6 && !holidayDates.includes(current)) counted += 1;
+    day.setUTCDate(day.getUTCDate() + 1);
+  }
+  return current;
+}
+
 export function formatDateYMD(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");

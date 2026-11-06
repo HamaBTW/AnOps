@@ -7,7 +7,6 @@ import {
   getEmployeeById,
   getEmployees,
   getLeaveRequests,
-  getLeaveTransactions,
   getPublicHolidays,
   getSoldeDeConge,
   getTodayAttendance,
@@ -17,8 +16,9 @@ import {
   createPendingAction,
   type LeaveDraftPayload,
 } from "@/server/services/hr-ai.service";
-import { formatDateYMD } from "@/features/hr/utils/date-utils";
+import { endDateForWorkingDays, formatDateYMD } from "@/features/hr/utils/date-utils";
 import type { LeaveRequest } from "@/features/hr/types";
+import { compressPolicyText } from "@/features/hr/ai/context-compression";
 import { searchPolicies } from "@/features/hr/ai/policy-search";
 import { defineTool, type HrTool, type ToolContext, type ToolResult } from "@/features/hr/ai/tool-registry";
 
@@ -33,9 +33,10 @@ const halfDayEnum = z.enum(["morning", "afternoon"]);
 
 const leaveDatesSchema = z.object({
   startDate: isoDate,
-  endDate: isoDate,
-  leaveType: leaveTypeEnum.describe("Use annual for Congés payés unless the user says otherwise."),
-  halfDayOption: halfDayEnum.optional().describe("Only for a single half-day."),
+  workingDays: z.number().int().min(1).max(90).optional().describe("If the user gave a number of days. Do not compute an end date."),
+  endDate: isoDate.optional().describe("Only if the user gave an end date."),
+  leaveType: leaveTypeEnum,
+  halfDayOption: halfDayEnum.optional(),
 });
 
 function today(): string {
@@ -65,7 +66,6 @@ function requestSummary(r: LeaveRequest) {
 
 async function balanceData(employeeId: string, companyId: string) {
   const solde = await getSoldeDeConge(employeeId, new Date().getFullYear(), companyId);
-  const transactions = await getLeaveTransactions({ employeeId }, companyId);
   return {
     solde,
     data: {
@@ -79,11 +79,6 @@ async function balanceData(employeeId: string, companyId: string) {
       unpaidDaysTaken: solde.unpaidDaysTaken,
       unusedDaysIfLeavingToday: Math.max(0, solde.earned - solde.taken),
       policy: solde.policySummary ?? null,
-      recentLedger: transactions.slice(0, 8).map((tx) => ({
-        date: tx.effectiveDate,
-        type: tx.transactionType,
-        days: tx.days,
-      })),
     },
   };
 }
@@ -101,6 +96,16 @@ function balanceCard(data: Awaited<ReturnType<typeof balanceData>>["solde"]): Re
   };
 }
 
+/**
+ * The end date from the user's number of days, computed here because models get this arithmetic wrong.
+ * With neither a day count nor an end date, the request is for one day.
+ */
+async function resolveEndDate(args: { startDate: string; endDate?: string; workingDays?: number }, companyId: string): Promise<string> {
+  if (!args.workingDays) return args.endDate ?? args.startDate;
+  const holidays = await getPublicHolidays(companyId);
+  return endDateForWorkingDays(args.startDate, args.workingDays, holidays.map((h) => h.date));
+}
+
 /** Rules that apply only to AI-drafted requests: a mistaken date from the model must not become a real request. */
 function draftDateErrors(startDate: string, endDate: string): string[] {
   const errors: string[] = [];
@@ -113,7 +118,7 @@ function draftDateErrors(startDate: string, endDate: string): string[] {
 const employeeTools: HrTool[] = [
   defineTool({
     name: "get_my_leave_balance",
-    description: "The caller's own Solde de congé: earned, taken, reserved, adjustments, available, policy and recent ledger entries.",
+    description: "Caller's own Solde de congé: earned, taken, reserved, available, policy.",
     kind: "read",
     allowedRoles: ALL_ROLES,
     needsEmployee: true,
@@ -125,7 +130,7 @@ const employeeTools: HrTool[] = [
   }),
   defineTool({
     name: "get_my_leave_requests",
-    description: "The caller's own leave requests and their statuses, newest first.",
+    description: "Caller's own leave requests with ids and statuses.",
     kind: "read",
     allowedRoles: ALL_ROLES,
     needsEmployee: true,
@@ -142,12 +147,12 @@ const employeeTools: HrTool[] = [
   }),
   defineTool({
     name: "get_my_payroll_preview",
-    description: "The caller's own personal payroll for a month, only when they ask about their own pay (\"my salary\"). Saves nothing. Returns base salary, daily rate, unpaid leave deduction and net.",
+    description: "Caller's own pay for a month, only if they ask about their own pay. Saves nothing.",
     kind: "read",
     allowedRoles: ALL_ROLES,
     needsEmployee: true,
     parameters: z.object({
-      period: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM. Defaults to the current month."),
+      period: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM"),
     }),
     handler: async (ctx, args) => {
       const preview = await calculateEmployeePayrollPreview(ctx.employeeId!, args.period ?? currentPeriod(), 22, ctx.companyId);
@@ -168,42 +173,44 @@ const employeeTools: HrTool[] = [
   }),
   defineTool({
     name: "check_leave_feasibility",
-    description: "Checks dates and leave type for the caller without creating anything: working days (weekends and holidays excluded), balance after, overlaps and validation errors.",
+    description: "Check dates without creating anything, for \"can I...\" questions: working days, balance after, errors.",
     kind: "read",
     allowedRoles: ALL_ROLES,
     needsEmployee: true,
     parameters: leaveDatesSchema,
     handler: async (ctx, args) => {
-      const errors = draftDateErrors(args.startDate, args.endDate);
+      const endDate = await resolveEndDate(args, ctx.companyId);
+      const errors = draftDateErrors(args.startDate, endDate);
       if (errors.length > 0) return { data: { feasible: false, errors } };
       const assessment = await assessLeaveRequest(
-        { ...args, employeeId: ctx.employeeId!, isPaid: args.leaveType !== "unpaid" },
+        { ...args, endDate, employeeId: ctx.employeeId!, isPaid: args.leaveType !== "unpaid" },
         ctx.companyId
       );
       return {
-        data: { feasible: assessment.errors.length === 0, ...assessment },
+        data: { feasible: assessment.errors.length === 0, startDate: args.startDate, endDate, ...assessment },
         dataSource: "leave ledger",
       };
     },
   }),
   defineTool({
     name: "create_leave_draft",
-    description: "Prepares a leave request for the caller and shows a confirmation card. Nothing is submitted until the user clicks Confirm, so never say it was submitted.",
+    description: "Prepare a leave request for the caller. The user confirms on a card.",
     kind: "write",
     allowedRoles: ALL_ROLES,
     needsEmployee: true,
     parameters: leaveDatesSchema.extend({
-      reason: z.string().trim().min(3).max(300).optional().describe("The user's reason, if they gave one."),
+      reason: z.string().trim().min(3).max(300).optional(),
     }),
     handler: async (ctx, args) => {
-      const errors = draftDateErrors(args.startDate, args.endDate);
+      const endDate = await resolveEndDate(args, ctx.companyId);
+      const errors = draftDateErrors(args.startDate, endDate);
       if (errors.length > 0) return { data: { drafted: false, errors } };
 
       const payload: LeaveDraftPayload = {
         employeeId: ctx.employeeId!,
         leaveType: args.leaveType,
         startDate: args.startDate,
-        endDate: args.endDate,
+        endDate,
         halfDayOption: args.halfDayOption,
         reason: args.reason ?? "Requested through the HR Copilot",
       };
@@ -217,11 +224,11 @@ const employeeTools: HrTool[] = [
         { toolName: "create_leave_draft", payload },
         {
           title: "Confirm leave request (Demande de congé)",
-          summary: `${assessment.days} working day(s) of ${args.leaveType.replace("_", " / ")} leave, ${args.startDate} to ${args.endDate}.`,
+          summary: `${assessment.days} working day(s) of ${args.leaveType.replace("_", " / ")} leave, ${args.startDate} to ${endDate}.`,
           details: {
             "Leave type": args.leaveType,
             "Start date": args.startDate,
-            "End date": args.endDate,
+            "End date": endDate,
             "Working days": assessment.days,
             "Balance before": assessment.balanceBefore,
             "Balance after": assessment.balanceAfter,
@@ -243,7 +250,7 @@ const employeeTools: HrTool[] = [
   }),
   defineTool({
     name: "cancel_my_leave_request",
-    description: "Prepares cancellation of one of the caller's own requests that has not started, and shows a confirmation card. Get the id from get_my_leave_requests. Nothing changes until the user clicks Confirm.",
+    description: "Prepare cancellation of the caller's own request (id from get_my_leave_requests). The user confirms on a card.",
     kind: "write",
     allowedRoles: ALL_ROLES,
     needsEmployee: true,
@@ -292,7 +299,7 @@ const employeeTools: HrTool[] = [
 const sharedTools: HrTool[] = [
   defineTool({
     name: "search_hr_policies",
-    description: "Searches the company HR policies. Call this before answering any policy question. Translate the query to English keywords.",
+    description: "Search HR policies: annual, sick, unpaid and family leave, departure, working hours, attendance, payroll. Query in English keywords.",
     kind: "read",
     allowedRoles: ALL_ROLES,
     parameters: z.object({ query: z.string().trim().min(2).max(200) }),
@@ -301,7 +308,7 @@ const sharedTools: HrTool[] = [
       return {
         data: {
           found: hits.length > 0,
-          sections: hits.map((hit) => ({ source: hit.source, section: hit.section, text: hit.text.trim() })),
+          sections: hits.map((hit) => ({ section: hit.section, text: compressPolicyText(hit.text) })),
         },
         policies: hits.map((hit) => ({ title: hit.source, section: hit.section })),
       };
@@ -309,7 +316,7 @@ const sharedTools: HrTool[] = [
   }),
 ];
 
-const departmentFilter = z.string().trim().max(80).optional().describe("Department name. Omit for the whole company.");
+const departmentFilter = z.string().trim().max(80).optional();
 
 function matchesDepartment(departmentName: string, department?: string): boolean {
   return !department || departmentName.toLowerCase().includes(department.toLowerCase());
@@ -318,7 +325,7 @@ function matchesDepartment(departmentName: string, department?: string): boolean
 const adminTools: HrTool[] = [
   defineTool({
     name: "get_absent_today",
-    description: "Who is absent today in the admin's company: on approved leave, or with no check-in yet.",
+    description: "Who is absent today: on approved leave, or no check-in.",
     kind: "read",
     allowedRoles: ADMIN_ONLY,
     parameters: z.object({ department: departmentFilter }),
@@ -355,7 +362,7 @@ const adminTools: HrTool[] = [
   }),
   defineTool({
     name: "get_pending_requests",
-    description: "Pending leave requests in the admin's company, with optional department and date filters.",
+    description: "Pending leave requests, with optional filters.",
     kind: "read",
     allowedRoles: ADMIN_ONLY,
     parameters: z.object({ department: departmentFilter, startDate: isoDate.optional(), endDate: isoDate.optional() }),
@@ -381,7 +388,7 @@ const adminTools: HrTool[] = [
   }),
   defineTool({
     name: "get_team_calendar",
-    description: "Approved and pending leave overlapping a date range, optionally for one department.",
+    description: "Approved and pending leave overlapping a date range.",
     kind: "read",
     allowedRoles: ADMIN_ONLY,
     parameters: z.object({ startDate: isoDate, endDate: isoDate, department: departmentFilter }),
@@ -411,11 +418,11 @@ const adminTools: HrTool[] = [
   }),
   defineTool({
     name: "get_employee_leave_summary",
-    description: "Solde de congé for one employee of the admin's company, found by name or id. Salary is not included.",
+    description: "Solde de congé of one employee by name or id. No salary.",
     kind: "read",
     allowedRoles: ADMIN_ONLY,
     parameters: z.object({
-      employee: z.string().trim().min(2).max(100).describe("The employee's name or id."),
+      employee: z.string().trim().min(2).max(100),
     }),
     handler: async (ctx, args) => {
       const employees = await getEmployees({ status: "all" }, ctx.companyId);
@@ -438,11 +445,11 @@ const adminTools: HrTool[] = [
   }),
   defineTool({
     name: "generate_payroll_preview",
-    description: "Company-wide payroll preview for a month. Use for any request to preview or run payroll, unless the user clearly means only their own pay. Saves nothing. Returns totals and the employees with unpaid leave deductions.",
+    description: "Company-wide payroll preview for a month, unless the user clearly means only their own pay. Saves nothing.",
     kind: "read",
     allowedRoles: ADMIN_ONLY,
     parameters: z.object({
-      period: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM. Defaults to the current month."),
+      period: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM"),
     }),
     handler: async (ctx, args) => {
       const period = args.period ?? currentPeriod();

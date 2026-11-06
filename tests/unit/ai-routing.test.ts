@@ -52,15 +52,24 @@ describe("routeChat", () => {
     expect(JSON.stringify(result.fallbacks)).not.toContain("secret");
   });
 
-  it("retries a retryable failure once on the same provider, then moves on", async () => {
+  it("retries a transient failure once on the same provider, then moves on", async () => {
     const groq = vi.fn(async () => {
-      throw new AiProviderError("Groq", "Rate limited (429).", true);
+      throw new AiProviderError("Groq", "Network error", true);
     });
     const gemini = answer("Gemini");
     const result = await routeChat([provider("Groq", groq), provider("Gemini", gemini)], { taskType: "copilot_chat", messages });
 
     expect(groq).toHaveBeenCalledTimes(2);
     expect(result.provider).toBe("Gemini");
+  });
+
+  it("does not retry a rate limited provider", async () => {
+    const groq = vi.fn(async () => {
+      throw new AiProviderError("Groq", "Rate limited (429).", true);
+    });
+    const result = await routeChat([provider("Groq", groq), provider("Gemini", answer("Gemini"))], { taskType: "copilot_chat", messages });
+
+    expect(groq).toHaveBeenCalledTimes(1);
     expect(result.fallbacks[0].reason).toBe("rate_limited");
   });
 

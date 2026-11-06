@@ -17,6 +17,7 @@ import {
   templateRecommendation,
 } from "@/features/hr/ai/advisor-rules";
 import { detectPromptInjection } from "@/features/hr/ai/guardrails";
+import { compressPolicyText } from "@/features/hr/ai/context-compression";
 import { searchPolicies } from "@/features/hr/ai/policy-search";
 import type { AdvisorCardData, AdvisorRecommendation, RequestFacts } from "@/features/hr/ai/types";
 
@@ -25,8 +26,7 @@ const ATTENDANCE_WINDOW_DAYS = 60;
 const LATE_AFTER_MINUTES = 9 * 60 + 30;
 const BUSINESS_TIME_ZONE = "Africa/Tunis";
 const MODEL_ATTEMPTS = 2;
-/** Generous on purpose: Gemini 2.5 counts hidden thinking against this, and a small limit truncates the JSON. */
-const MODEL_MAX_TOKENS = 2000;
+const MODEL_MAX_TOKENS = 400;
 
 const LEAVE_TYPE_CODES: Record<string, string> = {
   annual: "CP",
@@ -196,7 +196,7 @@ export async function gatherRequestFacts(requestId: string, companyId: string): 
     policy: searchPolicies(`${leaveType} leave ${isPaid ? "paid annual balance overdraft" : "unpaid deduction"}`, 2).map((hit) => ({
       source: hit.source,
       section: hit.section,
-      snippet: hit.text.trim().slice(0, 500),
+      snippet: compressPolicyText(hit.text),
     })),
     reasonFlagged: detectPromptInjection(reason),
   };
@@ -232,6 +232,7 @@ async function askModel(facts: RequestFacts) {
       jsonObject: true,
       temperature: 0.1,
       maxTokens: MODEL_MAX_TOKENS,
+      economy: true,
       messages: [
         { role: "system", content: ADVISOR_SYSTEM_PROMPT },
         { role: "user", content },
@@ -249,7 +250,8 @@ export type AdvisorOutcome =
   | { status: "not_found" | "not_pending" };
 
 /**
- * The advisor card for one request. Always renders: blocked requests and provider failures use the rules template.
+ * The advisor card for one request. Opening a list of requests costs no tokens: without `refresh` it returns a
+ * cached AI analysis if its facts are unchanged, otherwise the rules card. The model runs only when an admin asks.
  * It only ever writes to the recommendation cache. It cannot approve or reject anything.
  */
 export async function getLeaveRecommendation(
@@ -293,56 +295,49 @@ export async function getLeaveRecommendation(
   const now = new Date();
   const template = templateRecommendation(facts, blockers);
 
-  if (blockers.length === 0) {
-    const started = Date.now();
-    try {
-      const answer = await askModel(facts);
-      await logAiEvent(actor, {
-        eventType: "TOOL_CALL",
-        toolName: "approval_advisor",
-        arguments: { requestId },
-        resultStatus: answer ? "ok" : "invalid_output",
-        provider: answer?.provider,
-        model: answer?.model,
-        latencyMs: Date.now() - started,
-      });
-      if (answer) {
-        await saveRecommendation(collection, cId, requestId, {
-          result: answer.recommendation,
-          origin: "llm",
-          provider: answer.provider,
-          model: answer.model,
-          factsHash,
-          factsSnapshot: facts,
-          createdAt: now,
-        });
-        return {
-          status: "ok",
-          card: toCard(answer.recommendation, facts, { blocked: false, origin: "llm", provider: answer.provider, model: answer.model, generatedAt: now }),
-        };
-      }
-    } catch (err) {
-      console.warn("[hr-advisor] all providers failed", err instanceof Error ? err.name : "unknown");
-      await logAiEvent(actor, {
-        eventType: "TOOL_CALL",
-        toolName: "approval_advisor",
-        arguments: { requestId },
-        resultStatus: "provider_failure",
-        latencyMs: Date.now() - started,
-      });
-    }
-    // Not cached: the next view tries the model again.
-    return { status: "ok", card: toCard(template, facts, { blocked: false, origin: "rules", generatedAt: now }) };
+  // A blocked request is decided by rules, so asking a model would add nothing.
+  if (!options.refresh || blockers.length > 0) {
+    return { status: "ok", card: toCard(template, facts, { blocked: blockers.length > 0, origin: "rules", generatedAt: now }) };
   }
 
-  await saveRecommendation(collection, cId, requestId, {
-    result: template,
-    origin: "rules",
-    factsHash,
-    factsSnapshot: facts,
-    createdAt: now,
-  });
-  return { status: "ok", card: toCard(template, facts, { blocked: true, origin: "rules", generatedAt: now }) };
+  const started = Date.now();
+  try {
+    const answer = await askModel(facts);
+    await logAiEvent(actor, {
+      eventType: "TOOL_CALL",
+      toolName: "approval_advisor",
+      arguments: { requestId },
+      resultStatus: answer ? "ok" : "invalid_output",
+      provider: answer?.provider,
+      model: answer?.model,
+      latencyMs: Date.now() - started,
+    });
+    if (answer) {
+      await saveRecommendation(collection, cId, requestId, {
+        result: answer.recommendation,
+        origin: "llm",
+        provider: answer.provider,
+        model: answer.model,
+        factsHash,
+        factsSnapshot: facts,
+        createdAt: now,
+      });
+      return {
+        status: "ok",
+        card: toCard(answer.recommendation, facts, { blocked: false, origin: "llm", provider: answer.provider, model: answer.model, generatedAt: now }),
+      };
+    }
+  } catch (err) {
+    console.warn("[hr-advisor] all providers failed", err instanceof Error ? err.name : "unknown");
+    await logAiEvent(actor, {
+      eventType: "TOOL_CALL",
+      toolName: "approval_advisor",
+      arguments: { requestId },
+      resultStatus: "provider_failure",
+      latencyMs: Date.now() - started,
+    });
+  }
+  return { status: "ok", card: toCard(template, facts, { blocked: false, origin: "rules", generatedAt: now }) };
 }
 
 async function saveRecommendation(

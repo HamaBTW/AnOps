@@ -104,7 +104,9 @@ export class GroqProvider implements AiProvider {
         }
 
         // Non-retryable. Never forward the provider's message: it can echo request content.
-        throw new AiProviderError(this.name, `API error (HTTP ${status ?? "unknown"})`, false);
+        // The error code is a fixed identifier, so it is safe to keep for diagnosis.
+        const code = errorCode(err);
+        throw new AiProviderError(this.name, `API error (HTTP ${status ?? "unknown"}${code ? `, ${code}` : ""})`, false);
       }
 
       return { ...toResult(response, model), provider: this.name };
@@ -121,6 +123,7 @@ function buildRequest(model: string, options: AiCompletionOptions): GroqCreatePa
     max_completion_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: options.temperature ?? DEFAULT_TEMPERATURE,
     ...(options.jsonObject ? { response_format: { type: "json_object" as const } } : {}),
+    ...(options.economy && model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" as const } : {}),
     ...(options.tools?.length ? { tools: toOpenAiTools(options.tools), tool_choice: "auto" as const } : {}),
   } as GroqCreateParams;
 }
@@ -143,6 +146,11 @@ function toResult(response: ChatCompletion, model: string): ChatResult {
       totalTokens: response.usage?.total_tokens,
     },
   };
+}
+
+function errorCode(err: unknown): string | undefined {
+  const code = (err as { error?: { error?: { code?: unknown } } })?.error?.error?.code;
+  return typeof code === "string" && /^[a-z0-9_]{1,60}$/i.test(code) ? code : undefined;
 }
 
 function errorStatus(err: unknown): number | undefined {

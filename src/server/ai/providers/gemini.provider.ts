@@ -69,6 +69,10 @@ export class GeminiProvider implements AiProvider {
             maxOutputTokens: options.maxTokens ?? 1024,
             temperature: options.temperature ?? 0.7,
             ...(options.jsonObject ? { responseMimeType: "application/json" } : {}),
+            // Not yet in this SDK's types. Without it, hidden thinking uses up maxOutputTokens.
+            ...(options.economy && model.startsWith("gemini-2.5")
+              ? ({ thinkingConfig: { thinkingBudget: 0 } } as object)
+              : {}),
           },
         });
 

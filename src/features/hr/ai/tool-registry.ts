@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import type { AiToolDefinition } from "@/server/ai/types";
+import { compactToolSchema } from "@/features/hr/ai/context-compression";
 import type { ConfirmationCard } from "@/features/hr/ai/types";
 
 /**
@@ -55,8 +56,7 @@ export function toolsForContext(tools: HrTool[], ctx: Pick<ToolContext, "role" |
 
 export function toToolDefinitions(tools: HrTool[]): AiToolDefinition[] {
   return tools.map((tool) => {
-    const parameters = { ...z.toJSONSchema(tool.parameters) } as Record<string, unknown>;
-    delete parameters.$schema;
+    const parameters = compactToolSchema(z.toJSONSchema(tool.parameters) as Record<string, unknown>);
     return { name: tool.name, description: tool.description, parameters };
   });
 }

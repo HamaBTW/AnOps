@@ -24,11 +24,6 @@ function buildSections(): PolicySection[] {
 
 const POLICY_SECTIONS = buildSections();
 
-/** Section titles, given to the model so it knows what can be searched. */
-export function policyIndex(): string {
-  return POLICY_SECTIONS.map((s) => `- ${s.source} > ${s.section}`).join("\n");
-}
-
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
@@ -39,7 +34,7 @@ function tokenize(text: string): string[] {
 }
 
 /** Keyword search over policy sections. A title match counts more than a body match. */
-export function searchPolicies(query: string, limit = 3): PolicySection[] {
+export function searchPolicies(query: string, limit = 2): PolicySection[] {
   const terms = [...new Set(tokenize(query))];
   return POLICY_SECTIONS.map((section) => {
     const title = tokenize(`${section.source} ${section.section}`);

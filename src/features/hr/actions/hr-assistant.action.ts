@@ -69,6 +69,7 @@ export async function chatWithHRAssistantAction(rawData: unknown): Promise<Copil
       provider,
     });
 
+    console.info(`[hr-copilot] turn used ${reply.tokens} tokens (${reply.provider ?? "no LLM"})`);
     return {
       ok: true,
       text: reply.text,

@@ -48,6 +48,8 @@ export type AiCompletionOptions = {
   provider?: string;
   /** Ask the provider for JSON output. Callers must still validate the result. */
   jsonObject?: boolean;
+  /** Spend as little as possible on hidden reasoning, which otherwise counts as output tokens. */
+  economy?: boolean;
   /** Tools the model may call. Results come back in `AiCompletionResult.toolCalls`. */
   tools?: AiToolDefinition[];
 };

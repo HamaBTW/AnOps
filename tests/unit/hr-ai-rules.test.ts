@@ -15,6 +15,9 @@ import {
   templateRecommendation,
 } from "@/features/hr/ai/advisor-rules";
 import { searchPolicies } from "@/features/hr/ai/policy-search";
+import { endDateForWorkingDays } from "@/features/hr/utils/date-utils";
+import { compactToolSchema, compressHistory, compressPolicyText, selectToolsForMessage, truncateAtSentence } from "@/features/hr/ai/context-compression";
+import { draftFailed, matchFastIntent } from "@/features/hr/ai/fast-answers";
 import { defineTool, executeTool, toolsForContext, toToolDefinitions, type HrTool, type ToolContext } from "@/features/hr/ai/tool-registry";
 import type { RequestFacts } from "@/features/hr/ai/types";
 
@@ -70,6 +73,106 @@ describe("policy search", () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].section).toMatch(/Departure/);
     expect(searchPolicies("spaceship xylophone")).toEqual([]);
+  });
+});
+
+describe("working day arithmetic", () => {
+  it("counts working days, skipping weekends and holidays", () => {
+    // 2026-11-09 is a Monday.
+    expect(endDateForWorkingDays("2026-11-09", 3)).toBe("2026-11-11");
+    expect(endDateForWorkingDays("2026-11-09", 1)).toBe("2026-11-09");
+    expect(endDateForWorkingDays("2026-11-12", 3)).toBe("2026-11-16");
+    expect(endDateForWorkingDays("2026-11-09", 3, ["2026-11-10"])).toBe("2026-11-12");
+  });
+});
+
+describe("token saving", () => {
+  it("answers direct questions without a model, in any supported language", () => {
+    for (const text of ["How many days do I have left?", "Combien de jours de congé me reste-t-il ?", "كم يوم إجازة تبقى لي؟", "9adeh men nhar congé b9ali?"]) {
+      expect(matchFastIntent(text)?.tool).toBe("get_my_leave_balance");
+    }
+    expect(matchFastIntent("Who is absent today?")?.tool).toBe("get_absent_today");
+    expect(matchFastIntent("Show pending leave requests")?.tool).toBe("get_pending_requests");
+    expect(matchFastIntent("Preview payroll for this month")?.tool).toBe("generate_payroll_preview");
+  });
+
+  it("renders fast answers from the tool's numbers", () => {
+    const text = matchFastIntent("How many days do I have left?")!.render({ available: 7, earned: 10, taken: 2, reserved: 1 }, "en");
+    expect(text).toContain("7 days");
+    expect(matchFastIntent("Who is absent today?")!.render({ isWorkingDay: true, onApprovedLeave: [{ name: "Ali", department: "QA" }], noCheckIn: [] }, "en")).toContain("Ali (QA)");
+  });
+
+  it("leaves anything less direct to the model", () => {
+    for (const text of [
+      "Explain how my balance is calculated",
+      "How is my leave balance counted?",
+      "How many days do I have left and what is the sick leave rule?",
+      "Preview payroll for 2026-10",
+      "Book 3 days next Monday",
+    ]) {
+      expect(matchFastIntent(text)).toBeNull();
+    }
+  });
+
+  it("never answers a question about someone else, or a filtered question, from the caller's own data", () => {
+    for (const text of [
+      "What is Zied Outsider's leave balance?",
+      "What is Salma Eval's leave balance?",
+      "Show Karim's balance",
+      "leave balance of Karim",
+      "Quel est le solde de Karim ?",
+      "Combien de jours a Karim ?",
+      "How many days does Karim have left?",
+      "ما هو رصيد كريم؟",
+      "Who is absent in Engineering?",
+      "Show pending requests in Sales",
+      "Show my pending requests",
+      "Preview payroll for October",
+    ]) {
+      expect(matchFastIntent(text)).toBeNull();
+    }
+  });
+
+  it("sends only the tools a message can need, and all of them when unsure", () => {
+    const tools = ["search_hr_policies", "get_my_leave_balance", "create_leave_draft", "check_leave_feasibility", "get_my_payroll_preview"].map((name) => ({ name }));
+    const names = (message: string) => selectToolsForMessage(message, tools).map((t) => t.name);
+    expect(names("Book 3 days next Monday")).toEqual(["search_hr_policies", "create_leave_draft", "check_leave_feasibility"]);
+    expect(names("Is unpaid leave deducted from my salary?")).toEqual(["search_hr_policies", "get_my_payroll_preview"]);
+    expect(names("yes please")).toHaveLength(tools.length);
+  });
+
+  it("never adds a tool the caller was not given", () => {
+    expect(selectToolsForMessage("Who is absent today?", [{ name: "search_hr_policies" }]).map((t) => t.name)).toEqual(["search_hr_policies"]);
+  });
+
+  it("compresses history to two short exchanges", () => {
+    const long = "A sentence. ".repeat(200);
+    const history = Array.from({ length: 10 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `**${i}** ${long}` }));
+    const compressed = compressHistory([{ role: "system", content: "You are admin" }, ...history]);
+    expect(compressed).toHaveLength(4);
+    expect(compressed.every((m) => m.content.length <= 241 && !m.content.includes("*"))).toBe(true);
+    expect(JSON.stringify(compressed)).not.toContain("You are admin");
+  });
+
+  it("cuts text at a sentence end", () => {
+    expect(truncateAtSentence("First rule applies here. Second rule is much longer than the limit.", 40)).toBe("First rule applies here.");
+    expect(compressPolicyText("1. **Bold** `code`\n\n   spaced")).toBe("1. Bold code spaced");
+  });
+
+  it("removes schema parts a model does not need, keeping a property named like a keyword", () => {
+    expect(
+      compactToolSchema({
+        $schema: "x",
+        type: "object",
+        additionalProperties: false,
+        required: ["pattern"],
+        properties: { pattern: { type: "string", pattern: "^a$", maxLength: 3 } },
+      })
+    ).toEqual({ type: "object", required: ["pattern"], properties: { pattern: { type: "string" } } });
+  });
+
+  it("words a refused draft without a model", () => {
+    expect(draftFailed("en", ["Start date is in the past."])).toContain("Start date is in the past.");
   });
 });
 

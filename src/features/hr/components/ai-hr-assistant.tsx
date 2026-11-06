@@ -94,7 +94,7 @@ export function AIHRAssistant({
       model: selectedModel || undefined,
       provider: selectedProvider || undefined,
       // The last entry is the message being sent. Earlier cards and metadata are not sent back.
-      history: history.slice(0, -1).slice(-10).map((m) => ({ role: m.role, content: m.content })),
+      history: history.slice(0, -1).slice(-4).map((m) => ({ role: m.role, content: m.content })),
     });
 
     if (!result.ok) {

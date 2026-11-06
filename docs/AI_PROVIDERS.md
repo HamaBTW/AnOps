@@ -184,7 +184,7 @@ const result = await ai.chat({
 | `advisor_json` | Gemini → Groq → OpenRouter | `AI_ROUTE_ADVISOR_JSON` |
 | `policy_qa` | Gemini → Groq → OpenRouter | `AI_ROUTE_POLICY_QA` |
 
-Timeouts (25s), 429/5xx, empty responses and malformed tool arguments move to the next provider, with at most one retry per provider. `AI_DISABLED_PROVIDERS=groq` skips a provider, to rehearse an outage. Gemini 2.5 counts hidden thinking against `maxTokens`, so leave a generous limit (2000) or JSON gets truncated.
+Timeouts (25s), 429/5xx, empty responses and malformed tool arguments move to the next provider, with at most one retry per provider. `AI_DISABLED_PROVIDERS=groq` skips a provider, to rehearse an outage. Pass `economy: true` to limit hidden reasoning (Groq `gpt-oss`: low effort; Gemini 2.5: no thinking budget). Without it, Gemini 2.5 counts thinking against `maxTokens`, and a small limit truncates the answer. Providers also count `maxTokens` against rate limits, so keep it small.
 
 ---
 

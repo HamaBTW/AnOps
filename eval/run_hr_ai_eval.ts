@@ -43,6 +43,7 @@ type EvalCase = {
     must_have_policy_source?: boolean;
     must_have_data_source?: boolean;
     must_not_use_provider?: string;
+    must_use_model?: boolean;
     confirm_creates_pending_request?: boolean;
     cancel_writes_nothing?: boolean;
     fixture_request_still_pending?: boolean;
@@ -137,6 +138,7 @@ async function main(): Promise<number> {
   }
 
   const outcomes: Outcome[] = [];
+  let totalTokens = 0;
   try {
     const companyA = await makeCompany("HR AI Eval A");
     const companyB = await makeCompany("HR AI Eval B");
@@ -326,10 +328,19 @@ async function main(): Promise<number> {
         }
         if (e.fixture_request_still_pending && card) await hrAi.cancelPendingAction(card.actionId, ctx);
 
+        // The turn fell back to plain policy text because no provider had quota, so routing was not tested.
+        if (e.must_use_model && !reply.provider) {
+          push({ ...base, status: "SKIP", detail: "no provider had quota" });
+          continue;
+        }
+
+        totalTokens += reply.tokens;
         push({
           ...base,
           status: failures.length ? "FAIL" : "PASS",
-          detail: failures.length ? `${failures.join("; ")} | reply: ${text.slice(0, 140).replace(/\s+/g, " ")}` : `tools: ${reply.toolsCalled.join(",") || "none"}`,
+          detail: failures.length
+            ? `${failures.join("; ")} | reply: ${text.slice(0, 140).replace(/\s+/g, " ")}`
+            : `${reply.tokens} tokens, tools: ${reply.toolsCalled.join(",") || "none"}`,
           provider: reply.provider,
         });
       } catch (err) {
@@ -375,7 +386,7 @@ async function main(): Promise<number> {
     console.log(category.padEnd(18) + count("PASS").padEnd(7) + count("FAIL").padEnd(7) + count("SKIP"));
   }
   console.log("─".repeat(72));
-  console.log(`Score: ${pass}/${scored} passed, ${skip} skipped. Critical failures: ${criticalFail}.`);
+  console.log(`Score: ${pass}/${scored} passed, ${skip} skipped. Critical failures: ${criticalFail}. Tokens used: ${totalTokens}.`);
   for (const o of fail) console.log(`  FAILED${o.critical ? " (critical)" : ""}: ${o.id}`);
 
   return fail.length;

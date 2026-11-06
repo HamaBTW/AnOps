@@ -3,10 +3,13 @@ import { z } from "zod";
 import { defineTool } from "@/server/ai/tools/define-tool";
 import { modelRows } from "@/server/ai/tools/inventory.parts";
 import { authorNameOf, communityScope, maskVisitorEmail, redactPersonalData } from "@/server/ai/community/access";
-import { categoriesTable, conversationCard, conversationsTable, paginate, postCard, postsTable, statsCard, topicCard, topicsTable } from "@/server/ai/tools/community.parts";
+import { categoriesTable, conversationCard, conversationsTable, pageOf, postCard, postsTable, statsCard, topicCard, topicsTable } from "@/server/ai/tools/community.parts";
 import { createBlogPostSchema, createCommentSchema, createForumReplySchema, createForumTopicSchema, sendChatMessageSchema, updateBlogPostSchema } from "@/features/community/schemas/community.schema";
 import {
   closeChatConversation,
+  countBlogPosts,
+  countChatConversations,
+  countForumTopics,
   createBlogPost,
   createComment,
   createForumReply,
@@ -95,8 +98,8 @@ export const listPostsTool = defineTool({
   description: "List articles, newest first. status: all, draft, published, archived (people who cannot write see published only). q matches title, excerpt and tags.",
   input: z.object({ q: optText(80), status: z.enum(["all", "draft", "published", "archived"]).optional(), page: pageNo }).strict(),
   async run(ctx, args) {
-    const all = await getBlogPosts(ctx, { status: args.status, search: args.q });
-    const page = paginate(all, args.page);
+    const filter = { status: args.status, search: args.q };
+    const page = await pageOf(await countBlogPosts(ctx, filter), args.page, (skip, limit) => getBlogPosts(ctx, filter, { skip, limit }));
     return {
       summary: `${page.total} article${page.total === 1 ? "" : "s"}`,
       parts: [postsTable(page, { ...(args.q ? { q: args.q } : {}), ...(args.status ? { status: args.status } : {}) })],
@@ -134,7 +137,7 @@ export const listTopicsTool = defineTool({
   description: "List forum topics, pinned first then newest. q matches the title and text.",
   input: z.object({ q: optText(80), page: pageNo }).strict(),
   async run(ctx, args) {
-    const page = paginate(await getForumTopics(ctx, { search: args.q }), args.page);
+    const page = await pageOf(await countForumTopics(ctx, { search: args.q }), args.page, (skip, limit) => getForumTopics(ctx, { search: args.q }, { skip, limit }));
     return {
       summary: `${page.total} topic${page.total === 1 ? "" : "s"}`,
       parts: [topicsTable(page, args.q ? { q: args.q } : {})],
@@ -228,7 +231,7 @@ export const listConversationsTool = defineTool({
   description: "List support chat conversations, most recent first (support agents only). Visitor emails are always masked.",
   input: z.object({ status: z.enum(["all", "open", "closed"]).optional(), page: pageNo }).strict(),
   async run(ctx, args) {
-    const page = paginate(await getChatConversations(ctx, args.status), args.page);
+    const page = await pageOf(await countChatConversations(ctx, args.status), args.page, (skip, limit) => getChatConversations(ctx, args.status, { skip, limit }));
     return {
       summary: `${page.total} conversation${page.total === 1 ? "" : "s"}`,
       parts: [conversationsTable(page, args.status ? { status: args.status } : {})],

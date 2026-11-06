@@ -116,6 +116,8 @@ export function Composer({
         <label htmlFor="ai-composer" className="sr-only">
           Message AnOps AI
         </label>
+        {/* ARIA 1.1 combobox: the wrapper owns the popup state, the textarea keeps its textbox role and points at the active option. */}
+        <div role="combobox" aria-label="Message AnOps AI" aria-expanded={open} aria-haspopup="listbox" aria-owns={open ? listId : undefined} aria-controls={open ? listId : undefined} className="flex min-w-0 flex-1">
         <textarea
           id="ai-composer"
           ref={ref}
@@ -124,8 +126,6 @@ export function Composer({
           maxLength={MAX_CHARS}
           disabled={disabled}
           placeholder={disabled ? "AI is not available to you right now" : "Ask anything, or type / for commands"}
-          role="combobox"
-          aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-activedescendant={open && matches[active] ? `${listId}-${active}` : undefined}
           aria-autocomplete="list"
@@ -135,10 +135,11 @@ export function Composer({
             setDismissed(false);
           }}
           onKeyDown={onKeyDown}
-          // The container draws the focus ring (focus-within); the global :focus-visible outline would double it.
-          style={{ outline: "none" }}
-          className="max-h-44 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-secondary)] disabled:cursor-not-allowed"
+          // The container draws the focus ring (focus-within); the global :focus-visible outline would double it, so it is
+          // switched off with an important utility class (an inline style caused a hydration mismatch).
+          className="max-h-44 min-h-[44px] w-full flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] text-[var(--color-text-primary)] !outline-none placeholder:text-[var(--color-text-secondary)] disabled:cursor-not-allowed"
         />
+        </div>
         {sending ? (
           <button
             type="button"

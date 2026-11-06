@@ -1,6 +1,5 @@
 import "server-only";
 
-import { ai } from "@/server/ai";
 import type {
   AiCompletionOptions,
   AiCompletionResult,
@@ -76,6 +75,17 @@ export type AgentConfig = {
  * const response = await agent.chat(history, userMessage, context);
  * ```
  */
+/**
+ * How an agent reaches a model. It is always supplied by the caller and is always a gated call (see server/ai/gate.ts), so an
+ * agent cannot run without the access checks, the kill switch, the rate limits and the token budget.
+ */
+export type AgentComplete = (options: AiCompletionOptions) => Promise<AiCompletionResult>;
+
+/** One system prompt and one user prompt through the supplied gated call, returning the reply text. */
+export async function askWith(complete: AgentComplete, userPrompt: string, systemPrompt: string, options: Omit<AiCompletionOptions, "messages"> = {}): Promise<string> {
+  return (await complete({ ...options, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }] })).text;
+}
+
 export abstract class BaseAgent {
   readonly name: string;
   readonly description: string;
@@ -145,16 +155,13 @@ export abstract class BaseAgent {
    * @param history          Previous messages in this session (user + assistant turns)
    * @param userText         The new user message
    * @param context          Optional domain data the agent can use to enrich the prompt
-   * @param modelOverride    Force a specific model (e.g. from the UI selector). Takes
-   *                         precedence over the agent's default model.
-   * @param providerOverride Force a specific provider (e.g. "groq", "gemini", "openrouter").
+   * @param complete         The gated model call supplied by the caller (see server/ai/gate.ts)
    */
   async chat(
     history: AgentMessage[],
     userText: string,
-    context?: AgentContext,
-    modelOverride?: string,
-    providerOverride?: string
+    context: AgentContext | undefined,
+    complete: AgentComplete
   ): Promise<AgentResponse> {
     // 1. Build the system prompt (may be dynamic)
     const systemPrompt = await this.buildSystemPrompt(context);
@@ -185,15 +192,14 @@ export abstract class BaseAgent {
       messages: [],
       maxTokens: this.config.defaults?.maxTokens ?? 1024,
       temperature: this.config.defaults?.temperature ?? 0.7,
-      // modelOverride (from UI selector) > agent default > master auto-select
-      model: modelOverride ?? this.config.defaults?.model,
-      provider: providerOverride,
+      // The provider and model are chosen on the server (agent default, then the router). A caller cannot pick them.
+      model: this.config.defaults?.model,
     };
     messages = await this.beforeComplete(messages, context);
     options.messages = messages;
 
     // 6. Call the AI master (handles provider fallback internally)
-    let result = await ai.complete(options);
+    let result = await complete(options);
 
     // 7. Post-completion hook
     result = await this.afterComplete(result, context);

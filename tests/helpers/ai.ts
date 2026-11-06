@@ -3,6 +3,7 @@ import type { CompanyRole } from "@/features/company/types";
 import type { AiActorContext } from "@/server/ai/access/access.service";
 import { COLLECTIONS } from "@/server/db/documents";
 import type { TestHarness } from "./workspace";
+import type { AiModuleGrant, AiModuleKey } from "@/shared/domain/ai";
 
 export type SeededMember = { userId: ObjectId; companyId: ObjectId; role: CompanyRole };
 
@@ -64,4 +65,34 @@ export function wsOf(h: TestHarness, member: SeededMember): WorkspaceContext {
     currencyCode: "TND",
     permissions: permissionsForRole(role),
   };
+}
+
+/**
+ * Gives a workspace's user live AI access: an active user and membership, the company's AI switch on, and an AI grant for the
+ * given modules. For tests of model-backed features that run behind the AI gate with a context built by the harness.
+ */
+export async function enableAi(h: TestHarness, ctx: WorkspaceContext, modules: Partial<Record<AiModuleKey, Partial<AiModuleGrant>>>, extra: { canViewSensitiveHr?: boolean; dailyTokenCap?: number | null } = {}) {
+  const companyRole = ctx.role === "owner" ? "owner" : ctx.role === "admin" ? "admin" : ctx.role === "operator" ? "manager" : "employee";
+  const now = new Date();
+  await h.db.collection("users").updateOne(
+    { _id: ctx.userId },
+    { $setOnInsert: { name: `${companyRole} ${ctx.userId.toHexString().slice(-4)}`, email: `${ctx.userId.toHexString()}@example.test`, status: "active", emailVerified: now } },
+    { upsert: true }
+  );
+  await h.db.collection(COLLECTIONS.companyMembers).updateOne(
+    { companyId: ctx.companyId, userId: ctx.userId },
+    { $set: { role: companyRole, status: "active" }, $setOnInsert: { _id: new ObjectId(), createdAt: now } },
+    { upsert: true }
+  );
+  await h.db.collection(COLLECTIONS.aiSettings).updateOne(
+    { companyId: ctx.companyId },
+    { $setOnInsert: { _id: new ObjectId(), enabled: true, retentionDays: 90, dailyTokenBudget: 0, defaultUserDailyTokenCap: 0, version: 1, updatedBy: ctx.userId, updatedAt: now } },
+    { upsert: true }
+  );
+  const cells = Object.fromEntries(Object.entries(modules).map(([m, c]) => [m, { view: false, create: false, edit: false, delete: false, approve: false, ...c }]));
+  await h.db.collection(COLLECTIONS.aiAccessGrants).updateOne(
+    { companyId: ctx.companyId, userId: ctx.userId },
+    { $set: { enabled: true, modules: cells, canAuditTranscripts: false, canViewSensitiveHr: extra.canViewSensitiveHr ?? false, dailyTokenCap: extra.dailyTokenCap ?? null, updatedBy: ctx.userId, updatedAt: now }, $setOnInsert: { _id: new ObjectId(), version: 1 } },
+    { upsert: true }
+  );
 }

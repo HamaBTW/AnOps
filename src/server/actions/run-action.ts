@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "crypto";
 import type { ZodType } from "zod";
 import { resolveWorkspace, type WorkspaceContext } from "@/server/tenancy/workspace";
-import { consumeRateLimit } from "@/server/security/rate-limit";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { AppError, isAppError, type ActionError, type ActionResult } from "@/shared/lib/errors";
 import { toFieldErrors } from "@/shared/lib/validation";
 
@@ -22,11 +22,7 @@ export async function runAction<T>(
   try {
     const ctx = await resolveWorkspace(requestId);
     if (options.rateLimit) {
-      consumeRateLimit(
-        `${ctx.userId.toHexString()}:${name}`,
-        options.rateLimit.limit,
-        options.rateLimit.windowMs
-      );
+      await consumeSharedRateLimit(ctx.db, `user:${ctx.userId.toHexString()}:${name}`, options.rateLimit.limit, options.rateLimit.windowMs);
     }
     const data = await operation(ctx);
     return { ok: true, data };

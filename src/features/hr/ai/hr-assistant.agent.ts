@@ -26,6 +26,8 @@ export type HRAssistantContext = AgentContext & {
   userEmployeeId?: string;
   userFullName?: string;
   userEmail?: string;
+  /** Salary, daily rate and payroll deductions may be put in the prompt (the member holds the sensitive-HR switch). */
+  includePayroll?: boolean;
 };
 
 const HR_SYSTEM_PROMPT = `
@@ -123,6 +125,7 @@ export class HRAssistantAgent extends BaseAgent {
     }
 
     const companyId = context.companyId;
+    const includePayroll = context.includePayroll === true;
     const currentYear = new Date().getFullYear();
 
     try {
@@ -260,8 +263,12 @@ export class HRAssistantAgent extends BaseAgent {
             parts.push(`- **Date of Birth**: ${emp.dateOfBirth}`);
           }
           const dailyRate = Math.round((emp.baseSalary / 22) * 100) / 100;
-          parts.push(`- **Base Salary**: ${emp.baseSalary.toLocaleString()} TND`);
-          parts.push(`- **Daily Rate (Base ÷ 22)**: ${dailyRate.toFixed(2)} TND/day`);
+          if (includePayroll) {
+            parts.push(`- **Base Salary**: ${emp.baseSalary.toLocaleString()} TND`);
+            parts.push(`- **Daily Rate (Base ÷ 22)**: ${dailyRate.toFixed(2)} TND/day`);
+          } else {
+            parts.push("- Salary and payroll figures are not available to you through AI.");
+          }
 
           // Fetch Solde de Congé, policy, ledger transactions & leave requests
           const [solde, policy, requests, transactions] = await Promise.all([
@@ -296,10 +303,18 @@ export class HRAssistantAgent extends BaseAgent {
           
           const unusedDays = Math.max(0, solde.earned - solde.taken);
           const compValue = Math.round(unusedDays * dailyRate * 100) / 100;
-          parts.push(`- **Departure Compensation (Indemnité compensatrice Art. 120)**: **${unusedDays} unused days** (${solde.earned} Earned - ${solde.taken} Taken) = **${compValue.toLocaleString()} TND** (subject to legal verification)`);
+          parts.push(
+            includePayroll
+              ? `- **Departure Compensation (Indemnité compensatrice Art. 120)**: **${unusedDays} unused days** (${solde.earned} Earned - ${solde.taken} Taken) = **${compValue.toLocaleString()} TND** (subject to legal verification)`
+              : `- **Unused leave days (Art. 120)**: **${unusedDays} days**`
+          );
           
           const unpaidDeduction = Math.round(solde.unpaidDaysTaken * dailyRate * 100) / 100;
-          parts.push(`- **Unpaid Leave Taken (Payroll Deduction)**: **${solde.unpaidDaysTaken} days** = **${unpaidDeduction.toLocaleString()} TND** deducted from base salary [Formula: ${emp.baseSalary} ÷ 22 × ${solde.unpaidDaysTaken}]`);
+          parts.push(
+            includePayroll
+              ? `- **Unpaid Leave Taken (Payroll Deduction)**: **${solde.unpaidDaysTaken} days** = **${unpaidDeduction.toLocaleString()} TND** deducted from base salary [Formula: ${emp.baseSalary} ÷ 22 × ${solde.unpaidDaysTaken}]`
+              : `- **Unpaid Leave Taken**: **${solde.unpaidDaysTaken} days**`
+          );
 
           // Attach UI metadata card for this employee
           if (context) {

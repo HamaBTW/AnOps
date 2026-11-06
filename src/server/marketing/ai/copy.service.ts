@@ -2,11 +2,12 @@ import "server-only";
 import { ObjectId, type Db } from "mongodb";
 import { z } from "zod";
 import { ai } from "@/server/ai";
+import { gatedComplete } from "@/server/ai/gate";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { MARKETING_COLLECTIONS, type AiCopyDoc, type AiGenerationDoc, type CampaignDoc } from "@/server/marketing/documents";
 import { recordAudit } from "@/server/audit/audit.service";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
-import { consumeRateLimit } from "@/server/security/rate-limit";
 import type { AiRequestInput } from "@/features/marketing/schemas/marketing.schema";
 import { EMAIL_SUBJECT_MAX, SMS_BODY_MAX, SMS_OPT_OUT_FOOTER, TELEGRAM_BODY_MAX } from "@/features/marketing/utils/template";
 import { MARKETING_PAGE_SIZE, pageMeta, requireMarketing, scopeOf, skipOf, toObjectId } from "@/server/marketing/common";
@@ -129,7 +130,7 @@ export function parseCopyOutput(text: string, channel: AiRequestInput["channel"]
 
 export async function generateCopy(ctx: WorkspaceContext, input: AiRequestInput): Promise<AiGenerationDto> {
   requireMarketing(ctx, PERMISSIONS.MARKETING_AI_GENERATE);
-  consumeRateLimit(`${ctx.userId.toHexString()}:marketing.ai`, AI_GENERATIONS_PER_HOUR, 60 * 60_000);
+  await consumeSharedRateLimit(ctx.db, `user:${ctx.userId.toHexString()}:marketing.ai`, AI_GENERATIONS_PER_HOUR, 60 * 60_000, "You have reached the hourly limit for AI copy. Try again later.");
   if (!ai.status().some((provider) => provider.available)) {
     throw new AppError("PROVIDER_NOT_CONFIGURED", "AI copy generation is not configured on this server. Add an AI provider key to enable it.");
   }
@@ -161,7 +162,7 @@ export async function generateCopy(ctx: WorkspaceContext, input: AiRequestInput)
 
   const started = Date.now();
   try {
-    const result = await ai.complete({
+    const result = await gatedComplete(ctx, { module: "marketing", operation: "create", feature: "marketing.copy" }, {
       messages: [
         { role: "system", content: COPY_SYSTEM_PROMPT },
         { role: "user", content: buildUserPrompt(input) },
@@ -174,6 +175,8 @@ export async function generateCopy(ctx: WorkspaceContext, input: AiRequestInput)
     doc.providerName = result.provider;
     doc.modelName = result.model;
   } catch (error) {
+    // A refusal by the AI gate (no AI access, switched off, over a limit or budget) is shown, not recorded as a failed generation.
+    if (error instanceof AppError && ["FORBIDDEN", "RATE_LIMITED", "PROVIDER_NOT_CONFIGURED"].includes(error.code)) throw error;
     doc.status = "failed";
     doc.errorCode = error instanceof AppError && error.code === "INTERNAL" ? "AI_INVALID_OUTPUT" : "AI_UNAVAILABLE";
   }

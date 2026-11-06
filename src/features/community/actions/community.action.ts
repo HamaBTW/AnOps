@@ -43,6 +43,8 @@ import {
   generateSupportReplySuggestions,
 } from "@/features/community/ai/community-ai.agent";
 import type { AgentMessage } from "@/server/ai/base-agent";
+import { gatedComplete } from "@/server/ai/gate";
+import type { AiCompletionOptions } from "@/server/ai/types";
 
 export type ActionResult<T = unknown> =
   | { success: true; data: T; message?: string }
@@ -64,6 +66,10 @@ async function act<T = unknown>(name: string, operation: (ctx: WorkspaceContext,
     return { success: false, error: toActionError(error, requestId, `community.${name}`).message };
   }
 }
+
+/** The only way Community reaches a model: through the shared AI gate, as the feature the person is using. */
+const gated = (ctx: WorkspaceContext, operation: "view" | "create", feature: string) => (options: AiCompletionOptions) =>
+  gatedComplete(ctx, { module: "community", operation, feature }, options);
 
 const invalid = (parsed: { message: string; errors?: Record<string, string> }): { success: false; error: string; fieldErrors?: Record<string, string> } => ({ success: false, error: parsed.message, fieldErrors: parsed.errors });
 
@@ -228,7 +234,7 @@ export async function triggerAiBotReplyAction(conversationId: string): Promise<A
       companyName: "your company",
       visitorName: conversation.visitorName,
       recentArticles: articles.map((a) => ({ title: a.title, excerpt: a.excerpt })),
-    });
+    }, gated(ctx, "view", "community.bot"));
 
     const botMsg = await postBotMessage(ctx, conversationId, response.message.content);
     revalidatePath("/community");
@@ -241,7 +247,7 @@ export async function getAiReplySuggestionsAction(conversationId: string): Promi
   return act("replySuggestions", async (ctx) => {
     const messages = await getChatMessages(ctx, conversationId);
     const lastVisitorMsg = [...messages].reverse().find((m) => m.senderType === "visitor")?.body || "Hello";
-    const suggestions = await generateSupportReplySuggestions(lastVisitorMsg);
+    const suggestions = await generateSupportReplySuggestions(gated(ctx, "create", "community.suggestions"), lastVisitorMsg);
     if (suggestions[0]) await saveAIReplySuggestion(ctx, { conversationId, suggestedText: suggestions[0] });
     return { success: true, data: suggestions };
   });
@@ -257,7 +263,7 @@ export async function generateBlogPostSummaryAction(rawInput: unknown): Promise<
     if (!parsed.success) return invalid(parsed);
     const post = await getBlogPostByIdOrSlug(ctx, parsed.data.blogPostId, { countView: false });
     if (!post) return { success: false, error: "Article not found" };
-    const summaryData = await summarizeBlogArticle(post.title, post.body);
+    const summaryData = await summarizeBlogArticle(gated(ctx, "create", "community.summary"), post.title, post.body);
     const savedSummary = await saveAISummary(ctx, { blogPostId: post.id, summary: summaryData.summary, bulletPoints: summaryData.bulletPoints, modelVersion: summaryData.modelVersion });
     revalidatePath("/community");
     return { success: true, data: savedSummary, message: "3-bullet AI summary generated successfully" };

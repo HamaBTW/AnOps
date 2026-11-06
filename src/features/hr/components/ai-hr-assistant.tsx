@@ -91,8 +91,6 @@ export function AIHRAssistant({
     const result = await chatWithHRAssistantAction({
       userMessage: userText,
       employeeId: activeEmployeeId,
-      model: selectedModel || undefined,
-      provider: selectedProvider || undefined,
       history: history.map((m) => ({
         id: m.id,
         role: m.role,

@@ -8,7 +8,8 @@ import { appendMessages, getConversation, newMessage } from "@/server/ai/convers
 import { aiToolRegistry } from "@/server/ai/tools";
 import { runDraft, type CompleteFn } from "@/server/ai/draft/draft-engine";
 import type { ToolRegistry } from "@/server/ai/tools/registry";
-import { consumeRateLimit } from "@/server/security/rate-limit";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
+import { SENSITIVE_PLACEHOLDER } from "@/server/ai/platform";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import { toFieldErrors } from "@/shared/lib/validation";
@@ -104,7 +105,7 @@ export async function runCommandStep(ctx: WorkspaceContext, rawRequest: unknown,
 
   const access = await resolveAiAccess(ctx);
   assertAiReady(access);
-  consumeRateLimit(`${ctx.userId.toHexString()}:ai.command`, COMMAND_RATE.limit, COMMAND_RATE.windowMs);
+  await consumeSharedRateLimit(ctx.db, `user:${ctx.userId.toHexString()}:ai.command`, COMMAND_RATE.limit, COMMAND_RATE.windowMs);
 
   // The conversation must be the caller's own; getConversation is scoped to company and user.
   const conversationId = request.conversationId ? new ObjectId((await getConversation(ctx, request.conversationId)).id) : null;
@@ -112,7 +113,9 @@ export async function runCommandStep(ctx: WorkspaceContext, rawRequest: unknown,
   const result = await executeCommand(ctx, access, { name: request.command, step: request.step, args: request.args, values: request.values, draft: request.draft, conversationId }, deps);
 
   if (conversationId) {
-    const parts = [...(result.text ? [{ type: "text" as const, text: result.text }] : []), ...result.parts];
+    // Commands that show payroll data are kept in history as a neutral line, not as the figures.
+    const sensitive = (deps.commands ?? commandRegistry).get(request.command)?.sensitive === "hr" && result.parts.length > 0;
+    const parts = sensitive ? [{ type: "text" as const, text: SENSITIVE_PLACEHOLDER }] : [...(result.text ? [{ type: "text" as const, text: result.text }] : []), ...result.parts];
     await appendMessages(ctx, conversationId, [
       newMessage("user", [{ type: "text", text: request.label || `/${request.command}` }]),
       newMessage("assistant", parts),

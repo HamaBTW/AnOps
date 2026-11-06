@@ -32,6 +32,8 @@ export type AiCompletionOptions = {
    * other adapters ignore it, so callers that need JSON must pin `provider: "groq"`.
    */
   jsonObject?: boolean;
+  /** Aborts the provider request, for example when the person closes the stream. */
+  signal?: AbortSignal;
 };
 
 export type AiCompletionResult = {

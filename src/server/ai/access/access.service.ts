@@ -1,6 +1,7 @@
 import "server-only";
 import { ObjectId, type Db } from "mongodb";
-import { aiRetentionWriter, aiScope, aiScopeForMember, type AiScopeContext } from "@/server/ai/data/scope";
+import { isAiKillSwitchOn } from "@/server/ai/platform";
+import { aiCompanyPending, aiRetentionWriter, aiScope, aiScopeForMember, type AiScopeContext } from "@/server/ai/data/scope";
 import {
   AI_MODULES,
   AI_OPERATIONS,
@@ -128,7 +129,7 @@ const NO_GRANT: AiGrantView = {
   isDefault: false,
 };
 
-export type AiAccessState = "ready" | "company_disabled" | "not_granted" | "inactive";
+export type AiAccessState = "ready" | "platform_disabled" | "company_disabled" | "not_granted" | "inactive";
 
 export type AiAccess = {
   state: AiAccessState;
@@ -158,7 +159,9 @@ export async function resolveAiAccess(ctx: AiActorContext): Promise<AiAccess> {
   if (!grantDoc && member?.companyRole === "owner") grant = ownerDefaultGrant(member);
 
   let state: AiAccessState = "ready";
-  if (!member) state = "inactive";
+  // The platform switch (AI_KILL_SWITCH) wins over everything and is read on every call, so it takes effect on the next request.
+  if (isAiKillSwitchOn()) state = "platform_disabled";
+  else if (!member) state = "inactive";
   else if (!settings.enabled) state = "company_disabled";
   else if (!grant.enabled) state = "not_granted";
 
@@ -181,6 +184,7 @@ export async function resolveAiAccess(ctx: AiActorContext): Promise<AiAccess> {
 export function assertAiReady(access: AiAccess): void {
   if (access.state === "ready") return;
   const messages: Record<Exclude<AiAccessState, "ready">, string> = {
+    platform_disabled: "AI is temporarily switched off for the whole platform. Try again later.",
     company_disabled: "AI is not enabled for this company. Ask an owner or administrator.",
     not_granted: "AI access is not enabled for your account. Ask an owner or administrator.",
     inactive: "Your account is not active in this company.",
@@ -245,6 +249,10 @@ export async function updateAiSettings(ctx: AiActorContext, rawSettings: unknown
     );
   });
   await aiRetentionWriter(ctx).reapply(input.retentionDays);
+  // Switching AI off ends every open proposal of the company, so turning it back on never revives stale intent.
+  if (!input.enabled) {
+    await aiCompanyPending(ctx).updateMany({ status: "pending" }, { $set: { status: "cancelled", statusReason: "ai_disabled", resolvedAt: new Date() } });
+  }
   return getAiSettings(ctx);
 }
 

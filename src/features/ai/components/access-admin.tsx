@@ -233,7 +233,36 @@ export function AccessAdmin({
                 <div className={budgetPct >= 90 ? "h-full bg-[var(--color-status-error)]" : "h-full bg-[var(--color-action-primary)]"} style={{ width: `${budgetPct}%` }} />
               </div>
             )}
+            <p className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
+              Tokens are measured from what the provider reported.
+              {usage.today.estimatedCost && (
+                <> Estimated cost today: <span className="font-medium tabular-nums text-[var(--color-text-primary)]">{usage.today.estimatedCost.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {usage.today.estimatedCost.currency}</span> (an estimate from the configured price, not a bill).</>
+              )}
+            </p>
           </div>
+          {usage.byModel.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[24rem] text-sm">
+                <caption className="sr-only">Measured tokens by provider and model, last 7 days</caption>
+                <thead>
+                  <tr className="text-left text-xs text-[var(--color-text-secondary)]">
+                    <th scope="col" className="py-1.5 pr-3 font-medium">Provider and model (7 days)</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-medium">Calls</th>
+                    <th scope="col" className="py-1.5 text-right font-medium">Tokens</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.byModel.map((m) => (
+                    <tr key={`${m.provider}/${m.model}`} className="border-t border-[var(--color-border-subtle)]">
+                      <td className="py-1.5 pr-3 break-all text-[var(--color-text-primary)]">{m.provider} · {m.model}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{m.calls.toLocaleString()}</td>
+                      <td className="py-1.5 text-right tabular-nums">{m.tokens.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {usage.members.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[28rem] text-sm">

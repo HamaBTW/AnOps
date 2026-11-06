@@ -347,7 +347,7 @@ export function GuidedForm({ part }: { part: AiFormPart }) {
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                 <label htmlFor={id} className="text-sm font-semibold text-[var(--color-text-primary)]">
                   {f.label}
-                  {f.required && <span aria-hidden="true" className="ml-0.5 text-[var(--color-status-error)]">*</span>}
+                  {f.required && <span aria-hidden="true" className="ml-0.5 text-[var(--color-status-error-fg)]">*</span>}
                 </label>
                 {p && (
                   <span title={PROVENANCE[p].hint}>
@@ -368,8 +368,8 @@ export function GuidedForm({ part }: { part: AiFormPart }) {
                   Was: <span className="line-through">{wasText || "empty"}</span>
                 </p>
               )}
-              {inferred && <p className="text-xs text-[var(--color-status-warning)]">The AI assumed this. Check it, or change it.</p>}
-              {q && <p className="text-xs font-medium text-[var(--color-status-warning)]">{q}</p>}
+              {inferred && <p className="text-xs text-[var(--color-status-warning-fg)]">The AI assumed this. Check it, or change it.</p>}
+              {q && <p className="text-xs font-medium text-[var(--color-status-warning-fg)]">{q}</p>}
               {fieldErrors[f.name] ? <FieldError id={`${id}-error`}>{fieldErrors[f.name]}</FieldError> : f.hint ? <p id={`${id}-hint`} className="text-xs text-[var(--color-text-secondary)]">{f.hint}</p> : null}
             </div>
           );

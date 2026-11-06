@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { ObjectId } from "mongodb";
 import { randomBytes } from "crypto";
 import { createHarness, parsed, type TestHarness } from "../helpers/workspace";
+import { enableAi } from "../helpers/ai";
 import { MARKETING_COLLECTIONS, type AiGenerationDoc, type JobDoc, type SocialAccountDoc, type SocialOauthStateDoc, type SocialPostDoc } from "@/server/marketing/documents";
 import { encryptToken } from "@/server/marketing/crypto";
 import { socialPostInputSchema, campaignInputSchema, aiRequestSchema, tagInputSchema } from "@/features/marketing/schemas/marketing.schema";
@@ -71,8 +72,11 @@ beforeAll(async () => {
   operator = { ...h.ctx("operator"), userId: new ObjectId() };
   viewer = { ...h.ctx("viewer"), userId: new ObjectId() };
   other = h.otherTenant("owner");
-  // The callback re-checks live membership, so the owner needs a membership record in the test database.
-  await h.db.collection("company_members").insertOne({ companyId: owner.companyId, userId: owner.userId, role: "owner", status: "active" });
+  // Copy generation runs behind the AI gate: the people who generate copy hold a live Marketing AI grant.
+  await enableAi(h, owner, { marketing: { view: true, create: true } });
+  await enableAi(h, operator, { marketing: { view: true, create: true } });
+  await enableAi(h, other, { marketing: { view: true, create: true } });
+  // The callback re-checks live membership: enableAi above gave the owner an active membership record.
   accountId = (await insertAccount(owner, "1001", "Acme Page")).toHexString();
   foreignAccountId = (await insertAccount(other, "2002", "Other Page")).toHexString();
 });

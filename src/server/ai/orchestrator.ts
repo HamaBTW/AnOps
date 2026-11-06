@@ -13,17 +13,31 @@ import { cleanUserText, wrapUntrusted } from "@/server/ai/sanitize";
 import { aiToolRegistry } from "@/server/ai/tools";
 import { scopeTools, toolCatalog } from "@/server/ai/tools/prompt-catalog";
 import { isToolAvailable, type ToolRegistry } from "@/server/ai/tools/registry";
-import { reserveTokens, settleTokens, type TokenReservation } from "@/server/ai/usage.service";
+import { reserveTokens, settleTokens, trackCalls, type TokenReservation } from "@/server/ai/usage.service";
 import type { AiCompletionOptions, AiCompletionResult, AiMessage } from "@/server/ai/types";
 import type { AiMessagePart } from "@/server/db/documents";
-import { consumeRateLimit } from "@/server/security/rate-limit";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
+import { MAX_PROVIDER_CALLS_PER_TURN, SENSITIVE_PLACEHOLDER } from "@/server/ai/platform";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError, isAppError } from "@/shared/lib/errors";
 
 export const MAX_TOOL_STEPS = 4;
 export const MAX_COMPLETION_TOKENS = 700;
 const HISTORY_MESSAGES = 12;
+/** One read tool may take this long. The turn goes on without it rather than hanging. */
+export const TOOL_TIMEOUT_MS = 20_000;
+
+class ToolTimeout extends Error {}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ToolTimeout()), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 const TURN_RATE = { limit: 20, windowMs: 60_000 };
+const COMPANY_TURN_RATE = { limit: 200, windowMs: 60_000 };
 
 export type TurnEvent =
   | { type: "conversation"; conversationId: string }
@@ -38,6 +52,8 @@ export type TurnDeps = {
   registry?: ToolRegistry;
   commands?: CommandRegistry;
   complete?: CompleteFn;
+  /** Aborted when the person closes the stream: stops the provider call and any further step. */
+  signal?: AbortSignal;
 };
 
 const envelope = z.discriminatedUnion("type", [
@@ -89,6 +105,12 @@ function estimateTokens(messages: AiMessage[]): number {
   return Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4) + MAX_COMPLETION_TOKENS;
 }
 
+/** What is written to history: the parts as they are, or - for HR payroll data - one neutral line in their place. */
+function storable(parts: AiMessagePart[], sensitive: boolean): AiMessagePart[] {
+  if (!sensitive || parts.length === 0) return parts;
+  return [{ type: "text", text: SENSITIVE_PLACEHOLDER }];
+}
+
 function chunks(text: string): string[] {
   const out: string[] = [];
   for (let i = 0; i < text.length; i += 48) out.push(text.slice(i, i + 48));
@@ -112,13 +134,16 @@ export async function* runTurn(
   let toolCalls = 0;
   let errors = 0;
   let usedTokens = 0;
+  let providerCalls = 0;
+  let usageCalls: { provider: string; model: string; tokens: number }[] = [];
   let conversationId: ObjectId | null = null;
   const parts: AiMessagePart[] = [];
 
   try {
     let access = await resolveAiAccess(ctx);
     assertAiReady(access);
-    consumeRateLimit(`${ctx.userId.toHexString()}:ai.turn`, TURN_RATE.limit, TURN_RATE.windowMs);
+    await consumeSharedRateLimit(ctx.db, `user:${ctx.userId.toHexString()}:ai.turn`, TURN_RATE.limit, TURN_RATE.windowMs);
+    await consumeSharedRateLimit(ctx.db, `company:${ctx.companyId.toHexString()}:ai.turn`, COMPANY_TURN_RATE.limit, COMPANY_TURN_RATE.windowMs, "Your company is using AI very quickly. Wait a moment and try again.");
 
     // Conversation: an existing id must belong to this member (getConversation is scoped), else it is NOT_FOUND.
     let history: AiMessage[] = [];
@@ -168,28 +193,38 @@ export async function* runTurn(
         for (const piece of chunks(result.text)) yield { type: "text", text: piece };
         parts.push({ type: "text", text: result.text });
       }
-      for (const part of result.parts) {
-        parts.push(part);
-        yield { type: "part", part };
-      }
+      for (const part of result.parts) yield { type: "part", part };
+      parts.push(...storable(result.parts, parsedCommand.def.sensitive === "hr"));
       yield* finish([]);
       return;
     }
 
-    // Natural language: bounded tool loop.
+    // Natural language: bounded tool loop. A server with no provider says so plainly instead of failing at the first call.
+    if (!deps.complete && !ai.status().some((p) => p.available)) {
+      throw new AppError("PROVIDER_NOT_CONFIGURED", "AI is not configured on this server. Ask an administrator to add a provider. Slash commands still work.");
+    }
     const messages: AiMessage[] = [
       { role: "system", content: systemPrompt(access, registry, [text, ...history.filter((m) => m.role === "user").slice(-3).map((m) => m.content)]) },
       ...history,
       { role: "user", content: text },
     ];
     reservation = await reserveTokens(ctx, access, estimateTokens(messages));
+    // Every provider call of this turn goes through one counter: a hard cap on calls, cancellation with the stream, and the
+    // measured provider, model and tokens that are settled afterwards.
+    const tracked = trackCalls(async (options) => {
+      if (deps.signal?.aborted) throw new AppError("INTERNAL", "Cancelled.");
+      if (providerCalls >= MAX_PROVIDER_CALLS_PER_TURN) throw new AppError("RATE_LIMITED", "That request needed too many AI calls. Ask for one thing at a time.");
+      providerCalls++;
+      return complete({ ...options, ...(deps.signal ? { signal: deps.signal } : {}) });
+    });
+    usageCalls = tracked.calls;
 
     let nudged = false;
     for (let step = 0; step < MAX_TOOL_STEPS + 1; step++) {
       let action: z.infer<typeof envelope>;
       try {
         // Provider fallback and one repair attempt live in completeStructured; at most three calls per step.
-        const result = await completeStructured({ messages, maxTokens: MAX_COMPLETION_TOKENS, parse: parseEnvelope, complete, label: "chat" });
+        const result = await completeStructured({ messages, maxTokens: MAX_COMPLETION_TOKENS, parse: parseEnvelope, complete: tracked.complete, label: "chat" });
         usedTokens += result.totalTokens;
         action = result.value;
       } catch (error) {
@@ -266,13 +301,24 @@ export async function* runTurn(
         continue;
       }
       const live = { ...ctx, role: access.member!.role, permissions: access.member!.permissions };
-      const result = await tool.run(live, parsedArgs.data, { access }, {});
+      let result: Awaited<ReturnType<typeof tool.run>>;
+      try {
+        result = await withTimeout(tool.run(live, parsedArgs.data, { access }, {}), TOOL_TIMEOUT_MS);
+      } catch (error) {
+        // One failing tool does not end the turn: the model is told what went wrong (in words, never a stack) and can answer
+        // with what it has or try something else. Only expected failures are passed on; anything else still ends the turn.
+        if (!(error instanceof ToolTimeout) && !isAppError(error)) throw error;
+        errors++;
+        const reason = error instanceof ToolTimeout ? "That lookup took too long." : error.message;
+        parts.push({ type: "tool_status", tool: tool.name, status: "failed", summary: reason.slice(0, 200) });
+        messages.push({ role: "assistant", content: JSON.stringify(action) });
+        messages.push({ role: "user", content: wrapUntrusted("system", { error: reason }) });
+        continue;
+      }
       toolCalls++;
       parts.push({ type: "tool_status", tool: tool.name, status: "done", summary: result.summary });
-      for (const part of result.parts ?? []) {
-        parts.push(part);
-        yield { type: "part", part };
-      }
+      for (const part of result.parts ?? []) yield { type: "part", part };
+      parts.push(...storable(result.parts ?? [], tool.sensitive === "hr"));
       messages.push({ role: "assistant", content: JSON.stringify(action) });
       messages.push({ role: "user", content: wrapUntrusted(tool.name, result.data ?? { summary: result.summary }) });
     }
@@ -293,7 +339,7 @@ export async function* runTurn(
     }
   } finally {
     if (reservation) {
-      await settleTokens(ctx, reservation, { actualTokens: usedTokens > 0 ? usedTokens : null, toolCalls, errors }).catch(() => undefined);
+      await settleTokens(ctx, reservation, { actualTokens: usedTokens > 0 ? usedTokens : null, toolCalls, errors, calls: usageCalls }).catch(() => undefined);
     }
   }
 }

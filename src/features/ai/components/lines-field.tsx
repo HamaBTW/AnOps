@@ -93,7 +93,7 @@ export function LinesField({
                     ) : (
                       <input id={cellId} disabled={disabled} inputMode="decimal" value={row[c.name] ?? ""} placeholder={c.placeholder} aria-invalid={Boolean(error) || undefined} onChange={(e) => setCell(index, c.name, e.target.value)} className={cn(inputClass, p === "inferred" && "border-[var(--color-status-warning)]")} />
                     )}
-                    {error && <p role="alert" className="text-xs text-[var(--color-status-error)]">{error}</p>}
+                    {error && <p role="alert" className="text-xs text-[var(--color-status-error-fg)]">{error}</p>}
                   </div>
                 );
               })}

@@ -1,10 +1,11 @@
 import "server-only";
 import { z } from "zod";
-import { reserveTokens, settleTokens } from "@/server/ai/usage.service";
+import { ai } from "@/server/ai";
+import { reserveTokens, settleTokens, trackCalls } from "@/server/ai/usage.service";
 import { wrapUntrusted } from "@/server/ai/sanitize";
 import { applyModelLines, parseRows, serializeRows, type LineRow, type ModelLine } from "@/server/ai/draft/draft-lines";
 import { appears, cleanNumeric, statedProvenance } from "@/server/ai/draft/verify";
-import { consumeRateLimit } from "@/server/security/rate-limit";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { completeStructured, StructuredCompletionError, type CompleteFn } from "@/server/ai/structured-completion";
 import type { CommandArgs, CommandDefinition, CommandEnv, CommandResult, DraftCandidate, DraftCurrent, DraftInput, DraftSpec } from "@/server/ai/commands/types";
 import type { AiDraftMeta, AiEntryChoicePart, AiDraftPromptPart, AiFormField, AiFormPart, AiProvenance, AiRecordTablePart } from "@/server/db/documents";
@@ -153,7 +154,7 @@ function systemPrompt(spec: DraftSpec, g: Grounding): string {
 }
 
 async function askModel(env: CommandEnv, spec: DraftSpec, g: Grounding, text: string, deps: DraftDeps): Promise<ModelOut> {
-  consumeRateLimit(`${env.ctx.userId.toHexString()}:ai.draft`, DRAFT_RATE.limit, DRAFT_RATE.windowMs);
+  await consumeSharedRateLimit(env.ctx.db, `user:${env.ctx.userId.toHexString()}:ai.draft`, DRAFT_RATE.limit, DRAFT_RATE.windowMs);
   const messages = [
     { role: "system" as const, content: systemPrompt(spec, g) },
     { role: "user" as const, content: text },
@@ -162,8 +163,9 @@ async function askModel(env: CommandEnv, spec: DraftSpec, g: Grounding, text: st
   const reservation = await reserveTokens(env.ctx, env.access, estimate);
   let used: number | null = null;
   let errored = 0;
+  const tracked = trackCalls(deps.complete ?? ((o) => ai.complete(o)));
   try {
-    const result = await completeStructured({ messages, maxTokens: COMPLETION_TOKENS, parse: parseModel, complete: deps.complete, label: "draft" });
+    const result = await completeStructured({ messages, maxTokens: COMPLETION_TOKENS, parse: parseModel, complete: tracked.complete, label: "draft" });
     used = result.totalTokens || null;
     return result.value;
   } catch (error) {
@@ -176,7 +178,7 @@ async function askModel(env: CommandEnv, spec: DraftSpec, g: Grounding, text: st
     console.error(`[ai] draft failed (request ${env.ctx.requestId}): ${error instanceof Error ? error.name : "unknown"}`);
     throw new AppError("INTERNAL", "The AI service is not available right now. Try again shortly, or use the manual form.");
   } finally {
-    await settleTokens(env.ctx, reservation, { actualTokens: used, errors: errored }).catch(() => undefined);
+    await settleTokens(env.ctx, reservation, { actualTokens: used, errors: errored, calls: tracked.calls }).catch(() => undefined);
   }
 }
 

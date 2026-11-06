@@ -52,7 +52,7 @@ export function ConversationRail({
                     <button type="button" className="min-h-[44px] px-2 text-xs font-semibold text-[var(--color-status-error)] hover:underline focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]" onClick={() => { setConfirmId(null); onDelete(c.id); }}>
                       Delete
                     </button>
-                    <button type="button" className="min-h-[44px] px-2 text-xs font-semibold text-[var(--color-text-primary)] hover:underline focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]" onClick={() => setConfirmId(null)}>
+                    <button type="button" autoFocus className="min-h-[44px] px-2 text-xs font-semibold text-[var(--color-status-neutral)] hover:underline focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]" onClick={() => setConfirmId(null)}>
                       Keep
                     </button>
                   </div>

@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const ctx = await resolveWorkspace(requestId);
-    const turn = runTurn(ctx, parsed.data);
+    const turn = runTurn(ctx, parsed.data, { signal: request.signal });
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream<Uint8Array>({

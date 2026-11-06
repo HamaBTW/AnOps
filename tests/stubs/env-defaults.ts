@@ -12,5 +12,5 @@ process.env.NEXTAUTH_URL ??= "http://localhost:3000";
  * set their own placeholder values (or inject fake providers) after this runs.
  */
 for (const key of Object.keys(process.env)) {
-  if (/^(EMAIL_|SMTP_|BREVO_|TELEGRAM_|MARKETING_|FACEBOOK_|SOCIAL_)/.test(key)) delete process.env[key];
+  if (/^(EMAIL_|SMTP_|BREVO_|TELEGRAM_|MARKETING_|FACEBOOK_|SOCIAL_|AI_|GROQ_|OPENROUTER_|GEMINI_)/.test(key)) delete process.env[key];
 }

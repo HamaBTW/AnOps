@@ -36,6 +36,8 @@ export const COLLECTIONS = {
   aiPendingActions: "ai_pending_actions",
   aiUsage: "ai_usage",
   aiNotices: "ai_notices",
+  aiUsageModels: "ai_usage_models",
+  rateLimits: "rate_limits",
 } as const;
 
 /** Every tenant-owned document carries exactly this scope. There is no other tenancy level. */
@@ -580,6 +582,20 @@ export type AiUsageDoc = TenantScope & {
   toolCalls: number;
   errors: number;
   updatedAt: Date;
+  /** Rows written after the retention change expire on their own (TTL). Older rows have none. */
+  expiresAt?: Date;
+};
+
+/** Measured tokens per provider and model for one company and UTC day. Counters only. */
+export type AiUsageModelDoc = TenantScope & {
+  _id: ObjectId;
+  day: string;
+  provider: string;
+  model: string;
+  tokens: number;
+  calls: number;
+  updatedAt: Date;
+  expiresAt: Date;
 };
 
 export type AiNoticeDoc = TenantScope & {

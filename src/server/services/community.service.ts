@@ -321,14 +321,12 @@ export async function getTags(ctx: WorkspaceContext): Promise<ContentTag[]> {
   }));
 }
 
-export async function getBlogPosts(
-  ctx: WorkspaceContext,
-  filter?: { status?: string; categoryId?: string; search?: string }
-): Promise<BlogPost[]> {
-  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
-  const cId = ctx.companyId;
-  const db = ctx.db;
+/** Lists are bounded: a page, or at most this many rows when the caller does not ask for one. */
+export const DEFAULT_LIST_LIMIT = 200;
+export type ListPage = { skip: number; limit: number };
 
+function postQuery(ctx: WorkspaceContext, filter?: { status?: string; categoryId?: string; search?: string }): Filter<Document> {
+  const cId = ctx.companyId;
   const query: Filter<Document> = { companyId: cId };
 
   // Drafts and archived articles are working material: read-only members see published articles only.
@@ -344,11 +342,28 @@ export async function getBlogPosts(
     const regex = new RegExp(filter.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     query.$or = [{ title: regex }, { excerpt: regex }, { tags: regex }];
   }
+  return query;
+}
+
+export async function countBlogPosts(ctx: WorkspaceContext, filter?: { status?: string; categoryId?: string; search?: string }): Promise<number> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  return ctx.db.collection("blog_posts").countDocuments(postQuery(ctx, filter));
+}
+
+export async function getBlogPosts(
+  ctx: WorkspaceContext,
+  filter?: { status?: string; categoryId?: string; search?: string },
+  page?: ListPage
+): Promise<BlogPost[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const db = ctx.db;
 
   const docs = await db
     .collection("blog_posts")
-    .find(query)
+    .find(postQuery(ctx, filter))
     .sort({ publishedAt: -1, createdAt: -1 })
+    .skip(page?.skip ?? 0)
+    .limit(page?.limit ?? DEFAULT_LIST_LIMIT)
     .toArray();
 
   return docs.map((doc) => ({
@@ -518,15 +533,8 @@ export async function deleteBlogPost(ctx: WorkspaceContext, postId: string): Pro
 // COMMUNITY FORUM
 // ============================================================================
 
-export async function getForumTopics(
-  ctx: WorkspaceContext,
-  filter?: { categoryId?: string; search?: string }
-): Promise<ForumTopic[]> {
-  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
-  const cId = ctx.companyId;
-  const db = ctx.db;
-
-  const query: Filter<Document> = { companyId: cId };
+function topicQuery(ctx: WorkspaceContext, filter?: { categoryId?: string; search?: string }): Filter<Document> {
+  const query: Filter<Document> = { companyId: ctx.companyId };
   if (filter?.categoryId && filter.categoryId !== "all") {
     query.categoryId = filter.categoryId;
   }
@@ -534,11 +542,28 @@ export async function getForumTopics(
     const regex = new RegExp(filter.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     query.$or = [{ title: regex }, { body: regex }];
   }
+  return query;
+}
+
+export async function countForumTopics(ctx: WorkspaceContext, filter?: { categoryId?: string; search?: string }): Promise<number> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  return ctx.db.collection("forum_topics").countDocuments(topicQuery(ctx, filter));
+}
+
+export async function getForumTopics(
+  ctx: WorkspaceContext,
+  filter?: { categoryId?: string; search?: string },
+  page?: ListPage
+): Promise<ForumTopic[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const db = ctx.db;
 
   const docs = await db
     .collection("forum_topics")
-    .find(query)
+    .find(topicQuery(ctx, filter))
     .sort({ isPinned: -1, lastReplyAt: -1, createdAt: -1 })
+    .skip(page?.skip ?? 0)
+    .limit(page?.limit ?? DEFAULT_LIST_LIMIT)
     .toArray();
 
   return docs.map((doc) => ({
@@ -832,12 +857,27 @@ export async function deleteComment(ctx: WorkspaceContext, commentId: string): P
 // LIVE SUPPORT CHAT
 // ============================================================================
 
-export async function getChatConversations(ctx: WorkspaceContext, statusFilter?: string): Promise<ChatConversation[]> {
-  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+function chatQuery(ctx: WorkspaceContext, statusFilter?: string): Filter<Document> {
   const query: Filter<Document> = { companyId: ctx.companyId };
   if (!can(ctx, PERMISSIONS.COMMUNITY_SUPPORT)) query.visitorUserId = ctx.userId.toHexString();
   if (statusFilter && statusFilter !== "all") query.status = statusFilter;
-  const docs = await ctx.db.collection("chat_conversations").find(query).sort({ lastMessageAt: -1 }).toArray();
+  return query;
+}
+
+export async function countChatConversations(ctx: WorkspaceContext, statusFilter?: string): Promise<number> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  return ctx.db.collection("chat_conversations").countDocuments(chatQuery(ctx, statusFilter));
+}
+
+export async function getChatConversations(ctx: WorkspaceContext, statusFilter?: string, page?: ListPage): Promise<ChatConversation[]> {
+  assertPermission(ctx.permissions, PERMISSIONS.COMMUNITY_READ);
+  const docs = await ctx.db
+    .collection("chat_conversations")
+    .find(chatQuery(ctx, statusFilter))
+    .sort({ lastMessageAt: -1 })
+    .skip(page?.skip ?? 0)
+    .limit(page?.limit ?? DEFAULT_LIST_LIMIT)
+    .toArray();
   return docs.map(mapConversation);
 }
 

@@ -167,7 +167,7 @@ function ConfirmationCard({ part }: { part: Part<"confirmation"> }) {
       )}
 
       {message && (
-        <p role={isError ? "alert" : "status"} className={cn("mt-3 flex items-start gap-2 text-sm", isError ? "text-[var(--color-status-error)]" : "text-[var(--color-status-success)]")}>
+        <p role={isError ? "alert" : "status"} className={cn("mt-3 flex items-start gap-2 text-sm", isError ? "text-[var(--color-status-error-fg)]" : "text-[var(--color-status-success-fg)]")}>
           {isError ? <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" /> : state === "cancelled" ? <CircleSlash aria-hidden className="mt-0.5 size-4 shrink-0" /> : <Check aria-hidden className="mt-0.5 size-4 shrink-0" />}
           {message}
         </p>
@@ -193,7 +193,7 @@ function ConfirmationCard({ part }: { part: Part<"confirmation"> }) {
 function ToolStatus({ part }: { part: Part<"tool_status"> }) {
   const failed = part.status === "failed";
   return (
-    <p className={cn("inline-flex items-center gap-2 text-xs", failed ? "text-[var(--color-status-error)]" : "text-[var(--color-text-secondary)]")}>
+    <p className={cn("inline-flex items-center gap-2 text-xs", failed ? "text-[var(--color-status-error-fg)]" : "text-[var(--color-text-secondary)]")}>
       {part.status === "running" ? <Loader2 aria-hidden className="size-3.5 animate-spin motion-reduce:animate-none" /> : failed ? <AlertTriangle aria-hidden className="size-3.5" /> : <Check aria-hidden className="size-3.5" />}
       <span>{part.summary ?? part.tool.replace(/_/g, " ")}</span>
     </p>

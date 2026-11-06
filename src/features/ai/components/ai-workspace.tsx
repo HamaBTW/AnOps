@@ -40,6 +40,9 @@ const SUGGESTIONS = [
 ];
 
 function Unavailable({ state, canManage }: { state: AiWorkspaceState["state"]; canManage: boolean }) {
+  if (state === "platform_disabled") {
+    return <EmptyState icon={Lock} title="AnOps AI is switched off for now" description="AI has been turned off for the whole platform by an operator. Everything else in AnOps keeps working. Try again later." />;
+  }
   if (state === "company_disabled") {
     return (
       <EmptyState

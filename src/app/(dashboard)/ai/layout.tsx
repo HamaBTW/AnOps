@@ -9,6 +9,7 @@ export default async function AiLayout({ children }: { children: React.ReactNode
   if (ctx.permissions.has(PERMISSIONS.AI_ACCESS_MANAGE)) tabs.push({ label: "Access and limits", href: "/ai/access", exact: false });
   return (
     <div className="space-y-6">
+      <h1 className="sr-only">AnOps AI</h1>
       {tabs.length > 1 && <ModuleTabs tabs={tabs} />}
       {children}
     </div>

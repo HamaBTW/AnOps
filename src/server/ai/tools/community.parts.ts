@@ -14,10 +14,11 @@ type Args = Record<string, string | number | boolean>;
 type Paged<T> = { items: T[]; total: number; page: number; totalPages: number };
 
 export const PAGE_SIZE = 10;
-export function paginate<T>(all: T[], page = 1): Paged<T> {
-  const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
-  const p = Math.min(Math.max(1, page), totalPages);
-  return { items: all.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE), total: all.length, page: p, totalPages };
+/** One database page: the caller counts first, then reads only the rows of the page it shows. */
+export async function pageOf<T>(total: number, requested: number | undefined, load: (skip: number, limit: number) => Promise<T[]>): Promise<Paged<T>> {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(Math.max(1, requested ?? 1), totalPages);
+  return { items: await load((page - 1) * PAGE_SIZE, PAGE_SIZE), total, page, totalPages };
 }
 
 const POST_TONE: Record<string, AiBadge["tone"]> = { draft: "warning", published: "success", archived: "neutral" };

@@ -110,10 +110,8 @@ export async function proposeAction(
 
   const scope = aiScope(ctx);
   const now = new Date();
-  const open = await scope.pending.countDocuments({ status: "pending", expiresAt: { $gt: now } });
-  if (open >= MAX_OPEN_PENDING_PER_MEMBER) {
-    throw new AppError("RATE_LIMITED", "You have several changes waiting for confirmation. Confirm or cancel them first.");
-  }
+  const tooMany = () => new AppError("RATE_LIMITED", "You have several changes waiting for confirmation. Confirm or cancel them first.");
+  if ((await scope.pending.countDocuments({ status: "pending", expiresAt: { $gt: now } })) >= MAX_OPEN_PENDING_PER_MEMBER) throw tooMany();
 
   // Prepared with the LIVE role and permissions, through the module's own services.
   const liveCtx: WorkspaceContext = { ...ctx, role: access.member!.role, permissions: access.member!.permissions };
@@ -149,6 +147,12 @@ export async function proposeAction(
     resolvedAt: null,
   };
   await scope.pending.insertOne(doc);
+  // Count AFTER inserting: two proposals created at the same moment cannot both slip under the cap, because each one sees the
+  // other. The loser is withdrawn (at worst both are, which is the safe side).
+  if ((await scope.pending.countDocuments({ status: "pending", expiresAt: { $gt: now } })) > MAX_OPEN_PENDING_PER_MEMBER) {
+    await scope.pending.deleteOne({ _id: doc._id });
+    throw tooMany();
+  }
   await recordAudit(ctx.db, {
     companyId: ctx.companyId,
     actorUserId: ctx.userId,

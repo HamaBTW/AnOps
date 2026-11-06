@@ -5,6 +5,8 @@ import { KeyPool } from "@/server/ai/key-pool";
 import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
 /**
  * Free Gemini models (Gemini flash variants + Gemma family).
  * Full list: https://ai.google.dev/gemini-api/docs/models/gemini
@@ -94,7 +96,7 @@ export class GeminiProvider implements AiProvider {
         });
 
         const lastUserMsg = conversationMsgs[conversationMsgs.length - 1]?.content ?? "";
-        const result = await chat.sendMessage(lastUserMsg);
+        const result = await chat.sendMessage(lastUserMsg, { timeout: REQUEST_TIMEOUT_MS, ...(options.signal ? { signal: options.signal } : {}) });
         const text = result.response.text();
 
         return {

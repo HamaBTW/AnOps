@@ -2,6 +2,7 @@ import "server-only";
 import type {
   Collection,
   Db,
+  DeleteOptions,
   Document,
   Filter,
   FindOneAndUpdateOptions,
@@ -19,6 +20,7 @@ import {
   type AiNoticeDoc,
   type AiPendingActionDoc,
   type AiSettingsDoc,
+  type AiUsageModelDoc,
   type AiUsageDoc,
 } from "@/server/db/documents";
 
@@ -72,8 +74,8 @@ export class ScopedCollection<T extends Document> {
     return this.collection.findOneAndUpdate(this.scoped(filter), update, { ...options, includeResultMetadata: false });
   }
 
-  deleteOne(filter: Filter<T>) {
-    return this.collection.deleteOne(this.scoped(filter));
+  deleteOne(filter: Filter<T>, options?: DeleteOptions) {
+    return this.collection.deleteOne(this.scoped(filter), options);
   }
 
   deleteMany(filter: Filter<T>) {
@@ -100,6 +102,8 @@ export function aiScope(ctx: AiScopeContext) {
     usage: open<AiUsageDoc>(ctx.db, COLLECTIONS.aiUsage, own),
     companyUsage: open<AiUsageDoc>(ctx.db, COLLECTIONS.aiUsage, { companyId: ctx.companyId, userId: null }),
     notices: open<AiNoticeDoc>(ctx.db, COLLECTIONS.aiNotices, own),
+    /** Measured tokens per provider and model for the company, by day. Counters only. */
+    usageModels: open<AiUsageModelDoc>(ctx.db, COLLECTIONS.aiUsageModels, company),
     /** Every member's usage rows, for the usage view. Counters only; never content. Guarded by ai.usage.view in the service. */
     usageForAdmin: open<AiUsageDoc>(ctx.db, COLLECTIONS.aiUsage, { companyId: ctx.companyId, userId: { $ne: null } }),
   };
@@ -117,6 +121,11 @@ export function aiScopeForMember(ctx: Pick<AiScopeContext, "db" | "companyId">, 
     notices: open<AiNoticeDoc>(ctx.db, COLLECTIONS.aiNotices, member),
     usage: open<AiUsageDoc>(ctx.db, COLLECTIONS.aiUsage, member),
   };
+}
+
+/** Company-wide: every member's open proposals. Used only when AI is switched off for the whole company. */
+export function aiCompanyPending(ctx: Pick<AiScopeContext, "db" | "companyId">) {
+  return open<AiPendingActionDoc>(ctx.db, COLLECTIONS.aiPendingActions, { companyId: ctx.companyId });
 }
 
 /** Read-only access to one member's conversations, for the explicitly authorised transcript audit. */

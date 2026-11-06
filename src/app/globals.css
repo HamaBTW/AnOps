@@ -54,6 +54,10 @@ html.dark {
   --color-warning-bg: #3a3200;
   --color-warning-border: #d9a800;
   --color-warning-text: #f5e7a3;
+  /* Status colours for text on the surface itself (no tinted chip behind it): light enough for AA on the dark surface. */
+  --color-status-success-fg: #7fd9ae;
+  --color-status-warning-fg: #f0c36a;
+  --color-status-error-fg: #ff9f94;
 }
 
 * {
@@ -94,6 +98,10 @@ h1, h2, h3, h4, h5, h6 {
   --color-status-error-bg: #fff1ee;
   --color-status-neutral-bg: #e1e5dc;
   --color-status-neutral: #59645f;
+  /* Foreground-on-surface variants. Light theme: the same deep colours. Dark theme: lighter (see :root.dark). */
+  --color-status-success-fg: var(--color-status-success);
+  --color-status-warning-fg: var(--color-status-warning);
+  --color-status-error-fg: var(--color-status-error);
   /* Tinted icon chips: fixed light tint + deep foreground, readable on both light and dark surfaces. */
   --color-accent-blue: #1d4e89;
   --color-accent-blue-bg: #e3edf9;

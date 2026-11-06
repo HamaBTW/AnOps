@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { getAiSettings, type AiActorContext } from "@/server/ai/access/access.service";
 import { aiScope } from "@/server/ai/data/scope";
 import type { AiConversationDoc, AiMessageDoc, AiMessagePart } from "@/server/db/documents";
+import { withTransaction } from "@/server/db/transactions";
 import { AppError } from "@/shared/lib/errors";
 
 export const MAX_MESSAGES_PER_CONVERSATION = 200;
@@ -96,8 +97,21 @@ export async function renameConversation(ctx: AiActorContext, idRaw: string, tit
   if (result.matchedCount === 0) throw new AppError("NOT_FOUND", "Conversation not found.");
 }
 
+/**
+ * Deletes the conversation AND ends its open proposals in one unit of work. A proposal belongs to the conversation that
+ * produced it: once that is gone, nothing it proposed may still be confirmable.
+ */
 export async function deleteConversation(ctx: AiActorContext, idRaw: string): Promise<void> {
   if (!ObjectId.isValid(idRaw)) throw new AppError("NOT_FOUND", "Conversation not found.");
-  const result = await aiScope(ctx).conversations.deleteOne({ _id: new ObjectId(idRaw) });
-  if (result.deletedCount === 0) throw new AppError("NOT_FOUND", "Conversation not found.");
+  const id = new ObjectId(idRaw);
+  await withTransaction(ctx.db, async (tx) => {
+    const scope = aiScope(ctx);
+    const result = await scope.conversations.deleteOne({ _id: id }, { session: tx.session });
+    if (result.deletedCount === 0) throw new AppError("NOT_FOUND", "Conversation not found.");
+    await scope.pending.updateMany(
+      { conversationId: id, status: "pending" },
+      { $set: { status: "cancelled", statusReason: "conversation_deleted", resolvedAt: new Date() } },
+      { session: tx.session }
+    );
+  });
 }

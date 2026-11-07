@@ -115,6 +115,30 @@ describe("allocatePayment enforces its own rules, for every caller", () => {
   });
 });
 
+describe("allocatePayment is atomic under concurrency", () => {
+  it("two payments racing for the same invoice balance never overpay it", async () => {
+    const inv = await post(100);
+    const [p1, p2] = [await pay(100), await pay(100)];
+    const results = await Promise.all([p1, p2].map((p) => code(a.allocatePayment(p, [{ invoiceId: inv, amount: 80 }], userA))));
+    expect(results.filter((r) => r === "OK")).toHaveLength(1);
+    const after = await a.getInvoice(inv);
+    expect(after).toMatchObject({ amountPaid: 80, balance: 20, status: "partially_paid" });
+    expect(after.allocations).toHaveLength(1);
+    const unallocated = (await a.listPayments()).filter((x) => x.id === p1 || x.id === p2).map((x) => x.unallocatedAmount).sort();
+    expect(unallocated).toEqual([100, 20]); // the losing payment is untouched
+  });
+
+  it("one payment split concurrently across two invoices cannot exceed its amount", async () => {
+    const [i1, i2] = [await post(60), await post(60)];
+    const p = await pay(100);
+    const results = await Promise.all([i1, i2].map((invoiceId) => code(a.allocatePayment(p, [{ invoiceId, amount: 60 }], userA))));
+    expect(results.filter((r) => r === "OK")).toHaveLength(1);
+    expect((await a.listPayments()).find((x) => x.id === p)?.unallocatedAmount).toBe(40);
+    const paid = [(await a.getInvoice(i1)).amountPaid, (await a.getInvoice(i2)).amountPaid].sort();
+    expect(paid).toEqual([0, 60]);
+  });
+});
+
 describe("dashboard definitions", () => {
   it("counts only posted, partially paid and paid invoices: drafts and voided ones never inflate invoiced or outstanding", async () => {
     const c = await a.createCustomer({ name: "Dashboard Customer" }, userA);
@@ -145,6 +169,29 @@ describe("dashboard definitions", () => {
     const after = await a.getDashboard();
     expect(after.overdueCount).toBe(before.overdueCount);
     expect(after.overdue).toBe(before.overdue);
+  });
+
+  it("never adds currencies together: EUR activity shows only on the EUR dashboard", async () => {
+    const tndBefore = await a.getDashboard("TND");
+    const eurBefore = await a.getDashboard("EUR");
+    const eur = await post(500, "EUR");
+    await a.allocatePayment(await pay(200, "EUR"), [{ invoiceId: eur, amount: 200 }], userA);
+    const tndAfter = await a.getDashboard("TND");
+    const eurAfter = await a.getDashboard("EUR");
+    expect(tndAfter.totalInvoiced).toBe(tndBefore.totalInvoiced);
+    expect(eurAfter.currency).toBe("EUR");
+    expect(eurAfter.totalInvoiced - eurBefore.totalInvoiced).toBe(500);
+    expect(eurAfter.outstanding - eurBefore.outstanding).toBe(300);
+    expect(await a.listActiveCurrencies()).toEqual(expect.arrayContaining(["TND", "EUR"]));
+  });
+
+  it("monthly income and expenses are exact to the cent", async () => {
+    const month = new Date().toISOString().slice(0, 7);
+    const before = (await a.getDashboard("TND")).monthlySummary.find((m) => m.monthKey === month)!;
+    for (const amount of [0.1, 0.2, 0.7]) await a.recordPayment({ paymentDate: `${month}-01`, amount, currency: "TND", method: "cash" }, userA);
+    const after = (await a.getDashboard("TND")).monthlySummary.find((m) => m.monthKey === month)!;
+    expect(Math.round((after.income - before.income) * 100)).toBe(100);
+    for (const m of [after.income, after.expenses, after.net]) expect(Math.round(m * 100) / 100).toBe(m);
   });
 
   it("totals carry no floating-point residue", async () => {
@@ -184,5 +231,91 @@ describe("expense approval separation of duties", () => {
   it("a manager cannot approve at all, as before", async () => {
     const id = await submitted(admin1);
     expect(await code(as("manager", clerk).approveExpense(id, clerk))).toBe("FORBIDDEN");
+  });
+});
+
+describe("overdue is computed, not stored", () => {
+  it("flags posted unpaid invoices past due on the list, detail and unpaid list; paid and future ones are not flagged", async () => {
+    const late = await post(40, "TND", "2026-01-10");
+    const future = await post(40, "TND", "2099-01-10");
+    const settled = await post(40, "TND", "2026-01-10");
+    await a.allocatePayment(await pay(40), [{ invoiceId: settled, amount: 40 }], userA);
+    const list = await a.listInvoices();
+    const flag = (id: string) => list.find((i) => i.id === id)?.isOverdue;
+    expect([flag(late), flag(future), flag(settled)]).toEqual([true, false, false]);
+    expect((await a.getInvoice(late)).isOverdue).toBe(true);
+    expect((await a.getInvoice(late)).status).toBe("posted"); // the stored status machine is unchanged
+    expect((await a.listUnpaidInvoices()).find((i) => i.id === late)?.isOverdue).toBe(true);
+  });
+});
+
+describe("draft invoices can be edited and deleted; posted ones cannot", () => {
+  const draftInput = (unitPrice: number) => ({ customerId: customer, currency: "TND", issueDate: "2026-11-01", lines: [{ description: "Edit me", quantity: 2, unitPrice, taxRate: 19 }] });
+
+  it("editing a draft replaces its lines and recomputes totals", async () => {
+    const id = await a.createInvoiceDraft(draftInput(10), userA);
+    await a.updateInvoiceDraft(id, { ...draftInput(0), lines: [{ description: "New line", quantity: 3, unitPrice: 19.99, taxRate: 19 }], dueDate: "2026-12-01" }, userA);
+    const got = await a.getInvoice(id);
+    expect(got).toMatchObject({ status: "draft", total: 71.36, balance: 71.36, dueDate: "2026-12-01" });
+    expect(got.lines.map((l: { description: string }) => l.description)).toEqual(["New line"]);
+  });
+
+  it("posted invoices cannot be edited or deleted, and another company's draft is not found", async () => {
+    const posted = await post(30);
+    expect(await code(a.updateInvoiceDraft(posted, draftInput(99), userA))).toBe("INVALID_TRANSITION");
+    expect(await code(a.deleteInvoiceDraft(posted))).toBe("INVALID_TRANSITION");
+    expect((await a.getInvoice(posted)).total).toBe(30);
+    const theirCustomer = await b.createCustomer({ name: "B edit probe" }, userB);
+    const theirs = await mk(b, theirCustomer, 5, userB);
+    expect(await code(a.updateInvoiceDraft(theirs, draftInput(1), userA))).toBe("NOT_FOUND");
+    expect(await code(a.deleteInvoiceDraft(theirs))).toBe("NOT_FOUND");
+  });
+
+  it("an edit cannot point the draft at another company's customer", async () => {
+    const id = await a.createInvoiceDraft(draftInput(10), userA);
+    const theirCustomer = await b.createCustomer({ name: "B customer probe" }, userB);
+    expect(await code(a.updateInvoiceDraft(id, { ...draftInput(10), customerId: theirCustomer }, userA))).toBe("NOT_FOUND");
+  });
+
+  it("deleting a draft removes it", async () => {
+    const id = await a.createInvoiceDraft(draftInput(10), userA);
+    await a.deleteInvoiceDraft(id);
+    expect(await code(a.getInvoice(id))).toBe("NOT_FOUND");
+  });
+});
+
+describe("draft and rejected expenses can be edited and deleted; the rest are locked", () => {
+  const base = { expenseDate: "2026-11-02", description: "Taxi", amount: 10, tax: 1.9, currency: "TND" };
+
+  it("editing a rejected expense puts it back to draft and clears the rejection", async () => {
+    const id = await a.createExpense(base, userA);
+    await a.submitExpense(id, userA);
+    await a.rejectExpense(id, "missing receipt", userA);
+    await a.updateExpense(id, { ...base, amount: 12.5, tax: 2.38 }, userA);
+    expect(await a.getExpense(id)).toMatchObject({ status: "draft", amount: 12.5, total: 14.88, rejectionReason: undefined });
+  });
+
+  it("submitted, approved and paid expenses cannot be edited or deleted", async () => {
+    const id = await a.createExpense(base, userA);
+    await a.submitExpense(id, userA);
+    expect(await code(a.updateExpense(id, base, userA))).toBe("INVALID_TRANSITION");
+    expect(await code(a.deleteExpense(id))).toBe("INVALID_TRANSITION");
+    await a.approveExpense(id, userA);
+    expect(await code(a.deleteExpense(id))).toBe("INVALID_TRANSITION");
+  });
+
+  it("another company's expense and category are not reachable", async () => {
+    const theirs = await b.createExpense(base, userB);
+    expect(await code(a.updateExpense(theirs, base, userA))).toBe("NOT_FOUND");
+    expect(await code(a.deleteExpense(theirs))).toBe("NOT_FOUND");
+    const theirCategory = await b.createExpenseCategory("B only");
+    const mine = await a.createExpense(base, userA);
+    expect(await code(a.updateExpense(mine, { ...base, categoryId: theirCategory }, userA))).toBe("NOT_FOUND");
+  });
+
+  it("deleting a draft removes it", async () => {
+    const id = await a.createExpense(base, userA);
+    await a.deleteExpense(id);
+    expect(await code(a.getExpense(id))).toBe("NOT_FOUND");
   });
 });

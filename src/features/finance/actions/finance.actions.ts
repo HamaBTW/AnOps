@@ -127,6 +127,53 @@ export async function createInvoiceDraftAction(formData: FormData): Promise<Acti
   }
 }
 
+export async function updateInvoiceDraftAction(invoiceId: string, formData: FormData): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+
+    const linesRaw = formData.get("lines");
+    let lines: unknown[] = [];
+    if (typeof linesRaw === "string") {
+      try { lines = JSON.parse(linesRaw); } catch { lines = []; }
+    }
+    const parsed = invoiceCreateDraftSchema.safeParse({
+      customerId: formData.get("customerId"),
+      currency: formData.get("currency") || "TND",
+      issueDate: formData.get("issueDate"),
+      dueDate: formData.get("dueDate") || "",
+      notes: formData.get("notes") || "",
+      terms: formData.get("terms") || "",
+      lines,
+    });
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
+
+    const service = await getFinanceService();
+    await service.updateInvoiceDraft(invoiceId, parsed.data, auth.userId);
+    revalidatePath("/finance/invoices");
+    revalidatePath(`/finance/invoices/${invoiceId}`);
+    return { success: true, data: { id: invoiceId } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to update invoice";
+    return { error: msg };
+  }
+}
+
+export async function deleteInvoiceDraftAction(invoiceId: string): Promise<ActionResult> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    await service.deleteInvoiceDraft(invoiceId);
+    revalidatePath("/finance/invoices");
+    revalidatePath("/finance");
+    return { success: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to delete invoice";
+    return { error: msg };
+  }
+}
+
 export async function postInvoiceAction(invoiceId: string): Promise<ActionResult> {
   try {
     const auth = await getCurrentAuthUser();
@@ -270,6 +317,39 @@ export async function createExpenseAction(input: FormData | Record<string, any>)
     return { success: true, data: { id } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to create expense";
+    return { error: msg };
+  }
+}
+
+export async function updateExpenseAction(expenseId: string, input: Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const parsed = expenseCreateSchema.safeParse(input);
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
+    const service = await getFinanceService();
+    await service.updateExpense(expenseId, parsed.data, auth.userId);
+    revalidatePath("/finance/expenses");
+    revalidatePath("/finance");
+    return { success: true, data: { id: expenseId } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to update expense";
+    return { error: msg };
+  }
+}
+
+export async function deleteExpenseAction(expenseId: string): Promise<ActionResult> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    await service.deleteExpense(expenseId);
+    revalidatePath("/finance/expenses");
+    revalidatePath("/finance");
+    revalidatePath("/finance/receipts");
+    return { success: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to delete expense";
     return { error: msg };
   }
 }

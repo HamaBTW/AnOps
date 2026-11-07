@@ -19,9 +19,18 @@ export type AiToolDefinition = {
   parameters: Record<string, unknown>;
 };
 
+/** A file shown to a vision model (receipt photo, scanned PDF). User turns only. */
+export type AiAttachment = {
+  mimeType: string;
+  /** The file's bytes, base64-encoded (no data: prefix). */
+  dataBase64: string;
+};
+
 export type AiMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** User turns only: images or PDFs the model must look at. Only vision-capable providers are used. */
+  attachments?: AiAttachment[];
   /** Assistant turns only: the tool calls the model asked for. */
   toolCalls?: AiToolCall[];
   /** Tool turns only: the call this result answers, and the tool's name (Gemini needs the name). */
@@ -107,6 +116,8 @@ export interface AiProvider {
   readonly freeModels: string[];
   /** Run a chat completion and return the result */
   complete(options: AiCompletionOptions): Promise<AiCompletionResult>;
+  /** True when this provider can read these attachments. Providers without it never receive attachments. */
+  supportsAttachments?(attachments: AiAttachment[]): boolean;
 }
 
 /**

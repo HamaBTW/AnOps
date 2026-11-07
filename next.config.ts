@@ -12,6 +12,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    // Receipt photos and PDFs (up to 10 MB, see src/server/finance/receipt-storage.ts) are uploaded through a server action.
+    serverActions: { bodySizeLimit: "11mb" },
+  },
   outputFileTracingRoot: path.join(__dirname, "../../"),
   turbopack: {
     rules: {

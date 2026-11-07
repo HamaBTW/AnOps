@@ -114,7 +114,7 @@ export default async function FinanceInvoicesPage() {
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <StatusBadge label={inv.status.replace("_", " ")} tone={statusTone(inv.status)} />
+                      <StatusBadge label={inv.isOverdue ? "overdue" : inv.status.replace("_", " ")} tone={statusTone(inv.isOverdue ? "overdue" : inv.status)} />
                     </td>
                     <td className="py-3 px-4 text-[var(--color-text-primary)] text-xs">{inv.issueDate}</td>
                     <td className="py-3 px-4 text-[var(--color-text-secondary)] text-xs">

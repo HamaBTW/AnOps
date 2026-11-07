@@ -33,11 +33,13 @@ export default async function InvoiceDetailPage({
   const { id } = await params;
   let invoice: any = null;
   let canPost = false;
+  let canManage = false;
 
   try {
     const service = await getFinanceService();
     invoice = await service.getInvoice(id);
     canPost = service.hasPermission("finance.invoice.post");
+    canManage = service.hasPermission("finance.invoice.manage");
   } catch {
     notFound();
   }
@@ -57,6 +59,7 @@ export default async function InvoiceDetailPage({
         invoiceNumber={invoice.invoiceNumber}
         status={invoice.status}
         canPost={canPost}
+        canManage={canManage}
       />
 
       {/* Official Invoice Document Card */}
@@ -93,8 +96,8 @@ export default async function InvoiceDetailPage({
             </div>
             <div className="pt-1">
               <StatusBadge
-                label={invoice.status.replace("_", " ").toUpperCase()}
-                tone={statusTone(invoice.status)}
+                label={(invoice.isOverdue ? "overdue" : invoice.status.replace("_", " ")).toUpperCase()}
+                tone={statusTone(invoice.isOverdue ? "overdue" : invoice.status)}
               />
             </div>
           </div>

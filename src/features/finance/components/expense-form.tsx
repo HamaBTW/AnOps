@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { createExpenseAction, submitExpenseAction } from "@/features/finance/actions/finance.actions";
+import { createExpenseAction, submitExpenseAction, updateExpenseAction } from "@/features/finance/actions/finance.actions";
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";
 import { FormMessage } from "@/shared/components/ui/form-message";
@@ -16,9 +16,14 @@ type CategoryOption = {
 export function ExpenseForm({
   categories,
   initialData,
+  expenseId,
 }: {
   categories: CategoryOption[];
+  /** Set when editing an existing draft or rejected expense. */
+  expenseId?: string;
   initialData?: {
+    categoryId?: string;
+    notes?: string;
     vendor?: string;
     amount?: number;
     tax?: number;
@@ -37,6 +42,7 @@ export function ExpenseForm({
 
   const [expenseDate, setExpenseDate] = useState(initialData?.date || today);
   const [categoryId, setCategoryId] = useState(
+    initialData?.categoryId ||
     categories.find((c) => c.name.toLowerCase() === initialData?.categoryHint?.toLowerCase())?.id ||
     categories[0]?.id || ""
   );
@@ -45,8 +51,9 @@ export function ExpenseForm({
   const [amount, setAmount] = useState<number | string>(initialData?.amount ?? "");
   const [tax, setTax] = useState<number | string>(initialData?.tax ?? 0);
   const [currency, setCurrency] = useState(initialData?.currency || "TND");
-  const [notes, setNotes] = useState("");
-  const [submitImmediately, setSubmitImmediately] = useState(true);
+  const [notes, setNotes] = useState(initialData?.notes || "");
+  // A new expense is usually sent for approval right away; an edit keeps it a draft unless asked.
+  const [submitImmediately, setSubmitImmediately] = useState(!expenseId);
 
   const total = (parseFloat(String(amount)) || 0) + (parseFloat(String(tax)) || 0);
 
@@ -66,7 +73,7 @@ export function ExpenseForm({
     }
 
     startTransition(async () => {
-      const res = await createExpenseAction({
+      const values = {
         expenseDate,
         categoryId: categoryId || undefined,
         vendor: vendor.trim() || undefined,
@@ -76,7 +83,8 @@ export function ExpenseForm({
         currency,
         notes: notes.trim() || undefined,
         receiptDocumentId: initialData?.receiptDocumentId || undefined,
-      });
+      };
+      const res = expenseId ? await updateExpenseAction(expenseId, values) : await createExpenseAction(values);
 
       if (res.error) {
         setError(res.error);

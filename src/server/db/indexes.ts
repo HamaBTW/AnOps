@@ -4,6 +4,7 @@ import { COLLECTIONS } from "@/server/db/documents";
 import { AppError } from "@/shared/lib/errors";
 import { MARKETING_INDEXES } from "@/server/marketing/indexes";
 import { HR_AI_INDEXES } from "@/server/services/hr-ai.indexes";
+import { FINANCE_INDEXES } from "@/server/services/finance.indexes";
 
 /**
  * Index definitions for every company-scoped collection (HR, inventory, purchasing, manufacturing),
@@ -140,6 +141,7 @@ const INDEXES: Record<string, IndexDescription[]> = {
   ai_summaries: [{ key: { companyId: 1, blogPostId: 1, generatedAt: -1 }, name: "summary_company_post_time" }],
   ...MARKETING_INDEXES,
   ...HR_AI_INDEXES,
+  ...FINANCE_INDEXES,
 };
 
 const initialized = new WeakMap<Db, Promise<void>>();

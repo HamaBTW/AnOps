@@ -5,7 +5,7 @@ import type { ChatCompletion } from "groq-sdk/resources/chat/completions";
 import { KeyPool } from "@/server/ai/key-pool";
 import { groqApiKeyList } from "@/server/ai/config";
 import { fromOpenAiToolCalls, toOpenAiMessages, toOpenAiTools } from "@/server/ai/openai-wire";
-import type { AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
+import type { AiAttachment, AiProvider, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
 /**
@@ -24,6 +24,12 @@ const MAX_ATTEMPTS = 3;
 /** Per-request ceiling. The SDK's own retries are disabled; this class owns retry policy. */
 const REQUEST_TIMEOUT_MS = 20_000;
 const BACKOFF_BASE_MS = 300;
+
+/** Groq vision: images only (no PDF), and Groq caps a base64 image request at 4 MB. */
+// Checked live on 2026-11-07: the llama-4 vision models are gone from Groq; Qwen 3.8 reads images.
+const VISION_MODEL = process.env.GROQ_VISION_MODEL || "qwen/qwen3.8-27b";
+const VISION_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_VISION_BASE64 = 4 * 1024 * 1024;
 
 const DEFAULT_MAX_TOKENS = 1024;
 const DEFAULT_TEMPERATURE = 0.7;
@@ -45,6 +51,11 @@ export class GroqProvider implements AiProvider {
     return this.pool.hasKeys;
   }
 
+  supportsAttachments(attachments: AiAttachment[]): boolean {
+    const total = attachments.reduce((n, a) => n + a.dataBase64.length, 0);
+    return attachments.length <= 5 && total <= MAX_VISION_BASE64 && attachments.every((a) => VISION_MIME.has(a.mimeType));
+  }
+
   async complete(options: AiCompletionOptions): Promise<AiCompletionResult> {
     // If a non-Groq model was explicitly requested, bail early so the router reaches the right provider
     if (
@@ -57,7 +68,8 @@ export class GroqProvider implements AiProvider {
       throw new AiProviderError(this.name, `Model ${options.model} is not supported by Groq`, false);
     }
 
-    const model = options.model ?? FREE_MODELS[0];
+    const hasAttachments = options.messages.some((m) => m.attachments?.length);
+    const model = options.model ?? (hasAttachments ? VISION_MODEL : FREE_MODELS[0]);
     let lastFailure = "no attempt made";
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -94,7 +106,7 @@ export class GroqProvider implements AiProvider {
         }
 
         // If the model was not found (404) and was an override, try the default free model once.
-        if (status === 404 && model !== FREE_MODELS[0]) {
+        if (status === 404 && model !== FREE_MODELS[0] && !hasAttachments) {
           console.warn(`[Groq] Model "${model}" not found (404), recovering with ${FREE_MODELS[0]}`);
           try {
             const fallback = (await client.chat.completions.create(buildRequest(FREE_MODELS[0], options))) as ChatCompletion;
@@ -125,6 +137,8 @@ function buildRequest(model: string, options: AiCompletionOptions): GroqCreatePa
     temperature: options.temperature ?? DEFAULT_TEMPERATURE,
     ...(options.jsonObject ? { response_format: { type: "json_object" as const } } : {}),
     ...(options.economy && model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" as const } : {}),
+    // Qwen 3.x reasons by default; "none" answers in about half the time with the same reading of a receipt.
+    ...(options.economy && model.startsWith("qwen/") ? { reasoning_effort: "none" } : {}),
     ...(options.tools?.length ? { tools: toOpenAiTools(options.tools), tool_choice: "auto" as const } : {}),
   } as GroqCreateParams;
 }
@@ -161,8 +175,11 @@ function errorStatus(err: unknown): number | undefined {
 
 function isTransient(err: unknown, status: number | undefined): boolean {
   if (status !== undefined) return status >= 500 && status <= 599;
-  const name = (err as { name?: string })?.name;
-  return name === "APIConnectionError" || name === "APIConnectionTimeoutError";
+  // The SDK's connection and timeout errors report name "Error", so match the class name too.
+  const transient = new Set(["APIConnectionError", "APIConnectionTimeoutError"]);
+  const e = err as { name?: string; message?: string; constructor?: { name?: string } } | null;
+  // Class names can be minified in production bundles; the SDK's own messages are fixed text.
+  return transient.has(e?.name ?? "") || transient.has(e?.constructor?.name ?? "") || /^(Request timed out\.|Connection error\.)$/.test(e?.message ?? "");
 }
 
 function sleep(ms: number): Promise<void> {

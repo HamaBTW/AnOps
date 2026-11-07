@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { createInvoiceDraftAction } from "@/features/finance/actions/finance.actions";
+import { createInvoiceDraftAction, updateInvoiceDraftAction } from "@/features/finance/actions/finance.actions";
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";
 import { FormMessage } from "@/shared/components/ui/form-message";
@@ -27,15 +27,32 @@ type FormLine = {
   taxRate: number;
 };
 
+type Currency = "TND" | "USD" | "EUR" | "GBP";
+
+/** An existing draft to edit. Without it the form creates a new draft. */
+export type InvoiceDraftValues = {
+  id: string;
+  customerId: string;
+  currency: Currency;
+  issueDate: string;
+  dueDate?: string;
+  notes?: string;
+  terms?: string;
+  lines: Array<{ productId?: string; description: string; quantity: number; unitPrice: number; taxRate: number }>;
+};
+
 export function InvoiceBuilderForm({
   customers,
   products,
   preselectedCustomerId,
+  initialInvoice,
 }: {
   customers: Customer[];
   products: ProductOption[];
   preselectedCustomerId?: string;
+  initialInvoice?: InvoiceDraftValues;
 }) {
+  const editing = !!initialInvoice;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
@@ -43,14 +60,14 @@ export function InvoiceBuilderForm({
   const today = new Date().toISOString().slice(0, 10);
   const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [customerId, setCustomerId] = useState(preselectedCustomerId || (customers[0]?.id ?? ""));
-  const [currency, setCurrency] = useState<"TND" | "USD" | "EUR" | "GBP">("TND");
-  const [issueDate, setIssueDate] = useState(today);
-  const [dueDate, setDueDate] = useState(in30Days);
-  const [notes, setNotes] = useState("");
-  const [terms, setTerms] = useState("Payment due within 30 days of issue.");
+  const [customerId, setCustomerId] = useState(initialInvoice?.customerId || preselectedCustomerId || (customers[0]?.id ?? ""));
+  const [currency, setCurrency] = useState<Currency>(initialInvoice?.currency || "TND");
+  const [issueDate, setIssueDate] = useState(initialInvoice?.issueDate || today);
+  const [dueDate, setDueDate] = useState(initialInvoice ? initialInvoice.dueDate || "" : in30Days);
+  const [notes, setNotes] = useState(initialInvoice?.notes || "");
+  const [terms, setTerms] = useState(initialInvoice ? initialInvoice.terms || "" : "Payment due within 30 days of issue.");
 
-  const [lines, setLines] = useState<FormLine[]>([
+  const [lines, setLines] = useState<FormLine[]>(initialInvoice ? initialInvoice.lines.map((l, i) => ({ ...l, id: `line_${i}` })) : [
     {
       id: "line_1",
       productId: products[0]?.id || "",
@@ -171,12 +188,12 @@ export function InvoiceBuilderForm({
     payload.append("lines", JSON.stringify(formattedLines));
 
     startTransition(async () => {
-      const res = await createInvoiceDraftAction(payload);
+      const res = initialInvoice ? await updateInvoiceDraftAction(initialInvoice.id, payload) : await createInvoiceDraftAction(payload);
       if (res.error) {
         setFormError(res.error);
         return;
       }
-      router.push("/finance/invoices");
+      router.push(initialInvoice ? `/finance/invoices/${initialInvoice.id}` : "/finance/invoices");
       router.refresh();
     });
   }
@@ -455,11 +472,11 @@ export function InvoiceBuilderForm({
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-2">
-        <Button onClick={() => router.push("/finance/invoices")} disabled={pending}>
+        <Button onClick={() => router.push(initialInvoice ? `/finance/invoices/${initialInvoice.id}` : "/finance/invoices")} disabled={pending}>
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={pending || customers.length === 0}>
-          {pending ? "Creating Invoice..." : "Create Draft Invoice"}
+          {editing ? (pending ? "Saving..." : "Save Draft") : pending ? "Creating Invoice..." : "Create Draft Invoice"}
         </Button>
       </div>
     </form>

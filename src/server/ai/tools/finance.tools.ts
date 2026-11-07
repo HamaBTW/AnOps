@@ -320,17 +320,15 @@ export const summaryTool = defineTool({
   kind: "read",
   risk: "low",
   permission: R,
-  description: "Finance summary: invoiced, collected, outstanding, overdue, expense counts and a 6-month cash timeline, exactly as the Finance dashboard calculates them. Never recompute these figures.",
-  input: z.object({}).strict(),
-  async run(ctx) {
+  description: "Finance summary: invoiced, collected, outstanding, overdue, expense counts and a 6-month cash timeline for ONE currency (default: the company currency), exactly as the Finance dashboard calculates them. Never recompute or add figures across currencies.",
+  input: z.object({ currency: z.enum(CURRENCIES).optional() }).strict(),
+  async run(ctx, input) {
     const svc = fin(ctx);
-    const d = await svc.getDashboard();
-    const invoices = await svc.listInvoices();
+    const [d, currencies] = await Promise.all([svc.getDashboard(input.currency), svc.listActiveCurrencies()]);
     const notes: string[] = [];
-    // The dashboard adds amounts without converting; say so when more than one currency is in play.
-    const counted = invoices.filter((i) => ["posted", "partially_paid", "paid"].includes(i.status));
-    const currencies = [...new Set(counted.map((i) => i.currency))];
-    if (currencies.length > 1) notes.push(`Invoices in ${currencies.join(", ")} are added together without conversion, so read these totals with care.`);
+    // Figures are for one currency only; say when other currencies have activity too.
+    const others = currencies.filter((c) => c !== d.currency);
+    if (others.length) notes.push(`These figures are in ${d.currency} only. There is also activity in ${others.join(", ")}; ask for the summary in that currency.`);
     return {
       summary: "Finance summary",
       parts: [summaryCard(d, notes)],

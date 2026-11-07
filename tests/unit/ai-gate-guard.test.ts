@@ -42,7 +42,7 @@ describe("AI gate coverage", () => {
       "src/features/hr/actions/hr-assistant.action.ts",
       "src/app/api/v1/hr/leave-requests/[id]/advisor/route.ts",
       "src/features/community/actions/community.action.ts",
-      "src/features/finance/actions/receipt-ocr.actions.ts",
+      "src/server/finance/receipt-ocr.service.ts",
       "src/server/purchasing/replenishment-rationale.ts",
       "src/server/marketing/ai/copy.service.ts",
     ]) {

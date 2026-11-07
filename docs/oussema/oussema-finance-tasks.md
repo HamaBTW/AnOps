@@ -1,0 +1,65 @@
+# Finance Module: Task List
+
+Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped
+Plan: [oussema-finance-plan.md](oussema-finance-plan.md) · Progress log: [oussema-finance-progress.md](oussema-finance-progress.md)
+
+## Phase 0: Hardening and fixes
+- [x] **F0.1** Make `allocatePayment` atomic (transaction plus conditional updates on balance and unallocated amount); test a concurrent double allocation.
+- [x] **F0.2** Dashboard: cents-safe sums for monthly totals and net cash flow; totals grouped by currency.
+- [x] **F0.3** Overdue: work out `overdue` consistently (query-time flag on lists and detail) and keep it out of the stored status machine; test it.
+- [x] **F0.4** Add the company filter to the customer lookup in `listUnpaidInvoices` (and check all `$lookup`s).
+- [x] **F0.5** Finance indexes in `src/server/db/indexes.ts` (companyId + status/date, unique invoiceNumber per company, allocations by invoice/payment).
+- [x] **F0.6** `updateInvoiceDraft` + `deleteInvoiceDraft` (drafts only), with actions and edit UI.
+- [x] **F0.7** `updateExpense` + `deleteExpense` (draft/rejected only), with actions and edit UI.
+- [x] **F0.8** Replace `any` in the finance service (service is now lint-clean; the `any`s left in finance UI components and pages are covered by F5.7).
+
+## Phase 1: Real receipt OCR
+- [x] **F1.1** GridFS receipt storage service (`src/server/finance/receipt-storage.ts`): put/get/delete, company-scoped, size and type limits, SHA-256 hash.
+- [x] **F1.2** Authenticated route `GET /api/v1/finance/receipts/[id]/file`: streams the file after a company and permission check.
+- [x] **F1.3** AI layer: `AiMessage.attachments` plus Gemini `inlineData` / OpenAI-style `image_url` mapping, and routing that only picks vision-capable providers.
+- [x] **F1.4** Extraction pipeline (`src/server/finance/receipt-ocr.service.ts`): vision call, Zod result schema, deterministic checks, honest confidence, category matched to the company's categories.
+- [x] **F1.5** Duplicate detection (same file hash, or same vendor + date + total).
+- [x] **F1.6** Rewrite `scanReceiptAction` on top of F1.1–F1.5 (no raw database access in the action).
+- [x] **F1.7** Receipts UI: image/PDF preview beside the editable proposal, per-field confidence, warnings.
+- [x] **F1.8** "Apply → draft expense": creates the expense, sets `appliedToExpenseId`, marks it reviewed, links the receipt on the expense detail.
+- [ ] **F1.9** Bulk upload (several receipts, processed in a queue with progress).
+- [x] **F1.10** Tests: extraction validation (unit), pipeline with a stubbed model (integration).
+
+## Phase 4: Telegram receipt capture
+- [ ] **F4.1** Staff Telegram link: collection plus a single-use deep-link token bound to (userId, companyId); connect/disconnect UI in Finance settings.
+- [ ] **F4.2** Webhook dispatch: `/start fin_<token>` and messages from linked staff chats go to a finance handler; marketing flow unchanged.
+- [ ] **F4.3** Photo/document handler: `getFile` → download (≤10 MB) → F1 pipeline → draft expense → summary reply with link.
+- [ ] **F4.4** Commands `/receipt`, `/company`, `/stop`; rate limit; dedupe on `file_unique_id`; permission re-check; audit log.
+- [ ] **F4.5** Tests for the handler (stubbed Telegram + model) and a local polling path.
+
+## Phase 2: AI in every screen
+- [ ] **F2.1** Expense auto-categorization (suggestion with a reason) on the expense form.
+- [ ] **F2.2** Expense anomaly flags (deterministic rules + AI explanation) on the list and approval.
+- [ ] **F2.3** Invoice from a description ("Invoice ACME for 10 chairs, due in 30 days") → prefilled builder.
+- [ ] **F2.4** Payment smart match (suggested allocations, ranked, one-click apply).
+- [ ] **F2.5** Overdue reminder email drafted by AI (editable, then sent with F5.2).
+- [ ] **F2.6** Customer insight card (days to pay, risk).
+- [ ] **F2.7** Dashboard AI insights + 30/60/90-day cash-flow forecast.
+
+## Phase 3: Finance AI agent
+- [ ] **F3.1** Finance Copilot panel in `/finance` (finance-scoped orchestrator, aware of the current page).
+- [ ] **F3.2** New tools: scan receipt, match payment, cash-flow forecast, aging report, draft reminder, update draft invoice/expense.
+- [ ] **F3.3** Suggested prompts + file attachment in the chat.
+- [ ] **F3.4** Evals: tenant isolation, viewer can't write, no write without confirmation.
+
+## Phase 5: Modern features and UX
+- [ ] **F5.1** Duplicate invoice; credit note for posted or paid invoices.
+- [ ] **F5.2** Send invoice by email with PDF; status `sent` timestamp.
+- [ ] **F5.3** Tunisian VAT presets (19/13/7/0) + optional timbre fiscal.
+- [ ] **F5.4** Search, filters, sorting, cursor pagination on invoices / expenses / payments.
+- [ ] **F5.5** Reports: AR aging, expenses by category, monthly P&L, XLSX export.
+- [ ] **F5.6** Payment detail page + reverse allocation.
+- [ ] **F5.7** UI polish: empty states, skeletons, toasts, mobile.
+
+## Phase 6: Production readiness
+- [ ] **F6.1** RBAC + audit log for every finance write.
+- [ ] **F6.2** Rate limits on OCR/AI; magic-byte file validation.
+- [ ] **F6.3** Error boundaries; user-safe error messages.
+- [ ] **F6.4** Demo seed script `finance:seed-demo`.
+- [ ] **F6.5** Manual test guide + docs update (roles, architecture).
+- [ ] **F6.6** Full finance test run, typecheck, lint.

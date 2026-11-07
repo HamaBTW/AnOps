@@ -4,7 +4,7 @@ import { GroqProvider } from "@/server/ai/providers/groq.provider";
 import { OpenRouterProvider } from "@/server/ai/providers/openrouter.provider";
 import { GeminiProvider } from "@/server/ai/providers/gemini.provider";
 import { routeChat } from "@/server/ai/routing";
-import type { AiProvider, AiChatOptions, AiChatResult, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
+import type { AiAttachment, AiProvider, AiChatOptions, AiChatResult, AiCompletionOptions, AiCompletionResult } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
 /**
@@ -60,6 +60,18 @@ class AiMaster {
         "[AiMaster] No AI providers are configured. " +
         "Set GROQ_API_KEYS, OPENROUTER_API_KEY, or GEMINI_API_KEYS in your .env."
       );
+    }
+
+    // 0. Attachments (images, PDFs) go only to providers that can read them, Gemini first: it reads
+    //    both images and PDFs natively. A provider that cannot see the file is never asked to guess.
+    const attachments: AiAttachment[] = options.messages.flatMap((m) => m.attachments ?? []);
+    if (attachments.length) {
+      candidates = candidates
+        .filter((p) => p.supportsAttachments?.(attachments))
+        .sort((a, b) => Number(b.name === "Gemini") - Number(a.name === "Gemini"));
+      if (candidates.length === 0) {
+        throw new AiProviderError("AiMaster", "No configured AI provider can read this file type", false);
+      }
     }
 
     // 1. If a specific provider was explicitly selected (e.g. "groq", "gemini", "openrouter"):

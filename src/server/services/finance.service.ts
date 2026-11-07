@@ -1,15 +1,19 @@
 import "server-only";
 import clientPromise from "@/server/db/client";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { AppError } from "@/shared/lib/errors";
+import { withTransaction } from "@/server/db/transactions";
 import { assertPermission, permissionsForRole, workspaceRoleFor } from "@/server/security/permissions";
 import type { CompanyRole } from "@/features/company/types";
 import { addAmounts, computeLineTotal, computeTotals, fromCents, toCents } from "@/features/finance/utils/money";
+import { todayTunis } from "@/server/ai/finance/money";
+import { deleteReceiptFile, putReceiptFile, readReceiptFile, type ReceiptSource } from "@/server/finance/receipt-storage";
 
 export type FinanceServiceContext = {
   companyId: string;
   companyRole: CompanyRole;
-  userId: string;
+  /** Not used by the service: every write takes the acting user explicitly. */
+  userId?: string;
 };
 
 async function getDb() {
@@ -24,7 +28,7 @@ function requireCompanyId(companyId: string) {
   return new ObjectId(companyId);
 }
 
-async function getNextInvoiceNumber(db: any, companyId: ObjectId) {
+async function getNextInvoiceNumber(db: Db, companyId: ObjectId) {
   const year = new Date().getFullYear();
   const counter = db.collection("finance_counters");
   const res = await counter.findOneAndUpdate(
@@ -34,6 +38,11 @@ async function getNextInvoiceNumber(db: any, companyId: ObjectId) {
   );
   const seq = (res?.seq as number) || 1;
   return `INV-${year}-${String(seq).padStart(5, "0")}`;
+}
+
+/** A posted, not fully paid invoice past its due date (company calendar day). Computed, never stored. */
+export function isInvoiceOverdue(inv: { [k: string]: unknown }, today = todayTunis()): boolean {
+  return (inv.status === "posted" || inv.status === "partially_paid") && typeof inv.dueDate === "string" && !!inv.dueDate && inv.dueDate < today && toCents(Number(inv.balance) || 0) > 0;
 }
 
 export class FinanceService {
@@ -56,153 +65,152 @@ export class FinanceService {
     assertPermission(this.permissions, permission);
   }
 
-  async getDashboard() {
+  /** Currencies that have finance activity in this company, the company's own currency first. */
+  async listActiveCurrencies(): Promise<string[]> {
     this.ensurePermission("finance.read");
     const db = await getDb();
+    const base = await this.baseCurrency(db);
+    const [inv, exp, pay] = await Promise.all(
+      ["finance_invoices", "finance_expenses", "finance_payments"].map((c) => db.collection(c).distinct("currency", { companyId: this.companyId }))
+    );
+    const all = new Set<string>([base, ...[...inv, ...exp, ...pay].map((c) => (typeof c === "string" && c ? c : "TND"))]);
+    return [base, ...[...all].filter((c) => c !== base).sort()];
+  }
+
+  private async baseCurrency(db: Awaited<ReturnType<typeof getDb>>): Promise<string> {
+    const company = await db.collection("companies").findOne({ _id: this.companyId }, { projection: { currency: 1 } });
+    const c = typeof company?.currency === "string" ? company.currency.toUpperCase() : "";
+    return /^[A-Z]{3}$/.test(c) ? c : "TND";
+  }
+
+  /**
+   * Dashboard figures for ONE currency: amounts in different currencies are never added together.
+   * Defaults to the company's currency. All sums are done in whole cents.
+   */
+  async getDashboard(requestedCurrency?: string) {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const currency = requestedCurrency && /^[A-Z]{3}$/.test(requestedCurrency) ? requestedCurrency : await this.baseCurrency(db);
+    // Documents written before currency was stored count as TND.
+    const cur = currency === "TND" ? { $in: ["TND", null] } : currency;
     // The company calendar day (Africa/Tunis), the same one the AI tools use for "overdue".
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Tunis", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const todayStr = todayTunis();
+    // The last six calendar months, oldest first.
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, k) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - k), 1);
+      return { monthKey: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleString("en-US", { month: "short", year: "numeric" }) };
+    });
+    const firstMonthKey = months[0].monthKey;
 
     const [invoiceAgg, expenseAgg, overdueAgg, overdueList, monthlyPayments, monthlyExpenses] = await Promise.all([
       db.collection("finance_invoices").aggregate([
         // Only invoices that are official and not cancelled count: drafts are not yet receivable, voided ones never were.
-        { $match: { companyId: this.companyId, status: { $in: ["posted", "partially_paid", "paid"] } } },
+        { $match: { companyId: this.companyId, currency: cur, status: { $in: ["posted", "partially_paid", "paid"] } } },
         {
           $group: {
             _id: null,
-            totalInvoiced: { $sum: "$total" },
-            totalPaid: { $sum: "$amountPaid" },
-            outstanding: { $sum: "$balance" },
+            totalInvoicedCents: { $sum: { $round: [{ $multiply: [{ $ifNull: ["$total", 0] }, 100] }, 0] } },
+            totalPaidCents: { $sum: { $round: [{ $multiply: [{ $ifNull: ["$amountPaid", 0] }, 100] }, 0] } },
+            outstandingCents: { $sum: { $round: [{ $multiply: [{ $ifNull: ["$balance", 0] }, 100] }, 0] } },
           },
         },
       ]).toArray(),
       db.collection("finance_expenses").aggregate([
         { $match: { companyId: this.companyId } },
         {
+          // Workflow counts cover every currency (they are a to-do list); amounts only this currency.
           $group: {
             _id: "$status",
             count: { $sum: 1 },
-            amount: { $sum: "$total" },
+            amountCents: {
+              $sum: {
+                $cond: [
+                  { $eq: [{ $ifNull: ["$currency", "TND"] }, currency] },
+                  { $round: [{ $multiply: [{ $ifNull: ["$total", 0] }, 100] }, 0] },
+                  0,
+                ],
+              },
+            },
           },
         },
       ]).toArray(),
       db.collection("finance_invoices").aggregate([
-        {
-          $match: {
-            companyId: this.companyId,
-            status: { $in: ["posted", "partially_paid"] },
-            dueDate: { $lt: todayStr },
-          },
-        },
+        { $match: { companyId: this.companyId, currency: cur, status: { $in: ["posted", "partially_paid"] }, dueDate: { $lt: todayStr } } },
         {
           $group: {
             _id: null,
             count: { $sum: 1 },
-            totalOverdue: { $sum: "$balance" },
+            totalOverdueCents: { $sum: { $round: [{ $multiply: [{ $ifNull: ["$balance", 0] }, 100] }, 0] } },
           },
         },
       ]).toArray(),
       db.collection("finance_invoices").aggregate([
-        {
-          $match: {
-            companyId: this.companyId,
-            status: { $in: ["posted", "partially_paid"] },
-            dueDate: { $lt: todayStr },
-          },
-        },
+        { $match: { companyId: this.companyId, currency: cur, status: { $in: ["posted", "partially_paid"] }, dueDate: { $lt: todayStr } } },
+        { $sort: { dueDate: 1 } },
+        { $limit: 5 },
         {
           $lookup: {
             from: "finance_customers",
-            localField: "customerId",
-            foreignField: "_id",
+            let: { cid: "$customerId" },
+            pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_id", "$$cid"] }, { $eq: ["$companyId", this.companyId] }] } } }, { $project: { name: 1 } }],
             as: "customer",
           },
         },
         { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
-        { $sort: { dueDate: 1 } },
-        { $limit: 5 },
       ]).toArray(),
-      db.collection("finance_payments").find({
-        companyId: this.companyId,
-      }).sort({ paymentDate: -1 }).toArray(),
-      db.collection("finance_expenses").find({
-        companyId: this.companyId,
-        status: { $in: ["approved", "paid"] },
-      }).sort({ expenseDate: -1 }).toArray(),
+      db.collection("finance_payments")
+        .find({ companyId: this.companyId, currency: cur, paymentDate: { $gte: firstMonthKey } }, { projection: { paymentDate: 1, amount: 1 } })
+        .toArray(),
+      db.collection("finance_expenses")
+        .find({ companyId: this.companyId, currency: cur, status: { $in: ["approved", "paid"] }, expenseDate: { $gte: firstMonthKey } }, { projection: { expenseDate: 1, total: 1 } })
+        .toArray(),
     ]);
 
-    const inv = (invoiceAgg[0] as any) || { totalInvoiced: 0, totalPaid: 0, outstanding: 0 };
-    // Sums of two-decimal floats can carry residue; report whole cents.
-    for (const k of ["totalInvoiced", "totalPaid", "outstanding"]) inv[k] = fromCents(toCents(inv[k] || 0));
+    const inv = invoiceAgg[0] ?? { totalInvoicedCents: 0, totalPaidCents: 0, outstandingCents: 0 };
     const expensesCount: Record<string, number> = {};
-    const expensesAmount: Record<string, number> = {};
+    const expensesCents: Record<string, number> = {};
     for (const e of expenseAgg) {
-      expensesCount[(e as any)._id as string] = (e as any).count || 0;
-      expensesAmount[(e as any)._id as string] = (e as any).amount || 0;
+      expensesCount[String(e._id)] = e.count || 0;
+      expensesCents[String(e._id)] = e.amountCents || 0;
     }
+    const overdueData = overdueAgg[0] ?? { count: 0, totalOverdueCents: 0 };
 
-    const overdueData = (overdueAgg[0] as any) || { count: 0, totalOverdue: 0 };
-    overdueData.totalOverdue = fromCents(toCents(overdueData.totalOverdue || 0));
+    const monthlySummary = months.map(({ monthKey, label }) => {
+      const incomeCents = monthlyPayments
+        .filter((p) => typeof p.paymentDate === "string" && p.paymentDate.startsWith(monthKey))
+        .reduce((acc, p) => acc + toCents(Number(p.amount) || 0), 0);
+      const expenseCents = monthlyExpenses
+        .filter((e) => typeof e.expenseDate === "string" && e.expenseDate.startsWith(monthKey))
+        .reduce((acc, e) => acc + toCents(Number(e.total) || 0), 0);
+      return { monthKey, label, income: fromCents(incomeCents), expenses: fromCents(expenseCents), net: fromCents(incomeCents - expenseCents) };
+    });
 
-    // Format last 6 months timeline
-    const now = new Date();
-    const monthlySummary: Array<{
-      monthKey: string;
-      label: string;
-      income: number;
-      expenses: number;
-      net: number;
-    }> = [];
-
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const year = d.getFullYear();
-      const monthNum = String(d.getMonth() + 1).padStart(2, "0");
-      const monthKey = `${year}-${monthNum}`;
-      const label = d.toLocaleString("default", { month: "short", year: "numeric" });
-
-      const incomeInMonth = monthlyPayments
-        .filter((p: any) => typeof p.paymentDate === "string" && p.paymentDate.startsWith(monthKey))
-        .reduce((acc: number, cur: any) => acc + (Number(cur.amount) || 0), 0);
-
-      const expensesInMonth = monthlyExpenses
-        .filter((e: any) => typeof e.expenseDate === "string" && e.expenseDate.startsWith(monthKey))
-        .reduce((acc: number, cur: any) => acc + (Number(cur.total) || 0), 0);
-
-      monthlySummary.push({
-        monthKey,
-        label,
-        income: incomeInMonth,
-        expenses: expensesInMonth,
-        net: incomeInMonth - expensesInMonth,
-      });
-    }
-
-    const totalExpensesPaid = expensesAmount.paid || 0;
-    const netCashFlow = (inv.totalPaid || 0) - totalExpensesPaid;
+    const totalExpensesPaidCents = expensesCents.paid || 0;
 
     return {
-      totalInvoiced: inv.totalInvoiced || 0,
-      totalPaid: inv.totalPaid || 0,
-      outstanding: inv.outstanding || 0,
-      overdue: overdueData.totalOverdue || 0,
+      totalInvoiced: fromCents(inv.totalInvoicedCents || 0),
+      totalPaid: fromCents(inv.totalPaidCents || 0),
+      outstanding: fromCents(inv.outstandingCents || 0),
+      overdue: fromCents(overdueData.totalOverdueCents || 0),
       overdueCount: overdueData.count || 0,
-      topOverdueInvoices: overdueList.map((d: any) => ({
+      topOverdueInvoices: overdueList.map((d) => ({
         id: d._id.toString(),
-        invoiceNumber: d.invoiceNumber,
-        customerName: d.customer?.name || "Direct Customer",
-        dueDate: d.dueDate,
+        invoiceNumber: d.invoiceNumber as string,
+        customerName: (d.customer?.name as string) || "Direct Customer",
+        dueDate: d.dueDate as string,
         balance: d.balance || 0,
-        currency: d.currency || "TND",
+        currency: (d.currency as string) || "TND",
       })),
       expensesDraft: expensesCount.draft || 0,
       expensesSubmitted: expensesCount.submitted || 0,
       expensesApproved: expensesCount.approved || 0,
       expensesPaid: expensesCount.paid || 0,
-      totalExpensesAmount: Object.values(expensesAmount).reduce((a, b) => a + b, 0),
-      totalExpensesPaidAmount: totalExpensesPaid,
-      netCashFlow,
+      totalExpensesAmount: fromCents(Object.values(expensesCents).reduce((a, b) => a + b, 0)),
+      totalExpensesPaidAmount: fromCents(totalExpensesPaidCents),
+      netCashFlow: fromCents((inv.totalPaidCents || 0) - totalExpensesPaidCents),
       monthlySummary,
-      currency: "TND",
+      currency,
     };
   }
 
@@ -215,7 +223,7 @@ export class FinanceService {
       .sort({ name: 1 })
       .toArray();
 
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
       name: d.name,
@@ -297,7 +305,7 @@ export class FinanceService {
     const db = await getDb();
     const now = new Date();
 
-    const updateFields: Record<string, any> = {
+    const updateFields: Record<string, unknown> = {
       updatedAt: now,
       updatedBy: userId,
     };
@@ -361,11 +369,12 @@ export class FinanceService {
       .sort({ createdAt: -1 })
       .limit(100)
       .toArray();
+    const today = todayTunis();
 
     // Collect customer IDs for lookup
     const customerIds = docs
-      .map((d: any) => d.customerId)
-      .filter((id: any) => id && ObjectId.isValid(id));
+      .map((d) => d.customerId)
+      .filter((id) => id && ObjectId.isValid(id));
 
     const customerMap = new Map<string, { id: string; name: string; email?: string }>();
     if (customerIds.length > 0) {
@@ -382,7 +391,7 @@ export class FinanceService {
       }
     }
 
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
       customerId: d.customerId?.toString(),
@@ -397,6 +406,7 @@ export class FinanceService {
       total: d.total || 0,
       amountPaid: d.amountPaid || 0,
       balance: d.balance || 0,
+      isOverdue: isInvoiceOverdue(d, today),
       createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
     }));
   }
@@ -411,7 +421,7 @@ export class FinanceService {
       .limit(200)
       .toArray();
 
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       name: d.name,
       sku: d.sku,
@@ -474,6 +484,77 @@ export class FinanceService {
     return result.insertedId.toString();
   }
 
+  /** Replaces a draft's header and lines. Posted invoices are immutable: corrections go through void. */
+  async updateInvoiceDraft(invoiceId: string, input: {
+    customerId: string;
+    currency?: string;
+    issueDate: string;
+    dueDate?: string;
+    notes?: string;
+    terms?: string;
+    lines: Array<{ productId?: string; description: string; quantity: number; unitPrice: number; taxRate?: number }>;
+  }, userId: string) {
+    this.ensurePermission("finance.invoice.manage");
+    if (!ObjectId.isValid(invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
+    if (!ObjectId.isValid(input.customerId)) throw new AppError("VALIDATION_ERROR", "Invalid customer");
+    if (!input.lines.length) throw new AppError("VALIDATION_ERROR", "Add at least one line");
+    const db = await getDb();
+    const customer = await db.collection("finance_customers").findOne({ _id: new ObjectId(input.customerId), companyId: this.companyId });
+    if (!customer) throw new AppError("NOT_FOUND", "Customer not found");
+
+    const totals = computeTotals(input.lines);
+    const now = new Date();
+    const res = await db.collection("finance_invoices").updateOne(
+      { _id: new ObjectId(invoiceId), companyId: this.companyId, status: "draft" },
+      {
+        $set: {
+          customerId: new ObjectId(input.customerId),
+          currency: input.currency || "TND",
+          issueDate: input.issueDate,
+          dueDate: input.dueDate || undefined,
+          notes: input.notes?.trim() || undefined,
+          terms: input.terms?.trim() || undefined,
+          subtotal: totals.subtotal,
+          taxTotal: totals.taxTotal,
+          total: totals.total,
+          amountPaid: 0,
+          balance: totals.total,
+          lines: input.lines.map((l) => ({
+            _id: new ObjectId(),
+            productId: l.productId && ObjectId.isValid(l.productId) ? new ObjectId(l.productId) : undefined,
+            description: l.description.trim(),
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            taxRate: l.taxRate || 0,
+            lineTotal: computeLineTotal(l.quantity, l.unitPrice, l.taxRate),
+          })),
+          updatedAt: now,
+          updatedBy: userId,
+        },
+      }
+    );
+    if (res.matchedCount === 0) {
+      const exists = await db.collection("finance_invoices").countDocuments({ _id: new ObjectId(invoiceId), companyId: this.companyId });
+      if (!exists) throw new AppError("NOT_FOUND", "Invoice not found");
+      throw new AppError("INVALID_TRANSITION", "Only draft invoices can be edited. Void a posted invoice to correct it.");
+    }
+    return { success: true };
+  }
+
+  /** Deletes a draft. A draft was never sent or paid, so nothing else refers to it. Its number is not reused. */
+  async deleteInvoiceDraft(invoiceId: string) {
+    this.ensurePermission("finance.invoice.manage");
+    if (!ObjectId.isValid(invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
+    const db = await getDb();
+    const res = await db.collection("finance_invoices").deleteOne({ _id: new ObjectId(invoiceId), companyId: this.companyId, status: "draft" });
+    if (res.deletedCount === 0) {
+      const exists = await db.collection("finance_invoices").countDocuments({ _id: new ObjectId(invoiceId), companyId: this.companyId });
+      if (!exists) throw new AppError("NOT_FOUND", "Invoice not found");
+      throw new AppError("INVALID_TRANSITION", "Only draft invoices can be deleted. Void a posted invoice instead.");
+    }
+    return { success: true };
+  }
+
   async postInvoice(invoiceId: string, userId: string) {
     this.ensurePermission("finance.invoice.post");
     if (!ObjectId.isValid(invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
@@ -515,7 +596,7 @@ export class FinanceService {
     if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
 
     // Fetch Customer
-    let customer: any = null;
+    let customer: { id: string; name: string; email?: string; phone?: string; taxId?: string; address?: string } | null = null;
     if (inv.customerId && ObjectId.isValid(inv.customerId)) {
       const c = await db.collection("finance_customers").findOne({
         _id: new ObjectId(inv.customerId),
@@ -568,7 +649,8 @@ export class FinanceService {
       total: inv.total || 0,
       amountPaid: inv.amountPaid || 0,
       balance: inv.balance || 0,
-      lines: (inv.lines || []).map((l: any) => ({
+      isOverdue: isInvoiceOverdue(inv),
+      lines: ((inv.lines || []) as Array<{ _id?: ObjectId; productId?: ObjectId; description: string; quantity: number; unitPrice: number; taxRate?: number; lineTotal: number }>).map((l) => ({
         id: l._id?.toString() || String(Math.random()),
         productId: l.productId?.toString(),
         description: l.description,
@@ -581,7 +663,7 @@ export class FinanceService {
       voidedAt: inv.voidedAt?.toISOString?.(),
       voidReason: inv.voidReason,
       createdAt: inv.createdAt?.toISOString?.(),
-      allocations: allocations.map((a: any) => ({
+      allocations: allocations.map((a) => ({
         id: a._id.toString(),
         paymentId: a.paymentId.toString(),
         amount: a.amount,
@@ -607,7 +689,7 @@ export class FinanceService {
       "Balance",
     ];
 
-    const rows = invoices.map((inv: any) => [
+    const rows = invoices.map((inv) => [
       `"${inv.invoiceNumber}"`,
       `"${(inv.customer?.name || "Direct Customer").replace(/"/g, '""')}"`,
       `"${inv.status}"`,
@@ -663,7 +745,7 @@ export class FinanceService {
         .toArray();
     }
 
-    return categories.map((c: any) => ({
+    return categories.map((c) => ({
       id: c._id.toString(),
       companyId: c.companyId.toString(),
       name: c.name,
@@ -691,7 +773,7 @@ export class FinanceService {
   async listExpenses(statusFilter?: string) {
     this.ensurePermission("finance.read");
     const db = await getDb();
-    const query: Record<string, any> = { companyId: this.companyId };
+    const query: Record<string, unknown> = { companyId: this.companyId };
     if (statusFilter && statusFilter !== "all") {
       query.status = statusFilter;
     }
@@ -704,8 +786,8 @@ export class FinanceService {
 
     // Collect category IDs
     const categoryIds = docs
-      .map((d: any) => d.categoryId)
-      .filter((id: any) => id && ObjectId.isValid(id));
+      .map((d) => d.categoryId)
+      .filter((id) => id && ObjectId.isValid(id));
 
     const categoryMap = new Map<string, string>();
     if (categoryIds.length > 0) {
@@ -718,7 +800,7 @@ export class FinanceService {
       }
     }
 
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
       categoryId: d.categoryId?.toString(),
@@ -744,7 +826,7 @@ export class FinanceService {
     this.ensurePermission("finance.read");
     const expenses = await this.listExpenses();
     const headers = ["Date", "Vendor", "Category", "Description", "Status", "Currency", "Amount", "Tax", "Total"];
-    const rows = expenses.map((e: any) => [
+    const rows = expenses.map((e) => [
       `"${e.expenseDate || ""}"`,
       `"${(e.vendor || "N/A").replace(/"/g, '""')}"`,
       `"${(e.categoryName || "Uncategorized").replace(/"/g, '""')}"`,
@@ -758,7 +840,7 @@ export class FinanceService {
     return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   }
 
-  async createExpense(input: any, userId: string) {
+  async createExpense(input: { expenseDate: string; categoryId?: string; vendor?: string; description: string; amount: number; tax?: number; currency?: string; notes?: string; receiptDocumentId?: string }, userId: string) {
     this.ensurePermission("finance.expense.manage");
     const db = await getDb();
     const now = new Date();
@@ -787,6 +869,93 @@ export class FinanceService {
 
     const result = await db.collection("finance_expenses").insertOne(doc);
     return result.insertedId.toString();
+  }
+
+  async getExpense(expenseId: string) {
+    this.ensurePermission("finance.read");
+    if (!ObjectId.isValid(expenseId)) throw new AppError("VALIDATION_ERROR", "Invalid expense");
+    const db = await getDb();
+    const d = await db.collection("finance_expenses").findOne({ _id: new ObjectId(expenseId), companyId: this.companyId });
+    if (!d) throw new AppError("NOT_FOUND", "Expense not found");
+    return {
+      id: d._id.toString(),
+      categoryId: d.categoryId?.toString() as string | undefined,
+      expenseDate: d.expenseDate as string,
+      vendor: d.vendor as string | undefined,
+      description: d.description as string,
+      amount: (d.amount as number) || 0,
+      tax: (d.tax as number) || 0,
+      total: (d.total as number) || 0,
+      currency: (d.currency as string) || "TND",
+      status: d.status as string,
+      notes: d.notes as string | undefined,
+      rejectionReason: d.rejectionReason as string | undefined,
+      receiptDocumentId: d.receiptDocumentId?.toString() as string | undefined,
+    };
+  }
+
+  /**
+   * Edits a draft or rejected expense. Editing a rejected one puts it back to draft so it can be
+   * fixed and submitted again; submitted, approved and paid expenses are locked.
+   */
+  async updateExpense(expenseId: string, input: { expenseDate: string; categoryId?: string; vendor?: string; description: string; amount: number; tax?: number; currency?: string; notes?: string }, userId: string) {
+    this.ensurePermission("finance.expense.manage");
+    if (!ObjectId.isValid(expenseId)) throw new AppError("VALIDATION_ERROR", "Invalid expense");
+    const amount = Number(input.amount) || 0;
+    if (amount <= 0) throw new AppError("VALIDATION_ERROR", "Amount must be positive");
+    const tax = Number(input.tax) || 0;
+    const db = await getDb();
+    let categoryId: ObjectId | undefined;
+    if (input.categoryId && ObjectId.isValid(input.categoryId)) {
+      const cat = await db.collection("finance_expense_categories").findOne({ _id: new ObjectId(input.categoryId), companyId: this.companyId });
+      if (!cat) throw new AppError("NOT_FOUND", "Category not found");
+      categoryId = cat._id;
+    }
+    const now = new Date();
+    const res = await db.collection("finance_expenses").updateOne(
+      { _id: new ObjectId(expenseId), companyId: this.companyId, status: { $in: ["draft", "rejected"] } },
+      {
+        $set: {
+          categoryId,
+          expenseDate: input.expenseDate,
+          vendor: input.vendor?.trim() || undefined,
+          description: input.description.trim(),
+          amount,
+          tax,
+          total: addAmounts(amount, tax),
+          currency: input.currency || "TND",
+          notes: input.notes?.trim() || undefined,
+          status: "draft",
+          updatedAt: now,
+          updatedBy: userId,
+        },
+        $unset: { rejectedAt: "", rejectedBy: "", rejectionReason: "", submittedAt: "", submittedBy: "" },
+      }
+    );
+    if (res.matchedCount === 0) {
+      const exists = await db.collection("finance_expenses").countDocuments({ _id: new ObjectId(expenseId), companyId: this.companyId });
+      if (!exists) throw new AppError("NOT_FOUND", "Expense not found");
+      throw new AppError("INVALID_TRANSITION", "Only draft or rejected expenses can be edited.");
+    }
+    return { success: true };
+  }
+
+  async deleteExpense(expenseId: string) {
+    this.ensurePermission("finance.expense.manage");
+    if (!ObjectId.isValid(expenseId)) throw new AppError("VALIDATION_ERROR", "Invalid expense");
+    const db = await getDb();
+    const res = await db.collection("finance_expenses").deleteOne({ _id: new ObjectId(expenseId), companyId: this.companyId, status: { $in: ["draft", "rejected"] } });
+    if (res.deletedCount === 0) {
+      const exists = await db.collection("finance_expenses").countDocuments({ _id: new ObjectId(expenseId), companyId: this.companyId });
+      if (!exists) throw new AppError("NOT_FOUND", "Expense not found");
+      throw new AppError("INVALID_TRANSITION", "Only draft or rejected expenses can be deleted.");
+    }
+    // A receipt applied to this expense becomes available again.
+    await db.collection("finance_receipt_extractions").updateMany(
+      { companyId: this.companyId, appliedToExpenseId: new ObjectId(expenseId) },
+      { $unset: { appliedToExpenseId: "" }, $set: { updatedAt: new Date() } }
+    );
+    return { success: true };
   }
 
   async submitExpense(expenseId: string, userId: string) {
@@ -862,7 +1031,7 @@ export class FinanceService {
     this.ensurePermission("finance.read");
     const db = await getDb();
     const docs = await db.collection("finance_payments").find({ companyId: this.companyId }).sort({ paymentDate: -1 }).limit(100).toArray();
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       companyId: d.companyId.toString(),
       paymentDate: d.paymentDate,
@@ -904,11 +1073,6 @@ export class FinanceService {
     this.ensurePermission("finance.payment.allocate");
     if (!ObjectId.isValid(paymentId)) throw new AppError("VALIDATION_ERROR", "Invalid payment");
 
-    const db = await getDb();
-    const now = new Date();
-    const payment = await db.collection("finance_payments").findOne({ _id: new ObjectId(paymentId), companyId: this.companyId });
-    if (!payment) throw new AppError("NOT_FOUND", "Payment not found");
-
     // Money is compared in whole cents: summing floats leaves residue (0.3 - 0.1 is not 0.2) that
     // would reject a legitimate allocation or leave a fraction of a cent on a balance.
     if (new Set(allocations.map((a) => a.invoiceId)).size !== allocations.length) throw new AppError("VALIDATION_ERROR", "Each invoice can appear only once");
@@ -917,60 +1081,61 @@ export class FinanceService {
       if (!ObjectId.isValid(a.invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
       totalAllocCents += toCents(Number(a.amount) || 0);
     }
-
     if (totalAllocCents <= 0) throw new AppError("VALIDATION_ERROR", "Allocation amount must be positive");
-    if (totalAllocCents > toCents(payment.unallocatedAmount || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds unallocated amount");
 
-    // Check invoices exist and balances
-    for (const a of allocations) {
-      const inv = await db.collection("finance_invoices").findOne({ _id: new ObjectId(a.invoiceId), companyId: this.companyId });
-      if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
-      // Only posted invoices are collectable, and money is never converted between currencies.
-      if (inv.status !== "posted" && inv.status !== "partially_paid") throw new AppError("INVALID_TRANSITION", "Payments can only be applied to posted invoices");
-      if ((inv.currency || "TND") !== (payment.currency || "TND")) throw new AppError("VALIDATION_ERROR", "Payment and invoice currencies differ");
-      if (toCents(inv.balance || 0) < toCents(Number(a.amount) || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds invoice balance");
-    }
+    const db = await getDb();
+    const now = new Date();
+    const payments = db.collection("finance_payments");
+    const invoices = db.collection("finance_invoices");
+    const allocs = db.collection("finance_payment_allocations");
+    const paymentOid = new ObjectId(paymentId);
 
-    // Insert allocations and update
-    const ops: any[] = [];
-    for (const a of allocations) {
-      ops.push({
-        insertOne: {
-          document: {
-            companyId: this.companyId,
-            paymentId: new ObjectId(paymentId),
-            invoiceId: new ObjectId(a.invoiceId),
-            amount: Number(a.amount),
-            allocatedAt: now,
-            allocatedBy: userId,
-          },
-        },
-      });
-    }
-    if (ops.length) await db.collection("finance_payment_allocations").bulkWrite(ops);
+    // One unit of work. Every update is conditional on the value it was computed from, so two
+    // allocations racing on the same payment or invoice cannot both succeed: the loser matches
+    // nothing and the whole operation rolls back (a real transaction on a replica set, undo steps otherwise).
+    await withTransaction(db, async ({ session, onRollback }) => {
+      const payment = await payments.findOne({ _id: paymentOid, companyId: this.companyId }, { session });
+      if (!payment) throw new AppError("NOT_FOUND", "Payment not found");
+      if (totalAllocCents > toCents(payment.unallocatedAmount || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds unallocated amount");
 
-    // Update payment
-    await db.collection("finance_payments").updateOne(
-      { _id: new ObjectId(paymentId), companyId: this.companyId },
-      { $set: { unallocatedAmount: fromCents(toCents(payment.unallocatedAmount || 0) - totalAllocCents), updatedAt: now } }
-    );
+      const targets = [];
+      for (const a of allocations) {
+        const inv = await invoices.findOne({ _id: new ObjectId(a.invoiceId), companyId: this.companyId }, { session });
+        if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
+        // Only posted invoices are collectable, and money is never converted between currencies.
+        if (inv.status !== "posted" && inv.status !== "partially_paid") throw new AppError("INVALID_TRANSITION", "Payments can only be applied to posted invoices");
+        if ((inv.currency || "TND") !== (payment.currency || "TND")) throw new AppError("VALIDATION_ERROR", "Payment and invoice currencies differ");
+        if (toCents(inv.balance || 0) < toCents(Number(a.amount) || 0)) throw new AppError("VALIDATION_ERROR", "Allocation exceeds invoice balance");
+        targets.push({ inv, cents: toCents(Number(a.amount)) });
+      }
 
-    // Update each invoice
-    for (const a of allocations) {
-      const inv = await db.collection("finance_invoices").findOne({ _id: new ObjectId(a.invoiceId), companyId: this.companyId });
-      if (!inv) continue;
-      const newPaidCents = toCents(inv.amountPaid || 0) + toCents(Number(a.amount));
-      const newBalanceCents = toCents(inv.total || 0) - newPaidCents;
-      const newPaid = fromCents(newPaidCents);
-      const newBalance = fromCents(newBalanceCents);
-      let newStatus = inv.status;
-      if (newBalanceCents <= 0) newStatus = "paid";
-      else if (newPaidCents > 0) newStatus = "partially_paid";
-      await db.collection("finance_invoices").updateOne(
-        { _id: new ObjectId(a.invoiceId), companyId: this.companyId },
-        { $set: { amountPaid: newPaid, balance: newBalance, status: newStatus, updatedAt: now, updatedBy: userId } }
+      const paymentSet = await payments.updateOne(
+        { _id: paymentOid, companyId: this.companyId, unallocatedAmount: payment.unallocatedAmount },
+        { $set: { unallocatedAmount: fromCents(toCents(payment.unallocatedAmount || 0) - totalAllocCents), updatedAt: now } },
+        { session }
       );
-    }
+      if (paymentSet.matchedCount === 0) throw new AppError("CONFLICT", "The payment changed while allocating. Try again.");
+      onRollback(() => payments.updateOne({ _id: paymentOid }, { $set: { unallocatedAmount: payment.unallocatedAmount, updatedAt: payment.updatedAt } }));
+
+      for (const { inv, cents } of targets) {
+        const newPaidCents = toCents(inv.amountPaid || 0) + cents;
+        const newBalanceCents = toCents(inv.total || 0) - newPaidCents;
+        const newStatus = newBalanceCents <= 0 ? "paid" : "partially_paid";
+        const invoiceSet = await invoices.updateOne(
+          { _id: inv._id, companyId: this.companyId, balance: inv.balance, status: inv.status },
+          { $set: { amountPaid: fromCents(newPaidCents), balance: fromCents(newBalanceCents), status: newStatus, updatedAt: now, updatedBy: userId } },
+          { session }
+        );
+        if (invoiceSet.matchedCount === 0) throw new AppError("CONFLICT", "An invoice changed while allocating. Try again.");
+        onRollback(() => invoices.updateOne({ _id: inv._id }, { $set: { amountPaid: inv.amountPaid, balance: inv.balance, status: inv.status, updatedAt: inv.updatedAt, updatedBy: inv.updatedBy } }));
+
+        const inserted = await allocs.insertOne(
+          { companyId: this.companyId, paymentId: paymentOid, invoiceId: inv._id, amount: fromCents(cents), allocatedAt: now, allocatedBy: userId },
+          { session }
+        );
+        onRollback(() => allocs.deleteOne({ _id: inserted.insertedId }));
+      }
+    });
 
     return { success: true };
   }
@@ -988,14 +1153,14 @@ export class FinanceService {
       .sort({ dueDate: 1, createdAt: 1 })
       .toArray();
 
-    const customerIds = docs.map((d: any) => d.customerId).filter((id: any) => id && ObjectId.isValid(id));
+    const customerIds = docs.map((d) => d.customerId).filter((id) => id && ObjectId.isValid(id));
     const customerMap = new Map<string, string>();
     if (customerIds.length > 0) {
-      const customers = await db.collection("finance_customers").find({ _id: { $in: customerIds } }).toArray();
+      const customers = await db.collection("finance_customers").find({ _id: { $in: customerIds }, companyId: this.companyId }).toArray();
       for (const c of customers) customerMap.set(c._id.toString(), c.name);
     }
 
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       invoiceNumber: d.invoiceNumber,
       customerId: d.customerId?.toString(),
@@ -1005,6 +1170,7 @@ export class FinanceService {
       balance: d.balance || 0,
       currency: d.currency || "TND",
       dueDate: d.dueDate,
+      isOverdue: isInvoiceOverdue(d),
     }));
   }
 
@@ -1012,7 +1178,7 @@ export class FinanceService {
     this.ensurePermission("finance.read");
     const payments = await this.listPayments();
     const headers = ["Payment Date", "Method", "Reference", "Currency", "Amount", "Unallocated Amount"];
-    const rows = payments.map((p: any) => [
+    const rows = payments.map((p) => [
       `"${p.paymentDate || ""}"`,
       `"${p.method || ""}"`,
       `"${(p.reference || "").replace(/"/g, '""')}"`,
@@ -1028,30 +1194,50 @@ export class FinanceService {
     const db = await getDb();
     const docs = await db.collection("finance_receipt_extractions").aggregate([
       { $match: { companyId: this.companyId } },
+      { $sort: { createdAt: -1 } },
+      { $limit: 50 },
       {
         $lookup: {
           from: "finance_receipt_documents",
-          localField: "receiptDocumentId",
-          foreignField: "_id",
+          let: { rid: "$receiptDocumentId" },
+          pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$_id", "$$rid"] }, { $eq: ["$companyId", this.companyId] }] } } }],
           as: "doc",
         },
       },
       { $unwind: { path: "$doc", preserveNullAndEmptyArrays: true } },
-      { $sort: { createdAt: -1 } },
-      { $limit: 50 },
     ]).toArray();
 
-    return docs.map((d: any) => ({
+    return docs.map((d) => ({
       id: d._id.toString(),
       receiptDocumentId: d.receiptDocumentId?.toString() || "",
-      originalName: d.doc?.originalName || "Receipt File",
-      mimeType: d.doc?.mimeType || "application/octet-stream",
+      // Older scans stored only metadata; only documents with a stored file can be previewed.
+      hasFile: !!d.doc?.fileId,
+      originalName: d.doc?.originalName || (d.receiptDocumentId ? "Receipt file" : "Pasted text"),
+      mimeType: d.doc?.mimeType || "text/plain",
       size: d.doc?.size || 0,
+      source: (d.source as string) || "upload",
       proposed: d.proposed || {},
-      rawText: d.rawText || "",
+      warnings: (d.warnings as Array<{ code: string; message: string }>) || [],
+      appliedToExpenseId: d.appliedToExpenseId?.toString() as string | undefined,
+      possibleDuplicateExpenseId: d.possibleDuplicateExpenseId?.toString() as string | undefined,
+      provider: d.provider as string | undefined,
       reviewed: !!d.reviewed,
       createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
     }));
+  }
+
+  /** Stores a receipt file for this company (deduplicated by content hash). */
+  async storeReceiptFile(input: { bytes: Uint8Array; originalName: string; source: ReceiptSource }, userId: string) {
+    this.ensurePermission("finance.receipt.ocr");
+    const db = await getDb();
+    return putReceiptFile(db, { companyId: this.companyId, userId, ...input });
+  }
+
+  /** The stored file, for viewing. Null when it is not this company's file. */
+  async getReceiptFile(documentId: string) {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    return readReceiptFile(db, this.companyId, documentId);
   }
 
   async deleteReceiptExtraction(id: string) {
@@ -1064,11 +1250,16 @@ export class FinanceService {
     });
     if (!ext) throw new AppError("NOT_FOUND", "Extraction not found");
 
+    if (ext.appliedToExpenseId) throw new AppError("INVALID_TRANSITION", "This receipt is attached to an expense. Delete the expense first.");
     if (ext.receiptDocumentId) {
-      await db.collection("finance_receipt_documents").deleteOne({
-        _id: ext.receiptDocumentId,
+      // The file is removed only when no other scan still refers to it.
+      const others = await db.collection("finance_receipt_extractions").countDocuments({
         companyId: this.companyId,
+        receiptDocumentId: ext.receiptDocumentId,
+        _id: { $ne: ext._id },
       });
+      const usedByExpense = await db.collection("finance_expenses").countDocuments({ companyId: this.companyId, receiptDocumentId: ext.receiptDocumentId });
+      if (!others && !usedByExpense) await deleteReceiptFile(db, this.companyId, ext.receiptDocumentId.toHexString());
     }
 
     await db.collection("finance_receipt_extractions").deleteOne({
@@ -1099,6 +1290,5 @@ export async function getFinanceService() {
   return new FinanceService({
     companyId: tenant.companyId,
     companyRole: tenant.role,
-    userId: (tenant as any).userId || "",
   });
 }

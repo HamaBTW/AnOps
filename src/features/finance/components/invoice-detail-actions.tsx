@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { postInvoiceAction, voidInvoiceAction } from "@/features/finance/actions/finance.actions";
+import { deleteInvoiceDraftAction, postInvoiceAction, voidInvoiceAction } from "@/features/finance/actions/finance.actions";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
 
@@ -12,17 +12,20 @@ export function InvoiceDetailActions({
   invoiceNumber,
   status,
   canPost,
+  canManage = false,
 }: {
   invoiceId: string;
   invoiceNumber: string;
   status: string;
   canPost: boolean;
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [voidReason, setVoidReason] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   function handlePrint() {
     window.print();
@@ -39,6 +42,20 @@ export function InvoiceDetailActions({
         setError(res.error);
         return;
       }
+      router.refresh();
+    });
+  }
+
+  function handleDelete() {
+    setConfirmingDelete(false);
+    setError(null);
+    startTransition(async () => {
+      const res = await deleteInvoiceDraftAction(invoiceId);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      router.push("/finance/invoices");
       router.refresh();
     });
   }
@@ -81,6 +98,31 @@ export function InvoiceDetailActions({
             </svg>
             Print / Save as PDF
           </Button>
+
+          {canManage && status === "draft" && (
+            <>
+              <Link
+                href={`/finance/invoices/${invoiceId}/edit`}
+                className="inline-flex items-center min-h-[38px] px-3.5 text-sm font-medium rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
+              >
+                Edit Draft
+              </Link>
+              {confirmingDelete ? (
+                <>
+                  <Button variant="danger" onClick={handleDelete} disabled={pending}>
+                    {pending ? "Deleting..." : "Confirm delete"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={pending}>
+                    Keep draft
+                  </Button>
+                </>
+              ) : (
+                <Button variant="danger" onClick={() => setConfirmingDelete(true)} disabled={pending} title="Delete this draft permanently">
+                  Delete Draft
+                </Button>
+              )}
+            </>
+          )}
 
           {/* Post Invoice Button */}
           {canPost && status === "draft" && (

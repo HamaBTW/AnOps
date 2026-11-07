@@ -1,408 +1,561 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  scanReceiptAction,
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardPaste,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  ScanLine,
+  Send,
+  Save,
+  Sparkles,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  applyReceiptAction,
   deleteReceiptExtractionAction,
-  markReceiptReviewedAction,
-  type ProposedExtraction,
+  scanReceiptAction,
 } from "@/features/finance/actions/receipt-ocr.actions";
-import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
-import { TextField } from "@/shared/components/ui/text-field";
+import { Button, selectClass } from "@/shared/components/ui/button";
+import { Field, Select, Textarea } from "@/shared/components/ui/form-kit";
 import { FormMessage } from "@/shared/components/ui/form-message";
-import { IconPackage, IconDocument, IconCheck } from "@/shared/components/ui/brand-icons";
+import { EmptyState } from "@/shared/components/data-display/empty-state";
+import { useToast } from "@/shared/components/ui/toast";
+import { cn } from "@/shared/lib/utils";
 
-type ReceiptItem = {
+type Warning = { code: string; message: string };
+
+type Proposed = {
+  vendor?: string | null;
+  date?: string | null;
+  amount?: number | null;
+  tax?: number | null;
+  total?: number | null;
+  currency?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  /** Older scans stored a free-text hint instead of a category id. */
+  categoryHint?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  confidence?: number | null;
+  fieldConfidence?: Partial<Record<"vendor" | "date" | "total" | "tax" | "currency", number>>;
+};
+
+export type ReceiptItem = {
   id: string;
   receiptDocumentId: string;
+  hasFile: boolean;
   originalName: string;
   mimeType: string;
-  size: number;
-  proposed: ProposedExtraction;
-  rawText: string;
+  source: string;
+  proposed: Proposed;
+  warnings: Warning[];
+  appliedToExpenseId?: string;
+  possibleDuplicateExpenseId?: string;
   reviewed: boolean;
   createdAt: string;
 };
 
-export function ReceiptScanner({ initialReceipts = [] }: { initialReceipts?: ReceiptItem[] }) {
+type Review = {
+  extractionId: string;
+  receiptDocumentId: string | null;
+  mimeType: string | null;
+  proposed: Proposed;
+  warnings: Warning[];
+  duplicateFile: boolean;
+  possibleDuplicateExpenseId: string | null;
+  appliedToExpenseId?: string;
+};
+
+const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf";
+const MAX_BYTES = 10 * 1024 * 1024;
+const LOW_CONFIDENCE = 0.6;
+
+const fileUrl = (documentId: string) => `/api/v1/finance/receipts/${documentId}/file`;
+
+function ConfidenceBadge({ value }: { value: number | null | undefined }) {
+  if (value === null || value === undefined) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--color-text-secondary)]">
+        <Sparkles aria-hidden className="size-3.5 shrink-0" /> Confidence not reported
+      </span>
+    );
+  }
+  const pct = Math.round(value * 100);
+  const tone = value >= 0.8 ? "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)]" : value >= LOW_CONFIDENCE ? "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]" : "bg-[var(--color-status-error-bg)] text-[var(--color-status-error)]";
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", tone)}>
+      <Sparkles aria-hidden className="size-3.5 shrink-0" /> {pct}% confidence
+    </span>
+  );
+}
+
+function InfoNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p role="status" className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3 py-2.5 text-sm text-[var(--color-text-secondary)]">
+      {children}
+    </p>
+  );
+}
+
+export function ReceiptScanner({
+  initialReceipts = [],
+  categories,
+  canScan,
+  canCreateExpense,
+}: {
+  initialReceipts?: ReceiptItem[];
+  categories: Array<{ id: string; name: string }>;
+  canScan: boolean;
+  canCreateExpense: boolean;
+}) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  // Scan state
-  const [activeExtraction, setActiveExtraction] = useState<{
-    receiptDocumentId: string;
-    extractionId: string;
-    proposed: ProposedExtraction;
-  } | null>(null);
+  // Upload
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [pasteMode, setPasteMode] = useState(false);
+  const [pastedText, setPastedText] = useState("");
+  const [note, setNote] = useState("");
 
-  // Manual text mode toggle
-  const [showManualText, setShowManualText] = useState(false);
-  const [manualText, setManualText] = useState("");
-  const [manualNotes, setManualNotes] = useState("");
-
-  // Editable fields for active review
+  // Review
+  const [review, setReview] = useState<Review | null>(null);
   const [vendor, setVendor] = useState("");
   const [date, setDate] = useState("");
-  const [amount, setAmount] = useState<number | string>("");
-  const [tax, setTax] = useState<number | string>("");
+  const [categoryId, setCategoryId] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [tax, setTax] = useState("");
   const [currency, setCurrency] = useState("TND");
-  const [categoryHint, setCategoryHint] = useState("");
+  const [notes, setNotes] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  async function handleScanSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  const localPreview = useMemo(() => (file && file.type.startsWith("image/") ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => {
+    if (localPreview) URL.revokeObjectURL(localPreview);
+  }, [localPreview]);
+
+  function pickFile(f: File | null | undefined) {
     setError(null);
-    setSuccess(null);
-
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    if (manualText.trim()) formData.set("receiptText", manualText.trim());
-    if (manualNotes.trim()) formData.set("notes", manualNotes.trim());
-
-    startTransition(async () => {
-      const res = await scanReceiptAction(formData);
-      if (res.error) {
-        setError(res.error);
-        return;
-      }
-
-      if (res.data) {
-        const p = res.data.proposed || {};
-        setActiveExtraction(res.data);
-        setVendor(p.vendor || "");
-        setDate(p.date || new Date().toISOString().slice(0, 10));
-        setAmount(p.amount ?? p.total ?? "");
-        setTax(p.tax ?? 0);
-        setCurrency(p.currency || "TND");
-        setCategoryHint(p.categoryHint || "");
-        setSuccess("Receipt scanned successfully! Review the extracted fields below.");
-      }
-    });
-  }
-
-  function handleConvertToExpense() {
-    if (!activeExtraction) return;
-    const query = new URLSearchParams();
-    if (vendor) query.set("vendor", vendor);
-    if (amount) query.set("amount", String(amount));
-    if (tax) query.set("tax", String(tax));
-    if (date) query.set("date", date);
-    if (currency) query.set("currency", currency);
-    if (categoryHint) query.set("categoryHint", categoryHint);
-    if (activeExtraction.receiptDocumentId) {
-      query.set("receiptDocumentId", activeExtraction.receiptDocumentId);
+    if (!f) return;
+    if (f.size > MAX_BYTES) return setError("Receipts can be at most 10 MB.");
+    if (!ACCEPT.split(",").includes(f.type) && !/\.(jpe?g|png|webp|heic|heif|pdf)$/i.test(f.name)) {
+      return setError("Choose a JPEG, PNG, WEBP or HEIC photo, or a PDF.");
     }
-
-    // Mark as reviewed
-    markReceiptReviewedAction(activeExtraction.extractionId);
-
-    router.push(`/finance/expenses/new?${query.toString()}`);
+    setFile(f);
+    setPasteMode(false);
   }
 
-  function handleConvertFromHistory(item: ReceiptItem) {
-    const p = item.proposed || {};
-    const query = new URLSearchParams();
-    if (p.vendor) query.set("vendor", p.vendor);
-    if (p.amount ?? p.total) query.set("amount", String(p.amount ?? p.total));
-    if (p.tax) query.set("tax", String(p.tax));
-    if (p.date) query.set("date", p.date);
-    if (p.currency) query.set("currency", p.currency);
-    if (p.categoryHint) query.set("categoryHint", p.categoryHint);
-    if (item.receiptDocumentId) query.set("receiptDocumentId", item.receiptDocumentId);
-
-    markReceiptReviewedAction(item.id);
-    router.push(`/finance/expenses/new?${query.toString()}`);
+  function openReview(r: Review) {
+    const p = r.proposed;
+    setReview(r);
+    setVendor(p.vendor ?? "");
+    setDate(p.date ?? "");
+    const legacy = p.categoryHint ? categories.find((c) => c.name.toLowerCase() === p.categoryHint?.toLowerCase())?.id : undefined;
+    setCategoryId(p.categoryId ?? legacy ?? "");
+    setDescription(p.description ?? (p.vendor ? `Purchase at ${p.vendor}` : ""));
+    setAmount(p.amount != null ? String(p.amount) : p.total != null ? String(p.total) : "");
+    setTax(p.tax != null ? String(p.tax) : "0");
+    setCurrency(p.currency ?? "TND");
+    setNotes(p.notes ?? "");
+    requestAnimationFrame(() => document.getElementById("receipt-review")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this receipt extraction?")) return;
+  function handleScan() {
+    setError(null);
+    if (!file && !pastedText.trim()) return setError("Choose a receipt photo or PDF, or paste the receipt text.");
+    const fd = new FormData();
+    if (file) fd.set("receipt", file);
+    if (pastedText.trim()) fd.set("receiptText", pastedText.trim());
+    if (note.trim()) fd.set("notes", note.trim());
     startTransition(async () => {
-      await deleteReceiptExtractionAction(id);
-      if (activeExtraction?.extractionId === id) setActiveExtraction(null);
+      const res = await scanReceiptAction(fd);
+      if (res.error || !res.data) return setError(res.error ?? "The receipt could not be scanned.");
+      const d = res.data;
+      openReview({
+        extractionId: d.extractionId,
+        receiptDocumentId: d.receiptDocumentId,
+        mimeType: file?.type || null,
+        proposed: d.proposed,
+        warnings: d.warnings,
+        duplicateFile: d.duplicateFile,
+        possibleDuplicateExpenseId: d.possibleDuplicateExpenseId,
+      });
+      setFile(null);
+      setPastedText("");
+      setNote("");
+      if (inputRef.current) inputRef.current.value = "";
+      if (d.duplicateFile) toast.info("Already scanned", "This exact file was scanned before; showing that result.");
+      else toast.success("Receipt read", "Check the values, then create the expense.");
       router.refresh();
     });
   }
 
-  async function handleMarkReviewed(id: string) {
+  function handleApply(submit: boolean) {
+    if (!review) return;
+    setError(null);
+    const net = Number(amount);
+    if (!date) return setError("Enter the receipt date.");
+    if (!Number.isFinite(net) || net <= 0) return setError("Enter a net amount greater than 0.");
+    if (description.trim().length < 3) return setError("Enter a short description (at least 3 characters).");
     startTransition(async () => {
-      await markReceiptReviewedAction(id);
+      const res = await applyReceiptAction(
+        review.extractionId,
+        { expenseDate: date, categoryId, vendor, description: description.trim(), amount: net, tax: Number(tax) || 0, currency, notes },
+        { submit }
+      );
+      if (res.error || !res.data) return setError(res.error ?? "The expense could not be created.");
+      toast.success(submit ? "Expense submitted" : "Draft expense saved", vendor ? `${vendor}: ${(net + (Number(tax) || 0)).toFixed(2)} ${currency}` : undefined);
+      setReview(null);
       router.refresh();
     });
   }
+
+  function handleDelete(id: string) {
+    startTransition(async () => {
+      const res = await deleteReceiptExtractionAction(id);
+      setConfirmDelete(null);
+      if (res.error) return toast.error("Not deleted", res.error);
+      if (review?.extractionId === id) setReview(null);
+      toast.success("Receipt deleted");
+      router.refresh();
+    });
+  }
+
+  const lowField = (k: "vendor" | "date" | "total" | "tax" | "currency") => {
+    const v = review?.proposed.fieldConfidence?.[k];
+    return typeof v === "number" && v < LOW_CONFIDENCE ? "The AI was unsure about this value. Check it against the receipt." : undefined;
+  };
+  const total = (Number(amount) || 0) + (Number(tax) || 0);
+  const previewDoc = review?.receiptDocumentId ?? null;
+  const previewIsPdf = review?.mimeType === "application/pdf";
 
   return (
-    <div className="space-y-8">
-      {/* Upload & Scan Section */}
-      <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-[var(--color-action-primary)]/10 text-[var(--color-action-primary)]">
-            <IconPackage size={22} />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-              AI Receipt & Invoice OCR Scanner
-            </h2>
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              Upload any vendor receipt, ticket, or PDF invoice. The AI will parse merchant, date, amounts, and tax.
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleScanSubmit} className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <div className="flex-1 w-full">
-              <input
-                type="file"
-                name="receipt"
-                accept="image/*,application/pdf,.txt,.csv,.json"
-                className="block w-full text-sm text-[var(--color-text-primary)] file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[var(--color-action-primary)]/10 file:text-[var(--color-action-primary)] hover:file:bg-[var(--color-action-primary)]/20 cursor-pointer border border-[var(--color-border-subtle)] rounded-[var(--radius-control)] p-1.5 bg-[var(--color-bg-subtle)]/40"
-              />
+    <div className="space-y-6">
+      {/* Upload */}
+      {canScan ? (
+        <section aria-labelledby="scan-heading" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 space-y-4" data-tour="receipt-upload">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-action-primary)]/10 text-[var(--color-action-primary)]">
+              <ScanLine aria-hidden className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="scan-heading" className="text-base font-semibold text-[var(--color-text-primary)]">Scan a receipt</h2>
+              <p className="text-sm text-[var(--color-text-secondary)]">The AI reads vendor, date, amounts, tax and category from a photo or PDF. You check the values before anything is saved.</p>
             </div>
-            <Button type="submit" variant="primary" disabled={pending} className="min-w-[140px]">
-              {pending ? "Analyzing..." : "Scan Receipt"}
-            </Button>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-[var(--color-text-secondary)] pt-1">
-            <button
-              type="button"
-              onClick={() => setShowManualText(!showManualText)}
-              className="text-[var(--color-action-primary)] hover:underline font-medium"
+          {!pasteMode && (
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="Choose a receipt photo or PDF"
+              onClick={() => inputRef.current?.click()}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), inputRef.current?.click())}
+              onDragOver={(e) => (e.preventDefault(), setDragging(true))}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                pickFile(e.dataTransfer.files?.[0]);
+              }}
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed p-6 text-center transition-colors focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]",
+                dragging ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)]/5" : "border-[var(--color-border-control)] hover:bg-[var(--color-bg-subtle)]"
+              )}
             >
-              {showManualText ? "Hide text paste area" : "+ Paste raw text / OCR transcript manually"}
-            </button>
-            <span>Supports JPG, PNG, PDF, TXT</span>
-          </div>
-
-          {showManualText && (
-            <div className="space-y-3 pt-2 border-t border-[var(--color-border-subtle)]">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-[var(--color-text-secondary)]">
-                  Receipt Raw Text / OCR Output
-                </label>
-                <textarea
-                  rows={3}
-                  value={manualText}
-                  onChange={(e) => setManualText(e.target.value)}
-                  placeholder="Paste receipt lines, e.g.:&#10;CARREFOUR EXPRESS&#10;Date: 2026-10-24&#10;Total: 84.500 TND&#10;TVA 19%: 13.490 TND"
-                  className={textareaClass}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-[var(--color-text-secondary)]">
-                  Optional Context Note
-                </label>
-                <input
-                  type="text"
-                  value={manualNotes}
-                  onChange={(e) => setManualNotes(e.target.value)}
-                  placeholder="e.g. Lunch with prospective client"
-                  className={selectClass}
-                />
-              </div>
+              <input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} onChange={(e) => pickFile(e.target.files?.[0])} />
+              {file ? (
+                <div className="flex w-full max-w-md items-center gap-3 text-left">
+                  {localPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
+                    <img src={localPreview} alt="" className="size-16 shrink-0 rounded-[var(--radius-control)] object-cover border border-[var(--color-border-subtle)]" />
+                  ) : (
+                    <span className="flex size-16 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)]">
+                      <FileText aria-hidden className="size-7 text-[var(--color-text-secondary)]" />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[var(--color-text-primary)]" title={file.name}>{file.name}</p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">{(file.size / 1024 / 1024).toFixed(2)} MB · ready to scan</p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Remove the selected file"
+                    title="Remove file"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFile(null);
+                      if (inputRef.current) inputRef.current.value = "";
+                    }}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]"
+                  >
+                    <X aria-hidden className="size-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Upload aria-hidden className="size-8 text-[var(--color-text-secondary)]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">Drop a receipt here, or click to choose</p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">JPEG, PNG, WEBP, HEIC or PDF, up to 10 MB. On a phone you can take a photo.</p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          {error && <FormMessage kind="error">{error}</FormMessage>}
-          {success && <FormMessage kind="success">{success}</FormMessage>}
-        </form>
-      </div>
+          {pasteMode && (
+            <Field label="Receipt text" htmlFor="receipt-text" hint="Paste the lines of a receipt or an e-mailed invoice.">
+              <Textarea
+                id="receipt-text"
+                rows={5}
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                placeholder={"e.g. MONOPRIX LAC 2\n12/10/2026\nTOTAL TTC 84.500 DT\nTVA 19% 13.490"}
+              />
+            </Field>
+          )}
 
-      {/* Active Extraction Review Card */}
-      {activeExtraction && (
-        <div className="rounded-[var(--radius-card)] border-2 border-[var(--color-action-primary)]/40 bg-[var(--color-bg-surface)] p-6 shadow-md space-y-6 animate-in fade-in duration-300">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] pb-4">
-            <div>
-              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 mb-1">
-                <IconCheck size={14} />
-                {Math.round((activeExtraction.proposed.confidence || 0.9) * 100)}% Extraction Confidence
-              </div>
-              <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
-                Review Extracted Information
-              </h3>
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                Verify the values extracted by the AI before converting into an official expense claim.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setActiveExtraction(null)}>Dismiss</Button>
-              <Button variant="primary" onClick={handleConvertToExpense}>
-                Convert to Expense Claim →
-              </Button>
-            </div>
+          <Field label="Note for the AI (optional)" htmlFor="receipt-note" hint="Context the receipt does not show, such as who or what it was for.">
+            <input id="receipt-note" className={selectClass} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Lunch with a prospective client" />
+          </Field>
+
+          {error && !review && <FormMessage kind="error">{error}</FormMessage>}
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant="ghost" onClick={() => (setPasteMode((v) => !v), setFile(null))} disabled={pending}>
+              {pasteMode ? <ImageIcon aria-hidden className="size-4 shrink-0" /> : <ClipboardPaste aria-hidden className="size-4 shrink-0" />}
+              {pasteMode ? "Upload a file instead" : "Paste text instead"}
+            </Button>
+            <Button variant="primary" onClick={handleScan} disabled={pending || (!file && !pastedText.trim())}>
+              {pending && !review ? <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <ScanLine aria-hidden className="size-4 shrink-0" />}
+              {pending && !review ? "Reading receipt..." : "Scan receipt"}
+            </Button>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1">
-              <TextField
-                label="Merchant / Vendor"
-                value={vendor}
-                onChange={(e) => setVendor(e.target.value)}
-                placeholder="Merchant name"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)]">Receipt Date</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className={selectClass}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)]">Suggested Category</label>
-              <select
-                value={categoryHint}
-                onChange={(e) => setCategoryHint(e.target.value)}
-                className={selectClass}
-              >
-                <option value="">-- General Expense --</option>
-                <option value="Office Supplies">Office Supplies</option>
-                <option value="Meals & Entertainment">Meals & Entertainment</option>
-                <option value="Travel & Lodging">Travel & Lodging</option>
-                <option value="Utilities & Telecom">Utilities & Telecom</option>
-                <option value="Software & IT">Software & IT</option>
-                <option value="Marketing & Ads">Marketing & Ads</option>
-                <option value="Repairs & Maintenance">Repairs & Maintenance</option>
-                <option value="Professional Services">Professional Services</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)]">Net Amount</label>
-              <input
-                type="number"
-                step="0.001"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className={selectClass}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)]">Tax / VAT</label>
-              <input
-                type="number"
-                step="0.001"
-                value={tax}
-                onChange={(e) => setTax(e.target.value)}
-                className={selectClass}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)]">Currency</label>
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className={selectClass}
-              >
-                <option value="TND">TND (Tunisian Dinar)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="GBP">GBP (£)</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        </section>
+      ) : (
+        <InfoNote>You can view scanned receipts, but your role cannot scan new ones.</InfoNote>
       )}
 
-      {/* Receipts History Table */}
-      <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-[var(--color-text-primary)]">Scanned Receipts History</h3>
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              All OCR extractions saved for review and audit trails
-            </p>
+      {/* Review */}
+      {review && (
+        <section id="receipt-review" aria-labelledby="review-heading" className="rounded-[var(--radius-card)] border-2 border-[var(--color-action-primary)]/40 bg-[var(--color-bg-surface)] p-4 sm:p-6 space-y-5 scroll-mt-20">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <ConfidenceBadge value={review.proposed.confidence} />
+              <h2 id="review-heading" className="text-lg font-semibold text-[var(--color-text-primary)]">Check the values</h2>
+              <p className="text-sm text-[var(--color-text-secondary)]">Nothing is saved until you create the expense. Correct anything the AI misread.</p>
+            </div>
+            <Button variant="ghost" onClick={() => setReview(null)} disabled={pending} aria-label="Close the review">
+              <X aria-hidden className="size-4 shrink-0" /> Close
+            </Button>
           </div>
-          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]">
-            {initialReceipts.length} documents
-          </span>
+
+          {(review.warnings.length > 0 || review.duplicateFile) && (
+            <div role="status" className="rounded-[var(--radius-control)] border border-[var(--color-status-warning)] bg-[var(--color-status-warning-bg)] p-3 text-sm text-[var(--color-text-primary)]">
+              <p className="mb-1 flex items-center gap-2 font-semibold">
+                <AlertTriangle aria-hidden className="size-4 shrink-0 text-[var(--color-status-warning)]" /> Please check
+              </p>
+              <ul className="list-disc space-y-0.5 pl-6">
+                {review.duplicateFile && <li>This exact file was scanned before. This is the earlier result.</li>}
+                {review.warnings.map((w) => (
+                  <li key={w.code}>
+                    {w.message}
+                    {w.code === "possible_duplicate" && review.possibleDuplicateExpenseId && (
+                      <>
+                        {" "}
+                        <Link href={`/finance/expenses/${review.possibleDuplicateExpenseId}/edit`} className="font-semibold underline">View it</Link>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            {/* Preview */}
+            <div className="min-w-0">
+              {previewDoc && !previewIsPdf ? (
+                <a href={fileUrl(previewDoc)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- authenticated file route, not optimisable */}
+                  <img src={fileUrl(previewDoc)} alt="Scanned receipt" className="max-h-[520px] w-full object-contain" />
+                </a>
+              ) : previewDoc ? (
+                <a href={fileUrl(previewDoc)} target="_blank" rel="noreferrer" className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-6 text-sm font-semibold text-[var(--color-text-primary)] hover:opacity-90">
+                  <FileText aria-hidden className="size-8" /> Open the PDF <ExternalLink aria-hidden className="size-4" />
+                </a>
+              ) : (
+                <div className="flex min-h-[160px] items-center justify-center rounded-[var(--radius-control)] border border-dashed border-[var(--color-border-subtle)] p-6 text-sm text-[var(--color-text-secondary)]">Read from pasted text: no file.</div>
+              )}
+            </div>
+
+            {/* Editable proposal */}
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <Field label="Vendor" htmlFor="rv-vendor" hint={lowField("vendor")} className="sm:col-span-2">
+                <input id="rv-vendor" className={selectClass} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g. Monoprix, Ooredoo, Shell" />
+              </Field>
+              <Field label="Receipt date" htmlFor="rv-date" required hint={lowField("date")}>
+                <input id="rv-date" type="date" className={selectClass} value={date} onChange={(e) => setDate(e.target.value)} />
+              </Field>
+              <Field label="Category" htmlFor="rv-category" hint={review.proposed.categoryName ? `AI suggestion: ${review.proposed.categoryName}` : "The AI did not suggest a category."}>
+                <Select id="rv-category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">Uncategorized</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Description" htmlFor="rv-description" required className="sm:col-span-2">
+                <input id="rv-description" className={selectClass} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Printer paper and toner" />
+              </Field>
+              <Field label="Net amount" htmlFor="rv-amount" required hint={lowField("total")}>
+                <input id="rv-amount" type="number" inputMode="decimal" step="0.01" min="0" className={selectClass} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+              </Field>
+              <Field label="Tax / VAT" htmlFor="rv-tax" hint={lowField("tax")}>
+                <input id="rv-tax" type="number" inputMode="decimal" step="0.01" min="0" className={selectClass} value={tax} onChange={(e) => setTax(e.target.value)} placeholder="0.00" />
+              </Field>
+              <Field label="Currency" htmlFor="rv-currency" hint={lowField("currency")}>
+                <Select id="rv-currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  <option value="TND">TND</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                  <option value="GBP">GBP</option>
+                </Select>
+              </Field>
+              <div className="min-w-0 space-y-1.5">
+                <span className="block text-sm font-semibold text-[var(--color-text-primary)]">Total</span>
+                <div className="flex min-h-[44px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3 text-sm font-semibold text-[var(--color-text-primary)]">
+                  {total.toFixed(2)} {currency}
+                </div>
+              </div>
+              <Field label="Notes" htmlFor="rv-notes" className="sm:col-span-2" hint="Receipt number, payment method or anything an approver should know.">
+                <Textarea id="rv-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Ticket #4521, paid by card" />
+              </Field>
+            </div>
+          </div>
+
+          {error && <FormMessage kind="error">{error}</FormMessage>}
+
+          {review.appliedToExpenseId ? (
+            <FormMessage kind="success">
+              This receipt is already an expense. <Link className="font-semibold underline" href="/finance/expenses">Go to expenses</Link>
+            </FormMessage>
+          ) : canCreateExpense ? (
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button onClick={() => handleApply(false)} disabled={pending}>
+                <Save aria-hidden className="size-4 shrink-0" /> Save as draft
+              </Button>
+              <Button variant="primary" onClick={() => handleApply(true)} disabled={pending}>
+                {pending ? <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <Send aria-hidden className="size-4 shrink-0" />}
+                Create and submit
+              </Button>
+            </div>
+          ) : (
+            <InfoNote>Your role cannot create expenses. Ask a finance manager to apply this receipt.</InfoNote>
+          )}
+        </section>
+      )}
+
+      {/* History */}
+      <section aria-labelledby="history-heading" className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border-subtle)] p-4">
+          <div>
+            <h2 id="history-heading" className="font-semibold text-[var(--color-text-primary)]">Scanned receipts</h2>
+            <p className="text-xs text-[var(--color-text-secondary)]">Every scan is kept with its file for review and audit.</p>
+          </div>
+          <span className="rounded-full bg-[var(--color-bg-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)]">{initialReceipts.length} receipts</span>
         </div>
 
         {initialReceipts.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[var(--color-text-secondary)]">
-            No receipts scanned yet. Upload your first receipt above to preview AI extraction!
-          </div>
+          <EmptyState title="No receipts yet" description="Scan your first receipt above. It will appear here with its file and status." className="m-4" />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[var(--color-bg-subtle)]/60 text-[var(--color-text-secondary)] border-b border-[var(--color-border-subtle)]">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)]/60 text-[var(--color-text-secondary)]">
                 <tr>
-                  <th className="p-3 font-medium">Document</th>
-                  <th className="p-3 font-medium">Merchant</th>
-                  <th className="p-3 font-medium">Receipt Date</th>
-                  <th className="p-3 font-medium">Total</th>
-                  <th className="p-3 font-medium">Category</th>
+                  <th className="p-3 font-medium">Receipt</th>
+                  <th className="p-3 font-medium">Vendor</th>
+                  <th className="p-3 font-medium">Date</th>
+                  <th className="p-3 text-right font-medium">Total</th>
                   <th className="p-3 font-medium">Status</th>
-                  <th className="p-3 font-medium text-right">Actions</th>
+                  <th className="p-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-subtle)]">
                 {initialReceipts.map((r) => {
                   const p = r.proposed || {};
-                  const totalVal = p.total ?? p.amount ?? 0;
+                  const t = p.total ?? p.amount;
                   return (
-                    <tr key={r.id} className="hover:bg-[var(--color-bg-subtle)]/30 transition-colors">
+                    <tr key={r.id} className="hover:bg-[var(--color-bg-subtle)]/30">
                       <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <IconDocument size={16} className="text-[var(--color-text-secondary)] shrink-0" />
-                          <div className="truncate max-w-[160px] font-medium text-[var(--color-text-primary)]" title={r.originalName}>
-                            {r.originalName}
-                          </div>
+                        <div className="flex min-w-0 items-center gap-2">
+                          {r.mimeType.startsWith("image/") ? <ImageIcon aria-hidden className="size-4 shrink-0 text-[var(--color-text-secondary)]" /> : <FileText aria-hidden className="size-4 shrink-0 text-[var(--color-text-secondary)]" />}
+                          <span className="max-w-[160px] truncate font-medium text-[var(--color-text-primary)]" title={r.originalName}>{r.originalName}</span>
+                          {r.source === "telegram" && <span className="rounded bg-[var(--color-bg-subtle)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--color-text-secondary)]">Telegram</span>}
                         </div>
                       </td>
-                      <td className="p-3 font-medium text-[var(--color-text-primary)]">
-                        {p.vendor || "—"}
-                      </td>
-                      <td className="p-3 text-[var(--color-text-secondary)]">
-                        {p.date || "—"}
-                      </td>
-                      <td className="p-3 font-semibold text-[var(--color-text-primary)]">
-                        {Number(totalVal).toFixed(3)} {p.currency || "TND"}
-                      </td>
-                      <td className="p-3 text-[var(--color-text-secondary)]">
-                        {p.categoryHint || "General"}
-                      </td>
+                      <td className="p-3 font-medium text-[var(--color-text-primary)]">{p.vendor || "—"}</td>
+                      <td className="p-3 text-[var(--color-text-secondary)]">{p.date || "—"}</td>
+                      <td className="p-3 text-right font-semibold text-[var(--color-text-primary)] whitespace-nowrap">{t != null ? `${Number(t).toFixed(2)} ${p.currency || "TND"}` : "—"}</td>
                       <td className="p-3">
-                        {r.reviewed ? (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">
-                            <IconCheck size={12} /> Reviewed
+                        {r.appliedToExpenseId ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-status-success-bg)] px-2 py-0.5 text-xs font-medium text-[var(--color-status-success)]">
+                            <CheckCircle2 aria-hidden className="size-3.5" /> Expense created
+                          </span>
+                        ) : r.warnings.length ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-status-warning-bg)] px-2 py-0.5 text-xs font-medium text-[var(--color-status-warning)]" title={r.warnings.map((w) => w.message).join("\n")}>
+                            <AlertTriangle aria-hidden className="size-3.5" /> Check {r.warnings.length}
                           </span>
                         ) : (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
-                            Pending Review
-                          </span>
+                          <span className="rounded-full bg-[var(--color-bg-subtle)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-secondary)]">Needs review</span>
                         )}
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleConvertFromHistory(r)}
-                            className="text-xs px-2.5 py-1 rounded bg-[var(--color-action-primary)] text-white hover:opacity-90 font-medium"
+                          <Button
+                            className="min-h-[36px] px-3 text-xs"
+                            onClick={() =>
+                              openReview({
+                                extractionId: r.id,
+                                receiptDocumentId: r.hasFile ? r.receiptDocumentId : null,
+                                mimeType: r.mimeType,
+                                proposed: p,
+                                warnings: r.warnings,
+                                duplicateFile: false,
+                                possibleDuplicateExpenseId: r.possibleDuplicateExpenseId ?? null,
+                                appliedToExpenseId: r.appliedToExpenseId,
+                              })
+                            }
                           >
-                            Convert to Expense
-                          </button>
-                          {!r.reviewed && (
-                            <button
-                              onClick={() => handleMarkReviewed(r.id)}
-                              title="Mark as reviewed"
-                              className="text-xs px-2 py-1 rounded border border-[var(--color-border-subtle)] hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]"
-                            >
-                              ✓
-                            </button>
+                            <ScanLine aria-hidden className="size-3.5 shrink-0" /> {r.appliedToExpenseId ? "View" : "Review"}
+                          </Button>
+                          {canScan && !r.appliedToExpenseId && (
+                            confirmDelete === r.id ? (
+                              <>
+                                <Button variant="danger" className="min-h-[36px] px-3 text-xs" onClick={() => handleDelete(r.id)} disabled={pending}>Confirm</Button>
+                                <Button variant="ghost" className="min-h-[36px] px-3 text-xs" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+                              </>
+                            ) : (
+                              <Button variant="ghost" className="min-h-[36px] px-2 text-xs text-[var(--color-status-error)]" aria-label={`Delete ${r.originalName}`} title="Delete this scan and its file" onClick={() => setConfirmDelete(r.id)}>
+                                <Trash2 aria-hidden className="size-4 shrink-0" />
+                              </Button>
+                            )
                           )}
-                          <button
-                            onClick={() => handleDelete(r.id)}
-                            title="Delete receipt"
-                            className="p-1.5 rounded text-red-600 hover:bg-red-500/10"
-                          >
-                            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -412,7 +565,7 @@ export function ReceiptScanner({ initialReceipts = [] }: { initialReceipts?: Rec
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

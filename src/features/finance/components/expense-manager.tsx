@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
   submitExpenseAction,
+  deleteExpenseAction,
   approveExpenseAction,
   rejectExpenseAction,
   markExpensePaidAction,
@@ -66,6 +67,7 @@ export function ExpenseManager({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Rejection modal
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
 
@@ -281,6 +283,46 @@ export function ExpenseManager({
                     </td>
                     <td className="py-3 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {canManage && (e.status === "draft" || e.status === "rejected") && (
+                          <>
+                            <Link
+                              href={`/finance/expenses/${e.id}/edit`}
+                              className="px-2 py-1 rounded text-xs font-semibold border border-[var(--color-border-subtle)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
+                            >
+                              Edit
+                            </Link>
+                            {confirmDeleteId === e.id ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setConfirmDeleteId(null);
+                                    handleAction(() => deleteExpenseAction(e.id), "Expense deleted.");
+                                  }}
+                                  disabled={pending}
+                                  className="px-2 py-1 rounded text-xs font-semibold bg-[var(--color-status-error-bg)] text-[var(--color-status-error)] hover:opacity-80"
+                                >
+                                  Confirm
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="px-2 py-1 rounded text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+                                >
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(e.id)}
+                                disabled={pending}
+                                title="Delete this expense permanently"
+                                className="px-2 py-1 rounded text-xs font-semibold text-[var(--color-status-error)] hover:bg-[var(--color-status-error-bg)]"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </>
+                        )}
+
                         {/* Draft -> Submit */}
                         {canManage && e.status === "draft" && (
                           <button

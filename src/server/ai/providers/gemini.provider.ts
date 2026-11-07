@@ -3,7 +3,7 @@ import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Content, FunctionDeclaration, FunctionDeclarationSchema, Tool } from "@google/generative-ai";
 import { KeyPool } from "@/server/ai/key-pool";
-import type { AiMessage, AiProvider, AiCompletionOptions, AiCompletionResult, AiToolDefinition } from "@/server/ai/types";
+import type { AiAttachment, AiMessage, AiProvider, AiCompletionOptions, AiCompletionResult, AiToolDefinition } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -25,6 +25,12 @@ const FREE_MODELS = [
 
 const MAX_RETRIES_PER_CALL = 3;
 
+/** Gemini reads these inline. The whole request must stay under 20 MB, so files are capped well below it. */
+const VISION_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"]);
+const MAX_INLINE_BASE64 = 14 * 1024 * 1024;
+/** Model used when a request carries attachments. Gemma models do not read PDFs. */
+const VISION_MODEL = process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash";
+
 export class GeminiProvider implements AiProvider {
   readonly name = "Gemini";
   readonly freeModels = FREE_MODELS;
@@ -37,6 +43,11 @@ export class GeminiProvider implements AiProvider {
 
   get isAvailable(): boolean {
     return this.pool.hasKeys;
+  }
+
+  supportsAttachments(attachments: AiAttachment[]): boolean {
+    const total = attachments.reduce((n, a) => n + a.dataBase64.length, 0);
+    return total <= MAX_INLINE_BASE64 && attachments.every((a) => VISION_MIME.has(a.mimeType));
   }
 
   async complete(options: AiCompletionOptions): Promise<AiCompletionResult> {
@@ -52,7 +63,8 @@ export class GeminiProvider implements AiProvider {
       throw new AiProviderError(this.name, `Model ${options.model} is not supported by Gemini`, false);
     }
 
-    const model = options.model ?? FREE_MODELS[0];
+    const hasAttachments = options.messages.some((m) => m.attachments?.length);
+    const model = options.model ?? (hasAttachments ? VISION_MODEL : FREE_MODELS[0]);
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < MAX_RETRIES_PER_CALL; attempt++) {
@@ -128,7 +140,7 @@ export class GeminiProvider implements AiProvider {
         }
 
         // If a model override returned 404 (not found), recover with the default free model
-        if ((message.includes("404") || message.includes("not found")) && model !== FREE_MODELS[0]) {
+        if ((message.includes("404") || message.includes("not found")) && model !== FREE_MODELS[0] && !hasAttachments) {
           console.warn(`[Gemini] Model "${model}" not found (404), recovering with ${FREE_MODELS[0]}`);
           return await this.complete({ ...options, model: FREE_MODELS[0] });
         }
@@ -173,7 +185,13 @@ function toGeminiContents(messages: AiMessage[]): Content[] {
       });
       continue;
     }
-    contents.push({ role: "user", parts: [{ text: m.content }] });
+    contents.push({
+      role: "user",
+      parts: [
+        ...(m.attachments ?? []).map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.dataBase64 } })),
+        { text: m.content },
+      ],
+    });
   }
   return contents;
 }

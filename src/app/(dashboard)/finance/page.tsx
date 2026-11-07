@@ -16,7 +16,9 @@ export const metadata: Metadata = {
   description: "Executive financial summary: income vs expenses, receivables balance, and overdue invoice tracking.",
 };
 
-export default async function FinancePage() {
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ currency?: string }> }) {
+  const { currency: requestedCurrency } = await searchParams;
+  let currencies: string[] = [];
   let kpi = {
     totalInvoiced: 0,
     totalPaid: 0,
@@ -50,7 +52,7 @@ export default async function FinancePage() {
 
   try {
     const service = await getFinanceService();
-    kpi = await service.getDashboard();
+    [kpi, currencies] = await Promise.all([service.getDashboard(requestedCurrency?.toUpperCase()), service.listActiveCurrencies()]);
   } catch (err: any) {
     if (err?.digest !== "DYNAMIC_SERVER_USAGE") {
       console.error("[FinancePage] Dashboard error:", err);
@@ -112,6 +114,27 @@ export default async function FinancePage() {
           </Link>
         </div>
       </div>
+
+      {currencies.length > 1 && (
+        <nav aria-label="Dashboard currency" className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[var(--color-text-secondary)]">Currency:</span>
+          {currencies.map((c) => (
+            <Link
+              key={c}
+              href={`/finance?currency=${c}`}
+              aria-current={c === kpi.currency ? "page" : undefined}
+              className={
+                c === kpi.currency
+                  ? "px-2.5 py-1 rounded-[var(--radius-control)] font-semibold bg-[var(--color-action-primary)] text-white"
+                  : "px-2.5 py-1 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
+              }
+            >
+              {c}
+            </Link>
+          ))}
+          <span className="text-[var(--color-text-secondary)]">Amounts in different currencies are never added together.</span>
+        </nav>
+      )}
 
       {/* Primary KPI Balance Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

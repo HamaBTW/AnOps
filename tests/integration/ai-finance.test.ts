@@ -150,8 +150,9 @@ describe("reads", () => {
     const r = await f.read(viewer, "finance_get_summary", {});
     const d = r.data as { invoiced: string; collected: string; outstanding: string; overdue: string; caveats: string[] };
     expect(d).toMatchObject({ invoiced: dash.totalInvoiced.toFixed(2), collected: dash.totalPaid.toFixed(2), outstanding: dash.outstanding.toFixed(2), overdue: dash.overdue.toFixed(2) });
-    const sum = (await svc().listInvoices()).filter((i) => ["posted", "partially_paid", "paid"].includes(i.status)).reduce((n, i) => n + Math.round(i.total * 100), 0);
-    expect(Math.round(dash.totalInvoiced * 100)).toBe(sum); // the same definition, computed independently
+    const sum = (await svc().listInvoices()).filter((i) => i.currency === dash.currency && ["posted", "partially_paid", "paid"].includes(i.status)).reduce((n, i) => n + Math.round(i.total * 100), 0);
+    expect(Math.round(dash.totalInvoiced * 100)).toBe(sum); // the same definition (one currency), computed independently
+    expect(d.caveats.join(" ")).toMatch(/EUR|USD/); // other currencies are flagged, never added in
     expect(d.caveats.join(" ")).not.toMatch(/voided|draft/);
   });
 

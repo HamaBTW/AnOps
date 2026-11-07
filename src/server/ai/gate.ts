@@ -50,7 +50,9 @@ export async function gatedComplete(
   deps: { complete?: (o: AiCompletionOptions) => Promise<AiCompletionResult> } = {}
 ): Promise<AiCompletionResult> {
   const access = await authorizeAiUse(ctx, spec, { requireProvider: !deps.complete });
-  const estimate = Math.ceil(options.messages.reduce((n, m) => n + m.content.length, 0) / 4) + (options.maxTokens ?? 1024);
+  // An image or PDF page costs roughly 1,500 input tokens on the vision models.
+  const attachmentTokens = options.messages.reduce((n, m) => n + (m.attachments?.length ?? 0), 0) * 1500;
+  const estimate = Math.ceil(options.messages.reduce((n, m) => n + m.content.length, 0) / 4) + attachmentTokens + (options.maxTokens ?? 1024);
   const reservation = await reserveTokens(ctx, access, estimate);
   const tracked = trackCalls(deps.complete ?? ((o) => ai.complete(o)));
   let errors = 0;

@@ -28,6 +28,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     dueDate: invoice.dueDate,
     notes: invoice.notes,
     terms: invoice.terms,
+    stampDuty: invoice.stampDuty > 0,
     lines: invoice.lines.map((l: { productId?: string; description: string; quantity: number; unitPrice: number; taxRate: number }) => ({
       productId: l.productId,
       description: l.description,

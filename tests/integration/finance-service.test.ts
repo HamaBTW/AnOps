@@ -319,3 +319,94 @@ describe("draft and rejected expenses can be edited and deleted; the rest are lo
     expect(await code(a.getExpense(id))).toBe("NOT_FOUND");
   });
 });
+
+describe("timbre fiscal, duplicate and credit notes", () => {
+  const lines = [{ description: "Service", quantity: 1, unitPrice: 100, taxRate: 19 }];
+
+  it("the timbre fiscal adds 1.000 to TND invoices only, and is kept on edit", async () => {
+    const tnd = await a.createInvoiceDraft({ customerId: customer, currency: "TND", issueDate: "2026-11-01", lines, stampDuty: true }, userA);
+    expect(await a.getInvoice(tnd)).toMatchObject({ subtotal: 100, taxTotal: 19, stampDuty: 1, total: 120, balance: 120 });
+    const eur = await a.createInvoiceDraft({ customerId: customer, currency: "EUR", issueDate: "2026-11-01", lines, stampDuty: true }, userA);
+    expect(await a.getInvoice(eur)).toMatchObject({ stampDuty: 0, total: 119 });
+    await a.updateInvoiceDraft(tnd, { customerId: customer, currency: "TND", issueDate: "2026-11-01", lines, stampDuty: false }, userA);
+    expect(await a.getInvoice(tnd)).toMatchObject({ stampDuty: 0, total: 119 });
+  });
+
+  it("duplicate makes a new draft dated today with the same payment period", async () => {
+    const src = await a.createInvoiceDraft({ customerId: customer, currency: "TND", issueDate: "2026-01-01", dueDate: "2026-01-31", lines, stampDuty: true }, userA);
+    await a.postInvoice(src, userA);
+    const copy = await a.getInvoice(await a.duplicateInvoice(src, userA));
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Tunis" }).format(new Date());
+    expect(copy).toMatchObject({ status: "draft", issueDate: today, total: 120, stampDuty: 1 });
+    expect((Date.parse(copy.dueDate!) - Date.parse(copy.issueDate)) / 86_400_000).toBe(30);
+    expect(copy.invoiceNumber).not.toBe((await a.getInvoice(src)).invoiceNumber);
+  });
+
+  it("a credit note lowers the balance with its own number; full credit with no payment marks it credited", async () => {
+    const inv = await post(200);
+    const first = await a.createCreditNote(inv, { amount: 50, reason: "agreed discount" }, userA);
+    expect(first.number).toMatch(/^CN-\d{4}-\d{5}$/);
+    expect(await a.getInvoice(inv)).toMatchObject({ balance: 150, creditedAmount: 50, status: "posted" });
+    await a.createCreditNote(inv, { amount: 150, reason: "order cancelled" }, userA);
+    expect(await a.getInvoice(inv)).toMatchObject({ balance: 0, creditedAmount: 200, status: "credited" });
+    expect((await a.listCreditNotes(inv)).map((n) => n.amount)).toEqual([50, 150]);
+    expect((await a.listUnpaidInvoices()).some((i) => i.id === inv)).toBe(false);
+  });
+
+  it("a partly paid invoice credited to zero is paid; credits never exceed the balance, even when racing", async () => {
+    const inv = await post(100);
+    await a.allocatePayment(await pay(40), [{ invoiceId: inv, amount: 40 }], userA);
+    expect(await code(a.createCreditNote(inv, { amount: 61, reason: "too much" }, userA))).toBe("VALIDATION_ERROR");
+    const results = await Promise.all([1, 2].map(() => code(a.createCreditNote(inv, { amount: 60, reason: "race" }, userA))));
+    expect(results.filter((r) => r === "OK")).toHaveLength(1);
+    expect(await a.getInvoice(inv)).toMatchObject({ balance: 0, status: "paid", amountPaid: 40, creditedAmount: 60 });
+    const draft = await a.createInvoiceDraft({ customerId: customer, currency: "TND", issueDate: "2026-11-01", lines }, userA);
+    expect(await code(a.createCreditNote(draft, { amount: 1, reason: "draft" }, userA))).toBe("INVALID_TRANSITION");
+    expect(await code(as("manager", userA).createCreditNote(inv, { amount: 1, reason: "no right" }, userA))).toBe("FORBIDDEN");
+  });
+});
+
+describe("invoice search", () => {
+  it("finds by number or customer name, filters overdue, pages, and stays inside the company", async () => {
+    const zed = await a.createCustomer({ name: "Zebra Search SARL" }, userA);
+    const late = await a.createInvoiceDraft({ customerId: zed, currency: "TND", issueDate: "2026-01-01", dueDate: "2026-01-15", lines: [{ description: "x", quantity: 1, unitPrice: 5 }] }, userA);
+    await a.postInvoice(late, userA);
+    await a.createInvoiceDraft({ customerId: zed, currency: "TND", issueDate: "2026-11-01", lines: [{ description: "y", quantity: 1, unitPrice: 5 }] }, userA);
+    const byName = await a.searchInvoices({ q: "zebra" });
+    expect(byName.total).toBe(2);
+    const number = (await a.getInvoice(late)).invoiceNumber;
+    expect((await a.searchInvoices({ q: number })).rows.map((r) => r.id)).toEqual([late]);
+    expect((await a.searchInvoices({ q: "zebra", status: "overdue" })).rows.map((r) => r.id)).toEqual([late]);
+    expect((await a.searchInvoices({ q: "zebra", status: "draft" })).total).toBe(1);
+    expect((await a.searchInvoices({ q: "(.*" })).total).toBe(0); // regex characters are searched literally
+    expect((await b.searchInvoices({ q: "zebra" })).total).toBe(0);
+    const all = await a.searchInvoices({});
+    expect(all.rows.length).toBeLessThanOrEqual(25);
+    expect(all.totalPages).toBe(Math.max(1, Math.ceil(all.total / 25)));
+  });
+});
+
+describe("reversing an allocation, and payments after a credit note", () => {
+  it("a payment after a credit note lowers the balance from what is left, not from the total", async () => {
+    const inv = await post(100);
+    await a.createCreditNote(inv, { amount: 30, reason: "discount" }, userA);
+    await a.allocatePayment(await pay(70), [{ invoiceId: inv, amount: 70 }], userA);
+    expect(await a.getInvoice(inv)).toMatchObject({ amountPaid: 70, creditedAmount: 30, balance: 0, status: "paid" });
+  });
+
+  it("reversal puts the money back on the payment and the invoice, keeps a record, and happens once", async () => {
+    const inv = await post(80);
+    const p = await pay(80);
+    await a.allocatePayment(p, [{ invoiceId: inv, amount: 80 }], userA);
+    const alloc = (await a.getInvoice(inv)).allocations[0];
+    expect(await code(a.reverseAllocation(alloc.id, "", userA))).toBe("VALIDATION_ERROR");
+    const results = await Promise.all([1, 2].map(() => code(a.reverseAllocation(alloc.id, "wrong invoice", userA))));
+    expect(results.filter((r) => r === "OK")).toHaveLength(1);
+    const after = await a.getInvoice(inv);
+    expect(after).toMatchObject({ amountPaid: 0, balance: 80, status: "posted" });
+    expect(after.allocations[0]).toMatchObject({ reversalReason: "wrong invoice" });
+    expect((await a.listPayments()).find((x) => x.id === p)?.unallocatedAmount).toBe(80);
+    expect(await code(as("manager", userA).reverseAllocation(alloc.id, "no right", userA))).toBe("FORBIDDEN");
+    expect(await code(b.reverseAllocation(alloc.id, "other company", userB))).toBe("NOT_FOUND");
+  });
+});

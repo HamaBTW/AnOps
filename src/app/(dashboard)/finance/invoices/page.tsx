@@ -21,20 +21,45 @@ function statusTone(status: string): BadgeTone {
     case "voided":
       return "error";
     case "posted":
+    case "credited":
       return "info";
     default:
       return "neutral";
   }
 }
 
-export default async function FinanceInvoicesPage() {
-  let invoices: any[] = [];
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "open", label: "Open" },
+  { key: "overdue", label: "Overdue" },
+  { key: "draft", label: "Drafts" },
+  { key: "paid", label: "Paid" },
+  { key: "credited", label: "Credited" },
+  { key: "voided", label: "Voided" },
+] as const;
+
+export default async function FinanceInvoicesPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
+  const params = await searchParams;
+  const q = (params.q ?? "").slice(0, 80);
+  const status = FILTERS.some((f) => f.key === params.status) ? (params.status as string) : "all";
+  let result: Awaited<ReturnType<Awaited<ReturnType<typeof getFinanceService>>["searchInvoices"]>> = { rows: [], total: 0, page: 1, pageSize: 25, totalPages: 1 };
   try {
     const service = await getFinanceService();
-    invoices = await service.listInvoices();
+    result = await service.searchInvoices({ q, status, page: Number(params.page) || 1 });
   } catch {
-    invoices = [];
+    // Keeps the empty result; the page still renders with its filters.
   }
+  const invoices = result.rows;
+  const filtered = q !== "" || status !== "all";
+  const href = (over: Record<string, string | number | undefined>) => {
+    const sp = new URLSearchParams();
+    const merged = { q, status, page: result.page, ...over };
+    if (merged.q) sp.set("q", String(merged.q));
+    if (merged.status && merged.status !== "all") sp.set("status", String(merged.status));
+    if (merged.page && Number(merged.page) > 1) sp.set("page", String(merged.page));
+    const qs = sp.toString();
+    return `/finance/invoices${qs ? `?${qs}` : ""}`;
+  };
 
   const fmt = (n: number, c: string) =>
     new Intl.NumberFormat("fr-TN", { style: "currency", currency: c || "TND" }).format(n || 0);
@@ -51,11 +76,32 @@ export default async function FinanceInvoicesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {invoices.length > 0 && <InvoiceExportButton />}
+          {result.total > 0 && <InvoiceExportButton />}
           <ButtonLink href="/finance/invoices/new" variant="primary">
             + New Invoice
           </ButtonLink>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <form action="/finance/invoices" className="flex w-full max-w-md gap-2" role="search">
+          {status !== "all" && <input type="hidden" name="status" value={status} />}
+          <label htmlFor="invoice-search" className="sr-only">Search invoices</label>
+          <input id="invoice-search" name="q" defaultValue={q} placeholder="Search by invoice number or customer" className="min-h-[44px] w-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-focus-ring)]" />
+          <button type="submit" className="min-h-[44px] shrink-0 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]">Search</button>
+        </form>
+        <nav aria-label="Filter invoices by status" className="flex flex-wrap gap-1.5">
+          {FILTERS.map((f) => (
+            <Link
+              key={f.key}
+              href={href({ status: f.key, page: 1 })}
+              aria-current={status === f.key ? "page" : undefined}
+              className={status === f.key ? "rounded-full bg-[var(--color-action-primary)] px-3 py-1 text-xs font-semibold text-[var(--color-action-on-primary)]" : "rounded-full border border-[var(--color-border-subtle)] px-3 py-1 text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"}
+            >
+              {f.label}
+            </Link>
+          ))}
+        </nav>
       </div>
 
       <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] overflow-hidden shadow-sm">
@@ -78,14 +124,22 @@ export default async function FinanceInvoicesPage() {
               {invoices.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-[var(--color-text-secondary)]">
-                    <div className="space-y-3">
-                      <IconReceipt size={32} className="mx-auto text-[var(--color-text-secondary)] opacity-50" />
-                      <div className="font-medium text-[var(--color-text-primary)]">No invoices issued yet</div>
-                      <p className="text-xs">Create your first invoice to bill customers for products or services.</p>
-                      <ButtonLink href="/finance/invoices/new" variant="primary">
-                        Create Invoice
-                      </ButtonLink>
-                    </div>
+                    {filtered ? (
+                      <div className="space-y-3">
+                        <div className="font-medium text-[var(--color-text-primary)]">No invoices match</div>
+                        <p className="text-xs">Try another search or status.</p>
+                        <ButtonLink href="/finance/invoices">Clear filters</ButtonLink>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <IconReceipt size={32} className="mx-auto text-[var(--color-text-secondary)] opacity-50" />
+                        <div className="font-medium text-[var(--color-text-primary)]">No invoices issued yet</div>
+                        <p className="text-xs">Create your first invoice to bill customers for products or services.</p>
+                        <ButtonLink href="/finance/invoices/new" variant="primary">
+                          Create Invoice
+                        </ButtonLink>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -143,6 +197,17 @@ export default async function FinanceInvoicesPage() {
             </tbody>
           </table>
         </div>
+        {result.total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border-subtle)] px-4 py-3 text-xs text-[var(--color-text-secondary)]">
+            <span>
+              {(result.page - 1) * result.pageSize + 1}–{Math.min(result.page * result.pageSize, result.total)} of {result.total}
+            </span>
+            <div className="flex gap-2">
+              {result.page > 1 && <Link href={href({ page: result.page - 1 })} className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] px-3 py-1.5 font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">Previous</Link>}
+              {result.page < result.totalPages && <Link href={href({ page: result.page + 1 })} className="rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] px-3 py-1.5 font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">Next</Link>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

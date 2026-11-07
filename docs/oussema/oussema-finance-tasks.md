@@ -48,12 +48,12 @@ Plan: [oussema-finance-plan.md](oussema-finance-plan.md) · Progress log: [ousse
 - [x] **F3.4** Evals: tenant isolation, viewer can't write, no write without confirmation.
 
 ## Phase 5: Modern features and UX
-- [ ] **F5.1** Duplicate invoice; credit note for posted or paid invoices.
-- [ ] **F5.2** Send invoice by email with PDF; status `sent` timestamp.
-- [ ] **F5.3** Tunisian VAT presets (19/13/7/0) + optional timbre fiscal.
-- [ ] **F5.4** Search, filters, sorting, cursor pagination on invoices / expenses / payments.
-- [ ] **F5.5** Reports: AR aging, expenses by category, monthly P&L, XLSX export.
-- [ ] **F5.6** Payment detail page + reverse allocation.
+- [x] **F5.1** Duplicate invoice; credit note for posted or paid invoices.
+- [x] **F5.2** Send invoice by email (full HTML invoice + text copy; last sent at/to recorded; audited). A PDF attachment would need a PDF library (not added); customers get the complete invoice in the e-mail body.
+- [x] **F5.3** Tunisian VAT presets (19/13/7/0) + optional timbre fiscal.
+- [x] **F5.4** Invoices: server-side search (number or customer), status filter incl. Overdue/Open/Credited, pages of 25, shareable URLs. Expenses already had client-side search and status tabs; payments list is small (kept as is).
+- [x] **F5.5** Reports: AR aging, expenses by category, monthly P&L, XLSX export.
+- [x] **F5.6** Reverse an allocation from the invoice page (reason required, kept as reversed, atomic). A separate payment detail page was not needed.
 - [ ] **F5.7** UI polish: empty states, skeletons, toasts, mobile.
 
 ## Phase 6: Production readiness

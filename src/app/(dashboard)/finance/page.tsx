@@ -8,6 +8,7 @@ import {
   IconDocument,
   IconPackage,
   IconCheck,
+  IconBarChart,
 } from "@/shared/components/ui/brand-icons";
 import { FinancialChart } from "@/features/finance/components/financial-chart";
 import { FinanceInsightsPanel } from "@/features/finance/components/finance-insights-panel";
@@ -77,6 +78,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     { name: "Payments", href: "/finance/payments", icon: IconWallet, desc: "Reconciliation & invoice allocation" },
     { name: "Expenses", href: "/finance/expenses", icon: IconDocument, desc: "Operational spend & approval workflow" },
     { name: "Receipts (OCR)", href: "/finance/receipts", icon: IconPackage, desc: "AI document scanning & conversion" },
+    { name: "Reports", href: "/finance/reports", icon: IconBarChart, desc: "Aging, expenses by category, monthly P&L, Excel" },
   ];
 
   return (

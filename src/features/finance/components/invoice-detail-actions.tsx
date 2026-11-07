@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { deleteInvoiceDraftAction, postInvoiceAction, voidInvoiceAction } from "@/features/finance/actions/finance.actions";
+import { createCreditNoteAction, deleteInvoiceDraftAction, duplicateInvoiceAction, postInvoiceAction, voidInvoiceAction } from "@/features/finance/actions/finance.actions";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
 
@@ -13,13 +13,20 @@ export function InvoiceDetailActions({
   status,
   canPost,
   canManage = false,
+  balance = 0,
+  currency = "TND",
 }: {
   invoiceId: string;
   invoiceNumber: string;
   status: string;
   canPost: boolean;
   canManage?: boolean;
+  balance?: number;
+  currency?: string;
 }) {
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditAmount, setCreditAmount] = useState(String(balance));
+  const [creditReason, setCreditReason] = useState("");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +49,27 @@ export function InvoiceDetailActions({
         setError(res.error);
         return;
       }
+      router.refresh();
+    });
+  }
+
+  function handleDuplicate() {
+    setError(null);
+    startTransition(async () => {
+      const res = await duplicateInvoiceAction(invoiceId);
+      if (res.error || !res.data) return setError(res.error ?? "Could not duplicate.");
+      router.push(`/finance/invoices/${res.data.id}/edit`);
+    });
+  }
+
+  function handleCredit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    startTransition(async () => {
+      const res = await createCreditNoteAction(invoiceId, { amount: Number(creditAmount), reason: creditReason });
+      if (res.error) return setError(res.error);
+      setCreditOpen(false);
+      setCreditReason("");
       router.refresh();
     });
   }
@@ -124,6 +152,18 @@ export function InvoiceDetailActions({
             </>
           )}
 
+          {canManage && (
+            <Button onClick={handleDuplicate} disabled={pending} title="Copy this invoice into a new draft dated today">
+              Duplicate
+            </Button>
+          )}
+
+          {canPost && (status === "posted" || status === "partially_paid") && balance > 0 && (
+            <Button onClick={() => setCreditOpen((v) => !v)} disabled={pending} title="Lower what the customer owes with a numbered credit note">
+              Credit note
+            </Button>
+          )}
+
           {/* Post Invoice Button */}
           {canPost && status === "draft" && (
             <Button variant="primary" onClick={handlePost} disabled={pending}>
@@ -143,6 +183,24 @@ export function InvoiceDetailActions({
           )}
         </div>
       </div>
+
+      {creditOpen && (
+        <form onSubmit={handleCredit} className="grid gap-3 rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-end print:hidden">
+          <div className="space-y-1">
+            <label htmlFor="cn-amount" className="text-sm font-semibold text-[var(--color-text-primary)]">Credit ({currency})</label>
+            <input id="cn-amount" type="number" inputMode="decimal" step="0.01" min="0.01" max={balance} required value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} placeholder="0.00" className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)]" />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="cn-reason" className="text-sm font-semibold text-[var(--color-text-primary)]">Reason</label>
+            <input id="cn-reason" required minLength={3} maxLength={300} value={creditReason} onChange={(e) => setCreditReason(e.target.value)} placeholder="e.g. Returned item, agreed discount, billing error" className="w-full min-h-[44px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)]" />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setCreditOpen(false)} disabled={pending}>Cancel</Button>
+            <Button variant="primary" type="submit" disabled={pending}>{pending ? "Issuing..." : "Issue credit note"}</Button>
+          </div>
+          <p className="text-xs text-[var(--color-text-secondary)] sm:col-span-3">At most the open balance ({balance.toFixed(2)} {currency}). A credit note gets its own number and cannot be edited afterwards.</p>
+        </form>
+      )}
 
       {error && (
         <div className="print:hidden">

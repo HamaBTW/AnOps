@@ -54,3 +54,13 @@ export async function dashboardInsightsAction(currency: string, refresh = false)
     return { error: message(e, "Insights are not available right now.") };
   }
 }
+
+export async function sendInvoiceEmailAction(invoiceId: string, input: { to?: string; message?: string }): Promise<ActionResult<{ to: string; sentAt: string }>> {
+  try {
+    const ctx = await resolveWorkspace();
+    const { sendInvoiceEmail } = await import("@/server/finance/invoice-email");
+    return { success: true, data: await sendInvoiceEmail(ctx, invoiceId, { to: String(input.to ?? "").slice(0, 200), message: String(input.message ?? "").slice(0, 2000) }) };
+  } catch (e) {
+    return { error: message(e, "The invoice could not be sent.") };
+  }
+}

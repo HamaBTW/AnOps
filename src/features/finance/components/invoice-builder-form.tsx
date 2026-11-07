@@ -7,7 +7,7 @@ import { createInvoiceDraftAction, updateInvoiceDraftAction } from "@/features/f
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";
 import { FormMessage } from "@/shared/components/ui/form-message";
-import { computeLineTotal, roundMoney } from "@/features/finance/utils/money";
+import { computeLineTotal, roundMoney, stampDutyFor, TIMBRE_FISCAL_TND } from "@/features/finance/utils/money";
 import type { Customer } from "@/features/finance/types";
 
 type ProductOption = {
@@ -39,6 +39,7 @@ export type InvoiceDraftValues = {
   notes?: string;
   terms?: string;
   lines: Array<{ productId?: string; description: string; quantity: number; unitPrice: number; taxRate: number }>;
+  stampDuty?: boolean;
 };
 
 export function InvoiceBuilderForm({
@@ -65,6 +66,8 @@ export function InvoiceBuilderForm({
   const [issueDate, setIssueDate] = useState(initialInvoice?.issueDate || today);
   const [dueDate, setDueDate] = useState(initialInvoice ? initialInvoice.dueDate || "" : in30Days);
   const [notes, setNotes] = useState(initialInvoice?.notes || "");
+  // Tunisian invoices usually carry the timbre fiscal; on by default for new TND invoices.
+  const [stampDuty, setStampDuty] = useState(initialInvoice ? !!initialInvoice.stampDuty : true);
   const [terms, setTerms] = useState(initialInvoice ? initialInvoice.terms || "" : "Payment due within 30 days of issue.");
 
   const [lines, setLines] = useState<FormLine[]>(initialInvoice ? initialInvoice.lines.map((l, i) => ({ ...l, id: `line_${i}` })) : [
@@ -139,7 +142,8 @@ export function InvoiceBuilderForm({
       ),
     0
   );
-  const grandTotal = subtotal + taxTotal;
+  const stamp = stampDutyFor(currency, stampDuty);
+  const grandTotal = subtotal + taxTotal + stamp;
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("fr-TN", { style: "currency", currency }).format(n || 0);
@@ -176,6 +180,7 @@ export function InvoiceBuilderForm({
     if (dueDate) payload.append("dueDate", dueDate);
     if (notes) payload.append("notes", notes);
     if (terms) payload.append("terms", terms);
+    payload.append("stampDuty", String(stampDuty && currency === "TND"));
 
     const formattedLines = lines.map((l) => ({
       productId: l.productId || undefined,
@@ -437,6 +442,15 @@ export function InvoiceBuilderForm({
               <span>Tax / VAT:</span>
               <span className="font-medium text-[var(--color-text-primary)]">{fmt(taxTotal)}</span>
             </div>
+            {currency === "TND" && (
+              <label className="flex cursor-pointer items-center justify-between gap-3 text-[var(--color-text-secondary)]">
+                <span className="inline-flex items-center gap-2">
+                  <input type="checkbox" checked={stampDuty} onChange={(e) => setStampDuty(e.target.checked)} className="size-4 accent-[var(--color-action-primary)]" />
+                  Timbre fiscal
+                </span>
+                <span className="font-medium text-[var(--color-text-primary)]">{fmt(stampDuty ? TIMBRE_FISCAL_TND : 0)}</span>
+              </label>
+            )}
             <div className="flex justify-between text-base font-bold text-[var(--color-text-primary)] border-t border-[var(--color-border-subtle)] pt-2">
               <span>Grand Total:</span>
               <span className="text-[var(--color-action-primary)]">{fmt(grandTotal)}</span>

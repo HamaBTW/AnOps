@@ -33,6 +33,17 @@ export function computeLineTotal(quantity: number, unitPrice: number, taxRate?: 
   return roundMoney(base + tax);
 }
 
+/**
+ * Tunisian timbre fiscal: a fixed stamp duty added to the total of an invoice (1.000 TND under the current
+ * finance law). Kept here as one constant so an accountant can update it in one place.
+ */
+export const TIMBRE_FISCAL_TND = 1;
+
+/** The stamp duty for an invoice: only for TND invoices that ask for it. */
+export function stampDutyFor(currency: string | undefined, wanted: boolean | undefined): number {
+  return wanted && (currency ?? "TND") === "TND" ? TIMBRE_FISCAL_TND : 0;
+}
+
 export function computeTotals(lines: Array<{ quantity: number; unitPrice: number; taxRate?: number }>) {
   let subtotal = 0;
   let taxTotal = 0;

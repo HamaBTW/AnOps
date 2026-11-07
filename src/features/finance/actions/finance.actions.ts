@@ -108,6 +108,7 @@ export async function createInvoiceDraftAction(formData: FormData): Promise<Acti
       dueDate: formData.get("dueDate") || "",
       notes: formData.get("notes") || "",
       terms: formData.get("terms") || "",
+      stampDuty: formData.get("stampDuty") === "true",
       lines,
     };
 
@@ -144,6 +145,7 @@ export async function updateInvoiceDraftAction(invoiceId: string, formData: Form
       dueDate: formData.get("dueDate") || "",
       notes: formData.get("notes") || "",
       terms: formData.get("terms") || "",
+      stampDuty: formData.get("stampDuty") === "true",
       lines,
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
@@ -171,6 +173,49 @@ export async function deleteInvoiceDraftAction(invoiceId: string): Promise<Actio
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to delete invoice";
     return { error: msg };
+  }
+}
+
+export async function duplicateInvoiceAction(invoiceId: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    const id = await service.duplicateInvoice(invoiceId, auth.userId);
+    revalidatePath("/finance/invoices");
+    return { success: true, data: { id } };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to duplicate invoice" };
+  }
+}
+
+export async function createCreditNoteAction(invoiceId: string, input: { amount: number; reason: string }): Promise<ActionResult<{ number: string }>> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    const note = await service.createCreditNote(invoiceId, { amount: Number(input.amount), reason: String(input.reason ?? "").slice(0, 300) }, auth.userId);
+    revalidatePath("/finance/invoices");
+    revalidatePath(`/finance/invoices/${invoiceId}`);
+    revalidatePath("/finance");
+    return { success: true, data: { number: note.number } };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to create credit note" };
+  }
+}
+
+export async function reverseAllocationAction(allocationId: string, invoiceId: string, reason: string): Promise<ActionResult> {
+  try {
+    const auth = await getCurrentAuthUser();
+    if (!auth) return { error: "Unauthorized" };
+    const service = await getFinanceService();
+    await service.reverseAllocation(allocationId, String(reason ?? ""), auth.userId);
+    revalidatePath(`/finance/invoices/${invoiceId}`);
+    revalidatePath("/finance/payments");
+    revalidatePath("/finance");
+    return { success: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to reverse the allocation" };
   }
 }
 

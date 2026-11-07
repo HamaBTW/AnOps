@@ -8,7 +8,8 @@ export type FinanceStatus =
   | "voided"
   | "cancelled"
   | "approved"
-  | "rejected";
+  | "rejected"
+  | "credited";
 
 export type CurrencyCode = "TND" | "USD" | "EUR" | "GBP";
 
@@ -47,7 +48,7 @@ export type Invoice = {
   customerId: string;
   customer?: Pick<Customer, "id" | "name" | "email" | "taxId">;
   invoiceNumber: string;
-  status: Extract<FinanceStatus, "draft" | "posted" | "partially_paid" | "paid" | "overdue" | "voided" | "cancelled">;
+  status: Extract<FinanceStatus, "draft" | "posted" | "partially_paid" | "paid" | "overdue" | "voided" | "cancelled" | "credited">;
   currency: CurrencyCode;
   issueDate: string;
   dueDate?: string;

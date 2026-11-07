@@ -4,6 +4,8 @@ import { getFinanceService } from "@/server/services/finance.service";
 import { InvoiceDetailActions } from "@/features/finance/components/invoice-detail-actions";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
 import { ReminderDraft } from "@/features/finance/components/reminder-draft";
+import { SendInvoiceEmail } from "@/features/finance/components/send-invoice-email";
+import { InvoiceHistory } from "@/features/finance/components/invoice-history";
 
 export const metadata: Metadata = {
   title: "Invoice Details | Finance | AnOps ERP",
@@ -20,6 +22,7 @@ function statusTone(status: string): BadgeTone {
     case "voided":
       return "error";
     case "posted":
+    case "credited":
       return "info";
     default:
       return "neutral";
@@ -35,12 +38,16 @@ export default async function InvoiceDetailPage({
   let invoice: any = null;
   let canPost = false;
   let canManage = false;
+  let canAllocate = false;
+  let creditNotes: Array<{ id: string; number: string; amount: number; currency: string; reason: string; createdAt: string }> = [];
 
   try {
     const service = await getFinanceService();
     invoice = await service.getInvoice(id);
     canPost = service.hasPermission("finance.invoice.post");
     canManage = service.hasPermission("finance.invoice.manage");
+    canAllocate = service.hasPermission("finance.payment.allocate");
+    creditNotes = await service.listCreditNotes(id);
   } catch {
     notFound();
   }
@@ -61,7 +68,13 @@ export default async function InvoiceDetailPage({
         status={invoice.status}
         canPost={canPost}
         canManage={canManage}
+        balance={invoice.balance}
+        currency={invoice.currency}
       />
+
+      {canPost && ["posted", "partially_paid", "paid"].includes(invoice.status) && (
+        <SendInvoiceEmail invoiceId={invoice.id} customerEmail={invoice.customer?.email} lastSentAt={invoice.lastSentAt} lastSentTo={invoice.lastSentTo} />
+      )}
 
       {(canManage || canPost) && ["posted", "partially_paid"].includes(invoice.status) && invoice.balance > 0 && (
         <ReminderDraft invoiceId={invoice.id} overdue={!!invoice.isOverdue} customerEmail={invoice.customer?.email} />
@@ -228,6 +241,12 @@ export default async function InvoiceDetailPage({
               <span>VAT / TVA:</span>
               <span className="font-medium text-[var(--color-text-primary)] print:text-black">{fmt(invoice.taxTotal)}</span>
             </div>
+            {invoice.stampDuty > 0 && (
+              <div className="flex justify-between text-[var(--color-text-secondary)] print:text-gray-600">
+                <span>Timbre fiscal:</span>
+                <span className="font-medium text-[var(--color-text-primary)] print:text-black">{fmt(invoice.stampDuty)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-base font-bold text-[var(--color-text-primary)] border-t border-[var(--color-border-subtle)] pt-2 print:border-gray-300 print:text-black">
               <span>Total Due (TTC):</span>
               <span className="text-[var(--color-action-primary)] print:text-black">{fmt(invoice.total)}</span>
@@ -236,6 +255,12 @@ export default async function InvoiceDetailPage({
               <span>Amount Paid:</span>
               <span>{fmt(invoice.amountPaid)}</span>
             </div>
+            {invoice.creditedAmount > 0 && (
+              <div className="flex justify-between text-xs text-[var(--color-text-secondary)] print:text-gray-600">
+                <span>Credit notes:</span>
+                <span>−{fmt(invoice.creditedAmount)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm font-semibold text-[var(--color-text-primary)] border-t border-[var(--color-border-subtle)] pt-2 print:border-gray-300 print:text-black">
               <span>Balance Remaining:</span>
               <span>{fmt(invoice.balance)}</span>
@@ -243,27 +268,7 @@ export default async function InvoiceDetailPage({
           </div>
         </div>
 
-        {/* Payment History Section (if any payments are recorded) */}
-        {invoice.allocations && invoice.allocations.length > 0 && (
-          <div className="border-t border-[var(--color-border-subtle)] pt-4 space-y-2 print:border-gray-300">
-            <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] print:text-gray-500">
-              Payment Transactions Applied
-            </div>
-            <div className="space-y-1 text-xs">
-              {invoice.allocations.map((a: any, i: number) => (
-                <div
-                  key={a.id || i}
-                  className="flex justify-between p-2 rounded bg-[var(--color-bg-subtle)]/40 text-[var(--color-text-primary)] print:border print:border-gray-200"
-                >
-                  <span>Allocated on {a.allocatedAt.slice(0, 10)}</span>
-                  <span className="font-medium text-[var(--color-status-success)]">
-                    +{fmt(a.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <InvoiceHistory invoiceId={invoice.id} currency={invoice.currency || "TND"} allocations={invoice.allocations ?? []} creditNotes={creditNotes} canAllocate={canAllocate} />
       </div>
     </div>
   );

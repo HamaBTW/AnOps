@@ -49,6 +49,8 @@ export const invoiceCreateDraftSchema = z.object({
   notes: z.string().trim().optional().or(z.literal("")),
   terms: z.string().trim().optional().or(z.literal("")),
   lines: z.array(invoiceLineInputSchema).min(1, "Add at least one line"),
+  /** Add the Tunisian timbre fiscal (TND invoices only). */
+  stampDuty: z.preprocess((v) => v === true || v === "true" || v === "on", z.boolean()).optional(),
 });
 
 export const invoiceUpdateDraftSchema = invoiceCreateDraftSchema.partial();

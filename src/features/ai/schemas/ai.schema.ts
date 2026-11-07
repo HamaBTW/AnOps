@@ -54,6 +54,10 @@ export const chatRequestSchema = z
   .object({
     conversationId: objectIdSchema.optional(),
     text: z.string().trim().min(1, "Write a message first.").max(2000, "Keep messages under 2000 characters."),
+    /** A module copilot (for example the Finance Copilot) sees only that module's tools. */
+    scope: z.enum(["finance"]).optional(),
+    /** Which screen the person is on, such as "Invoice INV-2026-00012". Shown to the model as data only. */
+    page: z.string().trim().max(160).optional(),
   })
   .strict();
 

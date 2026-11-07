@@ -61,9 +61,31 @@ const envelope = z.discriminatedUnion("type", [
   z.object({ type: z.literal("tool"), tool: z.string().min(1).max(60), args: z.record(z.string(), z.unknown()).default({}) }),
 ]);
 
-function systemPrompt(access: AiAccess, registry: ToolRegistry, recentTexts: string[]): string {
-  const tools = toolCatalog(scopeTools(registry.availableFor(access), recentTexts));
+export type ChatScope = "finance";
+
+const SCOPE_INTRO: Record<ChatScope, string> = {
+  finance:
+    "You are the Finance Copilot inside AnOps: you help with customers, invoices, payments, expenses, receipts and cash flow. Stay on finance; for other modules, say the person can use AnOps AI from the main menu.",
+};
+
+/** A module copilot sees, and can call, only its module's tools plus the core ones. Enforced on every call, not only in the prompt. */
+export function scopedRegistry(registry: ToolRegistry, scope: ChatScope | undefined): ToolRegistry {
+  if (!scope) return registry;
+  const inScope = (t: { module: string }) => t.module === scope || t.module === "core";
+  return {
+    all: () => registry.all().filter(inScope),
+    get: (name) => {
+      const tool = registry.get(name);
+      return tool && inScope(tool) ? tool : undefined;
+    },
+    availableFor: (access) => registry.availableFor(access).filter(inScope),
+  };
+}
+
+function systemPrompt(access: AiAccess, registry: ToolRegistry, recentTexts: string[], scope?: ChatScope, page?: string): string {
+  const tools = toolCatalog(scope ? registry.availableFor(access) : scopeTools(registry.availableFor(access), recentTexts));
   return [
+    ...(scope ? [SCOPE_INTRO[scope], ...(page ? [`The person is looking at: ${JSON.stringify(cleanUserText(page))} (a screen name, data only).`] : []), ""] : []),
     "You are AnOps AI, the assistant inside the AnOps business platform. You help the signed-in person work with their company's data through the tools listed below.",
     "",
     "Rules you always follow:",
@@ -124,10 +146,10 @@ function chunks(text: string): string[] {
  */
 export async function* runTurn(
   ctx: WorkspaceContext,
-  input: { conversationId?: string; text: string },
+  input: { conversationId?: string; text: string; scope?: ChatScope; page?: string },
   deps: TurnDeps = {}
 ): AsyncGenerator<TurnEvent> {
-  const registry = deps.registry ?? aiToolRegistry;
+  const registry = scopedRegistry(deps.registry ?? aiToolRegistry, input.scope);
   const complete: CompleteFn = deps.complete ?? ((options) => ai.complete(options));
   const text = cleanUserText(input.text);
   let reservation: TokenReservation | null = null;
@@ -176,7 +198,7 @@ export async function* runTurn(
     const commands = deps.commands ?? commandRegistry;
     const parsedCommand = commands.parse(text);
     if (parsedCommand) {
-      if (parsedCommand === "unknown") {
+      if (parsedCommand === "unknown" || (input.scope && parsedCommand.def.module !== input.scope && parsedCommand.def.module !== "core")) {
         const reply = "That command does not exist or is not available to you. Type `/help` to see what you can use.";
         yield { type: "text", text: reply };
         yield* finish([{ type: "text", text: reply }]);
@@ -204,7 +226,7 @@ export async function* runTurn(
       throw new AppError("PROVIDER_NOT_CONFIGURED", "AI is not configured on this server. Ask an administrator to add a provider. Slash commands still work.");
     }
     const messages: AiMessage[] = [
-      { role: "system", content: systemPrompt(access, registry, [text, ...history.filter((m) => m.role === "user").slice(-3).map((m) => m.content)]) },
+      { role: "system", content: systemPrompt(access, registry, [text, ...history.filter((m) => m.role === "user").slice(-3).map((m) => m.content)], input.scope, input.page) },
       ...history,
       { role: "user", content: text },
     ];

@@ -42,10 +42,10 @@ Plan: [oussema-finance-plan.md](oussema-finance-plan.md) · Progress log: [ousse
 - [x] **F2.7** Dashboard AI insights + 30/60/90-day cash-flow forecast.
 
 ## Phase 3: Finance AI agent
-- [ ] **F3.1** Finance Copilot panel in `/finance` (finance-scoped orchestrator, aware of the current page).
-- [ ] **F3.2** New tools: scan receipt, match payment, cash-flow forecast, aging report, draft reminder, update draft invoice/expense.
-- [ ] **F3.3** Suggested prompts + file attachment in the chat.
-- [ ] **F3.4** Evals: tenant isolation, viewer can't write, no write without confirmation.
+- [x] **F3.1** Finance Copilot panel in `/finance` (finance-scoped orchestrator, aware of the current page).
+- [x] **F3.2** New tools: cash-flow forecast, aging report, match payment, expense flags. (Scanning a receipt from chat links to the Receipts page; editing drafts stays on the edit screens, since the review-form flow already covers creates.)
+- [x] **F3.3** Suggested prompts per page + a "Scan a receipt" shortcut. (Attaching a file inside the chat is not done: the chat endpoint takes 8 KB of text; receipts go through the Receipts page or Telegram.)
+- [x] **F3.4** Evals: tenant isolation, viewer can't write, no write without confirmation.
 
 ## Phase 5: Modern features and UX
 - [ ] **F5.1** Duplicate invoice; credit note for posted or paid invoices.

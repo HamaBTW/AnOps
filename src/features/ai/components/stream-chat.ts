@@ -21,7 +21,7 @@ export class ChatRequestError extends Error {
  * starts (signed out, no access, invalid message) comes back as JSON and is thrown as ChatRequestError.
  */
 export async function streamChat(
-  body: { text: string; conversationId?: string },
+  body: { text: string; conversationId?: string; scope?: "finance"; page?: string },
   onEvent: (event: StreamEvent) => void,
   signal: AbortSignal
 ): Promise<void> {

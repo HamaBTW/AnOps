@@ -29,6 +29,15 @@ export const FINANCE_INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, createdAt: -1 }, name: "fin_extraction_created" },
     { key: { companyId: 1, receiptDocumentId: 1 }, name: "fin_extraction_document" },
   ],
+  // Staff Telegram receipt capture. One link per member per company; a chat may serve several companies.
+  finance_telegram_links: [
+    { key: { companyId: 1, userId: 1 }, name: "fin_tg_member_unique", unique: true },
+    { key: { chatId: 1, active: 1 }, name: "fin_tg_chat" },
+  ],
+  finance_telegram_link_tokens: [
+    { key: { companyId: 1, userId: 1, consumedAt: 1 }, name: "fin_tg_token_member" },
+    { key: { expiresAt: 1 }, name: "fin_tg_token_ttl", expireAfterSeconds: 86_400 },
+  ],
   // One stored copy per file per company; the hash is how duplicate uploads are recognised.
   // Partial: documents written before files were stored have no hash.
   finance_receipt_documents: [

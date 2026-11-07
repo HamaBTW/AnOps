@@ -26,11 +26,11 @@ Plan: [oussema-finance-plan.md](oussema-finance-plan.md) · Progress log: [ousse
 - [x] **F1.10** Tests: extraction validation (unit), pipeline with a stubbed model (integration).
 
 ## Phase 4: Telegram receipt capture
-- [ ] **F4.1** Staff Telegram link: collection plus a single-use deep-link token bound to (userId, companyId); connect/disconnect UI in Finance settings.
-- [ ] **F4.2** Webhook dispatch: `/start fin_<token>` and messages from linked staff chats go to a finance handler; marketing flow unchanged.
-- [ ] **F4.3** Photo/document handler: `getFile` → download (≤10 MB) → F1 pipeline → draft expense → summary reply with link.
-- [ ] **F4.4** Commands `/receipt`, `/company`, `/stop`; rate limit; dedupe on `file_unique_id`; permission re-check; audit log.
-- [ ] **F4.5** Tests for the handler (stubbed Telegram + model) and a local polling path.
+- [x] **F4.1** Staff Telegram link: collection plus a single-use deep-link token bound to (userId, companyId); connect/disconnect UI in Finance settings.
+- [x] **F4.2** Webhook dispatch: `/start fin_<token>` and messages from linked staff chats go to a finance handler; marketing flow unchanged.
+- [x] **F4.3** Photo/document handler: `getFile` → download (≤10 MB) → F1 pipeline → draft expense → summary reply with link.
+- [x] **F4.4** Commands `/receipt`, `/company`, `/stop`; rate limit; dedupe on `file_unique_id`; permission re-check; audit log.
+- [x] **F4.5** Tests for the handler (stubbed Telegram + model) and a local polling path.
 
 ## Phase 2: AI in every screen
 - [ ] **F2.1** Expense auto-categorization (suggestion with a reason) on the expense form.

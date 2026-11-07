@@ -21,6 +21,7 @@ import { appendConsentEvent } from "@/server/marketing/consent.service";
 import { suppress } from "@/server/marketing/delivery-events";
 import { getTelegramState, telegramDeepLink } from "@/server/marketing/providers/telegram/config";
 import { sendTelegramMessage } from "@/server/marketing/providers/telegram/client";
+import { handleStaffMessage, isFinanceChat, type StaffOutcome } from "@/server/finance/telegram-receipts.service";
 
 /**
  * Telegram subscriptions: how a customer's chat becomes a destination for exactly one contact of one company.
@@ -171,6 +172,16 @@ export const telegramUpdateSchema = z
     message: z
       .object({
         text: z.string().max(4096).optional(),
+        // Read only for staff receipt capture (Finance); customer chats never use them.
+        caption: z.string().max(1024).optional(),
+        photo: z
+          .array(z.object({ file_id: z.string().max(256), file_unique_id: z.string().max(128), file_size: z.number().optional(), width: z.number().optional(), height: z.number().optional() }).passthrough())
+          .max(10)
+          .optional(),
+        document: z
+          .object({ file_id: z.string().max(256), file_unique_id: z.string().max(128), file_name: z.string().max(256).optional(), mime_type: z.string().max(128).optional(), file_size: z.number().optional() })
+          .passthrough()
+          .optional(),
         chat: z.object({ id: z.number().int(), type: z.string() }).passthrough(),
         from: z.object({ id: z.number().int(), is_bot: z.boolean().optional(), username: z.string().max(64).optional() }).passthrough().optional(),
       })
@@ -187,7 +198,7 @@ export const telegramUpdateSchema = z
   .passthrough();
 
 export type TelegramUpdate = z.infer<typeof telegramUpdateSchema>;
-export type TelegramUpdateOutcome = "duplicate" | "connected" | "link_invalid" | "link_conflict" | "stopped" | "welcome" | "chat_blocked" | "chat_unblocked" | "ignored";
+export type TelegramUpdateOutcome = "duplicate" | "connected" | "link_invalid" | "link_conflict" | "stopped" | "welcome" | "chat_blocked" | "chat_unblocked" | "ignored" | StaffOutcome;
 
 const REPLIES = {
   welcome:
@@ -247,7 +258,18 @@ async function handleUpdate(db: Db, update: TelegramUpdate, botToken: string, re
   }
 
   const message = update.message;
-  if (!message || message.chat.type !== "private" || message.from?.is_bot || !message.text) return "ignored";
+  if (!message || message.chat.type !== "private" || message.from?.is_bot) return "ignored";
+  // Staff receipt capture: a Finance link token, or any message from a chat linked to a staff member.
+  // /stop stays with Marketing so a person who is also a customer can always stop marketing messages.
+  const isStop = /^\/stop(?:@\w+)?\s*$/i.test(message.text?.trim() ?? "");
+  if (!isStop && (await isFinanceChat(db, message.chat.id, message.text))) {
+    return handleStaffMessage(
+      db,
+      { chatId: message.chat.id, username: message.from?.username ?? null, text: message.text, caption: message.caption, photo: message.photo, document: message.document },
+      requestId
+    );
+  }
+  if (!message.text) return "ignored";
   const chatId = message.chat.id;
   const text = message.text.trim();
   const command = /^\/(start|stop)(?:@\w+)?(?:\s+(\S+))?\s*$/i.exec(text);

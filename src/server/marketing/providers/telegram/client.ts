@@ -148,6 +148,48 @@ export async function getWebhookInfo(token: string): Promise<TelegramWebhookInfo
   };
 }
 
+const fileInfo = z.object({ file_id: z.string(), file_path: z.string().optional(), file_size: z.number().optional() }).passthrough();
+
+/**
+ * Downloads a file a user sent to the bot (a receipt photo or PDF). Bots can fetch files up to 20 MB;
+ * `maxBytes` is checked on the reported size and again while reading, so a large file is never buffered.
+ */
+export async function downloadTelegramFile(token: string, fileId: string, maxBytes: number): Promise<Uint8Array> {
+  const reply = await call(token, "getFile", { file_id: fileId });
+  if (!reply.ok) throw classifyTelegramRejection(reply.status, reply.description, reply.retryAfterSeconds);
+  const parsed = fileInfo.safeParse(reply.result);
+  if (!parsed.success || !parsed.data.file_path) throw new ProviderError("INVALID_RESPONSE", "Telegram returned no file path.", false);
+  if ((parsed.data.file_size ?? 0) > maxBytes) throw new ProviderError("PAYLOAD_TOO_LARGE", "The file is too large.", false);
+
+  let response: Response;
+  try {
+    response = await fetch(`${TELEGRAM_API}/file/bot${token}/${parsed.data.file_path}`, { signal: AbortSignal.timeout(30_000), cache: "no-store" });
+  } catch {
+    throw new ProviderError("NETWORK_OR_TIMEOUT", "The Telegram file download did not complete.", false);
+  }
+  if (!response.ok || !response.body) throw new ProviderError("PROVIDER_UNAVAILABLE", "Telegram did not return the file.", false);
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = response.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > maxBytes) {
+      await reader.cancel();
+      throw new ProviderError("PAYLOAD_TOO_LARGE", "The file is too large.", false);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+
 /** Long-poll fetch used by the local-development poller only. Never run together with a webhook. */
 export async function getUpdates(token: string, offset: number, timeoutSeconds: number): Promise<unknown[]> {
   const reply = await call(

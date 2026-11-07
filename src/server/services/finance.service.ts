@@ -3,6 +3,8 @@ import clientPromise from "@/server/db/client";
 import { ObjectId, type Db, type Document, type WithId } from "mongodb";
 import { AppError } from "@/shared/lib/errors";
 import { withTransaction } from "@/server/db/transactions";
+import { recordAudit } from "@/server/audit/audit.service";
+import { randomUUID } from "crypto";
 import { assertPermission, permissionsForRole, workspaceRoleFor } from "@/server/security/permissions";
 import type { CompanyRole } from "@/features/company/types";
 import { addAmounts, computeLineTotal, computeTotals, fromCents, stampDutyFor, toCents } from "@/features/finance/utils/money";
@@ -88,6 +90,27 @@ export class FinanceService {
    * Dashboard figures for ONE currency: amounts in different currencies are never added together.
    * Defaults to the company's currency. All sums are done in whole cents.
    */
+  /**
+   * One audit event per finance write: who did what to which record, with a few safe facts (amounts,
+   * statuses; never document text). Written after the change; a failure is logged and never undoes it.
+   */
+  private async audit(action: string, entityType: string, entityId: string, userId: string, metadata?: Record<string, string | number | boolean>) {
+    try {
+      const db = await getDb();
+      await recordAudit(db, {
+        companyId: this.companyId,
+        actorUserId: ObjectId.isValid(userId) ? new ObjectId(userId) : new ObjectId("000000000000000000000000"),
+        action: `finance.${action}`,
+        entityType,
+        entityId,
+        requestId: randomUUID(),
+        metadata,
+      });
+    } catch (error) {
+      console.error(`[finance.audit] ${action} not recorded`, error instanceof Error ? error.name : "unknown");
+    }
+  }
+
   async getDashboard(requestedCurrency?: string) {
     this.ensurePermission("finance.read");
     const db = await getDb();
@@ -313,7 +336,9 @@ export class FinanceService {
     };
 
     const result = await db.collection("finance_customers").insertOne(doc);
-    return result.insertedId.toString();
+    const id = result.insertedId.toString();
+    await this.audit("customer.created", "finance_customer", id, userId);
+    return id;
   }
 
   async updateCustomer(
@@ -352,6 +377,7 @@ export class FinanceService {
     );
 
     if (res.matchedCount === 0) throw new AppError("NOT_FOUND", "Customer not found");
+    await this.audit("customer.updated", "finance_customer", customerId, userId);
     return { success: true };
   }
 
@@ -386,6 +412,7 @@ export class FinanceService {
     });
 
     if (res.deletedCount === 0) throw new AppError("NOT_FOUND", "Customer not found");
+    await this.audit("customer.deleted", "finance_customer", customerId, userId);
     return { success: true, deactivated: false };
   }
 
@@ -546,7 +573,9 @@ export class FinanceService {
     };
 
     const result = await db.collection("finance_invoices").insertOne(doc);
-    return result.insertedId.toString();
+    const id = result.insertedId.toString();
+    await this.audit("invoice.created", "finance_invoice", id, userId, { total: totals.total, currency: input.currency || "TND" });
+    return id;
   }
 
   /** Replaces a draft's header and lines. Posted invoices are immutable: corrections go through void. */
@@ -607,11 +636,12 @@ export class FinanceService {
       if (!exists) throw new AppError("NOT_FOUND", "Invoice not found");
       throw new AppError("INVALID_TRANSITION", "Only draft invoices can be edited. Void a posted invoice to correct it.");
     }
+    await this.audit("invoice.updated", "finance_invoice", invoiceId, userId, { total: totals.total });
     return { success: true };
   }
 
   /** Deletes a draft. A draft was never sent or paid, so nothing else refers to it. Its number is not reused. */
-  async deleteInvoiceDraft(invoiceId: string) {
+  async deleteInvoiceDraft(invoiceId: string, userId = "") {
     this.ensurePermission("finance.invoice.manage");
     if (!ObjectId.isValid(invoiceId)) throw new AppError("VALIDATION_ERROR", "Invalid invoice");
     const db = await getDb();
@@ -621,6 +651,7 @@ export class FinanceService {
       if (!exists) throw new AppError("NOT_FOUND", "Invoice not found");
       throw new AppError("INVALID_TRANSITION", "Only draft invoices can be deleted. Void a posted invoice instead.");
     }
+    await this.audit("invoice.deleted", "finance_invoice", invoiceId, userId);
     return { success: true };
   }
 
@@ -662,7 +693,7 @@ export class FinanceService {
     const invoices = db.collection("finance_invoices");
     const notes = db.collection("finance_credit_notes");
     const now = new Date();
-    return withTransaction(db, async ({ session, onRollback }) => {
+    const note = await withTransaction(db, async ({ session, onRollback }) => {
       const inv = await invoices.findOne({ _id: new ObjectId(invoiceId), companyId: this.companyId }, { session });
       if (!inv) throw new AppError("NOT_FOUND", "Invoice not found");
       if (inv.status !== "posted" && inv.status !== "partially_paid") throw new AppError("INVALID_TRANSITION", "Credit notes can only be issued on posted invoices with an open balance.");
@@ -688,6 +719,8 @@ export class FinanceService {
       onRollback(() => notes.deleteOne({ _id: inserted.insertedId }));
       return { id: inserted.insertedId.toHexString(), number };
     });
+    await this.audit("invoice.credit_note", "finance_invoice", invoiceId, userId, { amount: fromCents(cents), number: note.number });
+    return note;
   }
 
   async listCreditNotes(invoiceId: string) {
@@ -710,6 +743,7 @@ export class FinanceService {
     );
 
     if (res.matchedCount === 0) throw new AppError("INVALID_TRANSITION", "Invoice cannot be posted");
+    await this.audit("invoice.posted", "finance_invoice", invoiceId, userId);
     return { success: true };
   }
 
@@ -725,6 +759,7 @@ export class FinanceService {
     );
 
     if (res.matchedCount === 0) throw new AppError("INVALID_TRANSITION", "Invoice cannot be voided");
+    await this.audit("invoice.voided", "finance_invoice", invoiceId, userId);
     return { success: true };
   }
 
@@ -1017,7 +1052,9 @@ export class FinanceService {
     };
 
     const result = await db.collection("finance_expenses").insertOne(doc);
-    return result.insertedId.toString();
+    const id = result.insertedId.toString();
+    await this.audit("expense.created", "finance_expense", id, userId, { total, currency: doc.currency });
+    return id;
   }
 
   async getExpense(expenseId: string) {
@@ -1086,10 +1123,11 @@ export class FinanceService {
       if (!exists) throw new AppError("NOT_FOUND", "Expense not found");
       throw new AppError("INVALID_TRANSITION", "Only draft or rejected expenses can be edited.");
     }
+    await this.audit("expense.updated", "finance_expense", expenseId, userId, { amount, tax });
     return { success: true };
   }
 
-  async deleteExpense(expenseId: string) {
+  async deleteExpense(expenseId: string, userId = "") {
     this.ensurePermission("finance.expense.manage");
     if (!ObjectId.isValid(expenseId)) throw new AppError("VALIDATION_ERROR", "Invalid expense");
     const db = await getDb();
@@ -1104,6 +1142,7 @@ export class FinanceService {
       { companyId: this.companyId, appliedToExpenseId: new ObjectId(expenseId) },
       { $unset: { appliedToExpenseId: "" }, $set: { updatedAt: new Date() } }
     );
+    await this.audit("expense.deleted", "finance_expense", expenseId, userId);
     return { success: true };
   }
 
@@ -1117,6 +1156,7 @@ export class FinanceService {
       { $set: { status: "submitted", submittedAt: now, submittedBy: userId, updatedAt: now, updatedBy: userId } }
     );
     if (res.matchedCount === 0) throw new AppError("INVALID_TRANSITION", "Expense cannot be submitted");
+    await this.audit("expense.submitted", "finance_expense", expenseId, userId);
     return { success: true };
   }
 
@@ -1147,6 +1187,7 @@ export class FinanceService {
       if (e && this.isSelfApproval(e as { createdBy?: string; submittedBy?: string }, userId)) throw new AppError("FORBIDDEN", "You cannot approve an expense you created or submitted. Ask another approver.");
       throw new AppError("INVALID_TRANSITION", "Expense cannot be approved");
     }
+    await this.audit("expense.approved", "finance_expense", expenseId, userId);
     return { success: true };
   }
 
@@ -1160,6 +1201,7 @@ export class FinanceService {
       { $set: { status: "rejected", rejectedAt: now, rejectedBy: userId, rejectionReason: reason.trim(), updatedAt: now, updatedBy: userId } }
     );
     if (res.matchedCount === 0) throw new AppError("INVALID_TRANSITION", "Expense cannot be rejected");
+    await this.audit("expense.rejected", "finance_expense", expenseId, userId);
     return { success: true };
   }
 
@@ -1173,6 +1215,7 @@ export class FinanceService {
       { $set: { status: "paid", paidAt: now, paidBy: userId, updatedAt: now, updatedBy: userId } }
     );
     if (res.matchedCount === 0) throw new AppError("INVALID_TRANSITION", "Expense cannot be marked paid");
+    await this.audit("expense.paid", "finance_expense", expenseId, userId);
     return { success: true };
   }
 
@@ -1216,7 +1259,9 @@ export class FinanceService {
     };
 
     const result = await db.collection("finance_payments").insertOne(doc);
-    return result.insertedId.toString();
+    const id = result.insertedId.toString();
+    await this.audit("payment.recorded", "finance_payment", id, userId, { amount, currency: doc.currency });
+    return id;
   }
 
   async allocatePayment(paymentId: string, allocations: Array<{ invoiceId: string; amount: number }>, userId: string) {
@@ -1288,6 +1333,7 @@ export class FinanceService {
       }
     });
 
+    await this.audit("payment.allocated", "finance_payment", paymentId, userId, { amount: fromCents(totalAllocCents), invoices: allocations.length });
     return { success: true };
   }
 
@@ -1338,6 +1384,7 @@ export class FinanceService {
       if (i.matchedCount === 0) throw new AppError("CONFLICT", "The invoice changed meanwhile. Try again.");
       onRollback(() => invoices.updateOne({ _id: inv._id }, { $set: { amountPaid: inv.amountPaid, balance: inv.balance, status: inv.status } }));
     });
+    await this.audit("payment.allocation_reversed", "finance_payment_allocation", allocationId, userId);
     return { success: true };
   }
 
@@ -1365,7 +1412,7 @@ export class FinanceService {
       id: d._id.toString(),
       invoiceNumber: d.invoiceNumber,
       customerId: d.customerId?.toString(),
-      customerName: d.customerId ? customerMap.get(d.customerId.toString()) : "Direct Customer",
+      customerName: (d.customerId ? customerMap.get(d.customerId.toString()) : undefined) ?? "Direct Customer",
       total: d.total || 0,
       amountPaid: d.amountPaid || 0,
       balance: d.balance || 0,

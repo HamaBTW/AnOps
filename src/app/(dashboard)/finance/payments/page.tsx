@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { PaymentManager } from "@/features/finance/components/payment-manager";
 import { suggestPaymentMatches } from "@/features/finance/utils/insights";
+import type { FinanceService } from "@/server/services/finance.service";
 
 export const metadata: Metadata = {
   title: "Payments | Finance | AnOps ERP",
@@ -9,8 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default async function FinancePaymentsPage() {
-  let payments: any[] = [];
-  let unpaidInvoices: any[] = [];
+  let payments: Awaited<ReturnType<FinanceService["listPayments"]>> = [];
+  let unpaidInvoices: Awaited<ReturnType<FinanceService["listUnpaidInvoices"]>> = [];
   let canAllocate = false;
 
   try {

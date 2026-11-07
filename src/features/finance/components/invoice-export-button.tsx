@@ -1,20 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
+import { useToast } from "@/shared/components/ui/toast";
 import { exportInvoicesCsvAction } from "@/features/finance/actions/finance.actions";
 import { Button } from "@/shared/components/ui/button";
 
 export function InvoiceExportButton() {
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   function handleExport() {
-    setError(null);
     startTransition(async () => {
       const res = await exportInvoicesCsvAction();
       if (res.error) {
-        setError(res.error);
-        alert(res.error);
+        toast.error("Export failed", res.error);
         return;
       }
       if (res.data?.csv) {

@@ -54,12 +54,12 @@ Plan: [oussema-finance-plan.md](oussema-finance-plan.md) · Progress log: [ousse
 - [x] **F5.4** Invoices: server-side search (number or customer), status filter incl. Overdue/Open/Credited, pages of 25, shareable URLs. Expenses already had client-side search and status tabs; payments list is small (kept as is).
 - [x] **F5.5** Reports: AR aging, expenses by category, monthly P&L, XLSX export.
 - [x] **F5.6** Reverse an allocation from the invoice page (reason required, kept as reversed, atomic). A separate payment detail page was not needed.
-- [ ] **F5.7** UI polish: empty states, skeletons, toasts, mobile.
+- [x] **F5.7** UI polish: no `any` and no native `alert`/`confirm` left in Finance (inline confirm steps, toasts, in-page messages); designed empty and no-match states on the new screens. Loading skeletons for the older list pages were not added.
 
 ## Phase 6: Production readiness
-- [ ] **F6.1** RBAC + audit log for every finance write.
-- [ ] **F6.2** Rate limits on OCR/AI; magic-byte file validation.
-- [ ] **F6.3** Error boundaries; user-safe error messages.
-- [ ] **F6.4** Demo seed script `finance:seed-demo`.
-- [ ] **F6.5** Manual test guide + docs update (roles, architecture).
+- [x] **F6.1** RBAC + audit log for every finance write.
+- [x] **F6.2** Rate limits on OCR/AI; magic-byte file validation.
+- [x] **F6.3** Error boundaries; user-safe error messages.
+- [x] **F6.4** Demo seed script `finance:seed-demo`.
+- [x] **F6.5** Manual test guide + docs update (roles, architecture).
 - [ ] **F6.6** Full finance test run, typecheck, lint.

@@ -56,13 +56,13 @@ rules in Part B below are the enforced behaviour, and the `hr.*` rows are the ta
 | `finance.read` | ✓ | ✓ | ✓ | ✓ |
 | `finance.report.view` | ✓ | ✓ | ✓ | ✓ |
 | `finance.customer.manage` | ✓ | ✓ | ✓ | |
-| `finance.invoice.manage` (create/edit drafts) | ✓ | ✓ | ✓ | |
-| `finance.invoice.post` (post/void) | ✓ | ✓ | | |
-| `finance.payment.allocate` (record/allocate payments) | ✓ | ✓ | | |
-| `finance.expense.manage` (create/edit drafts/submitted) | ✓ | ✓ | ✓ | |
-| `finance.expense.approve` (approve/reject) | ✓ | ✓ | | |
+| `finance.invoice.manage` (create, edit, delete and duplicate drafts) | ✓ | ✓ | ✓ | |
+| `finance.invoice.post` (post, void, issue credit notes, send by e-mail) | ✓ | ✓ | | |
+| `finance.payment.allocate` (record, allocate and reverse payment allocations) | ✓ | ✓ | | |
+| `finance.expense.manage` (create; edit or delete draft and rejected expenses) | ✓ | ✓ | ✓ | |
+| `finance.expense.approve` (approve/reject; never one's own, except the owner) | ✓ | ✓ | | |
 | `finance.expense.pay` (mark approved expense paid) | ✓ | ✓ | | |
-| `finance.receipt.ocr` (upload/scan receipts) | ✓ | ✓ | ✓ | |
+| `finance.receipt.ocr` (scan receipts on the web or by Telegram; Telegram also needs `finance.expense.manage`) | ✓ | ✓ | ✓ | |
 
 ### Marketing permissions
 

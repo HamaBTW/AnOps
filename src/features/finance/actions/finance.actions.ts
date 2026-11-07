@@ -3,11 +3,19 @@
 import { revalidatePath } from "next/cache";
 import { getFinanceService } from "@/server/services/finance.service";
 import { getCurrentAuthUser } from "@/server/auth/rbac";
+import { isAppError } from "@/shared/lib/errors";
 import { customerCreateSchema, customerUpdateSchema, invoiceCreateDraftSchema, invoiceVoidSchema, paymentRecordSchema, paymentAllocateSchema, expenseCreateSchema, expenseRejectSchema } from "@/features/finance/schemas/finance.schema";
 
 export type ActionResult<T = unknown> = { success?: boolean; error?: string; data?: T };
 
-export async function createCustomerAction(input: FormData | Record<string, any>): Promise<ActionResult<{ id: string }>> {
+/** Person-facing errors (AppError) are shown as written; anything else is logged by name and replaced by the fallback. */
+function safeMessage(error: unknown, fallback: string): string {
+  if (isAppError(error)) return error.message;
+  console.error("[finance.action]", fallback, error instanceof Error ? error.name : "unknown");
+  return fallback;
+}
+
+export async function createCustomerAction(input: FormData | Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
@@ -24,25 +32,22 @@ export async function createCustomerAction(input: FormData | Record<string, any>
 
     const parsed = customerCreateSchema.safeParse(raw);
     if (!parsed.success) {
-      console.warn("[createCustomerAction] Validation failed:", parsed.error.issues);
-      const msg = parsed.error.issues[0]?.message || "Invalid input";
+        const msg = parsed.error.issues[0]?.message || "Invalid input";
       return { error: msg };
     }
 
     const service = await getFinanceService();
     const id = await service.createCustomer(parsed.data, auth.userId);
-    console.log("[createCustomerAction] Successfully created customer:", id);
     revalidatePath("/finance/customers");
     revalidatePath("/finance/invoices");
     return { success: true, data: { id } };
   } catch (e) {
-    console.error("[createCustomerAction] Error:", e);
-    const msg = e instanceof Error ? e.message : "Failed to create customer";
+    const msg = safeMessage(e, "Failed to create customer");
     return { error: msg };
   }
 }
 
-export async function updateCustomerAction(id: string, input: FormData | Record<string, any>): Promise<ActionResult<{ id: string }>> {
+export async function updateCustomerAction(id: string, input: FormData | Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
@@ -69,7 +74,7 @@ export async function updateCustomerAction(id: string, input: FormData | Record<
     revalidatePath("/finance/invoices");
     return { success: true, data: { id } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to update customer";
+    const msg = safeMessage(e, "Failed to update customer");
     return { error: msg };
   }
 }
@@ -85,7 +90,7 @@ export async function deleteCustomerAction(id: string): Promise<ActionResult<{ d
     revalidatePath("/finance/invoices");
     return { success: true, data: result };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to delete customer";
+    const msg = safeMessage(e, "Failed to delete customer");
     return { error: msg };
   }
 }
@@ -96,7 +101,7 @@ export async function createInvoiceDraftAction(formData: FormData): Promise<Acti
     if (!auth) return { error: "Unauthorized" };
 
     const linesRaw = formData.get("lines");
-    let lines: any[] = [];
+    let lines: unknown[] = [];
     if (typeof linesRaw === "string") {
       try { lines = JSON.parse(linesRaw); } catch { lines = []; }
     }
@@ -119,11 +124,11 @@ export async function createInvoiceDraftAction(formData: FormData): Promise<Acti
     }
 
     const service = await getFinanceService();
-    const id = await service.createInvoiceDraft(parsed.data as any, auth.userId);
+    const id = await service.createInvoiceDraft(parsed.data, auth.userId);
     revalidatePath("/finance/invoices");
     return { success: true, data: { id } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to create invoice";
+    const msg = safeMessage(e, "Failed to create invoice");
     return { error: msg };
   }
 }
@@ -156,7 +161,7 @@ export async function updateInvoiceDraftAction(invoiceId: string, formData: Form
     revalidatePath(`/finance/invoices/${invoiceId}`);
     return { success: true, data: { id: invoiceId } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to update invoice";
+    const msg = safeMessage(e, "Failed to update invoice");
     return { error: msg };
   }
 }
@@ -166,12 +171,12 @@ export async function deleteInvoiceDraftAction(invoiceId: string): Promise<Actio
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
-    await service.deleteInvoiceDraft(invoiceId);
+    await service.deleteInvoiceDraft(invoiceId, auth.userId);
     revalidatePath("/finance/invoices");
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to delete invoice";
+    const msg = safeMessage(e, "Failed to delete invoice");
     return { error: msg };
   }
 }
@@ -185,7 +190,7 @@ export async function duplicateInvoiceAction(invoiceId: string): Promise<ActionR
     revalidatePath("/finance/invoices");
     return { success: true, data: { id } };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Failed to duplicate invoice" };
+    return { error: safeMessage(e, "Failed to duplicate invoice") };
   }
 }
 
@@ -200,7 +205,7 @@ export async function createCreditNoteAction(invoiceId: string, input: { amount:
     revalidatePath("/finance");
     return { success: true, data: { number: note.number } };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Failed to create credit note" };
+    return { error: safeMessage(e, "Failed to create credit note") };
   }
 }
 
@@ -215,7 +220,7 @@ export async function reverseAllocationAction(allocationId: string, invoiceId: s
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Failed to reverse the allocation" };
+    return { error: safeMessage(e, "Failed to reverse the allocation") };
   }
 }
 
@@ -230,7 +235,7 @@ export async function postInvoiceAction(invoiceId: string): Promise<ActionResult
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to post invoice";
+    const msg = safeMessage(e, "Failed to post invoice");
     return { error: msg };
   }
 }
@@ -251,7 +256,7 @@ export async function voidInvoiceAction(input: FormData | { invoiceId: string; r
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to void invoice";
+    const msg = safeMessage(e, "Failed to void invoice");
     return { error: msg };
   }
 }
@@ -265,7 +270,7 @@ export async function exportInvoicesCsvAction(): Promise<ActionResult<{ csv: str
     const filename = `invoices_${new Date().toISOString().slice(0, 10)}.csv`;
     return { success: true, data: { csv, filename } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to export invoices";
+    const msg = safeMessage(e, "Failed to export invoices");
     return { error: msg };
   }
 }
@@ -285,11 +290,11 @@ export async function recordPaymentAction(formData: FormData): Promise<ActionRes
     const parsed = paymentRecordSchema.safeParse(raw);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const service = await getFinanceService();
-    const id = await service.recordPayment(parsed.data as any, auth.userId);
+    const id = await service.recordPayment(parsed.data, auth.userId);
     revalidatePath("/finance/payments");
     return { success: true, data: { id } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to record payment";
+    const msg = safeMessage(e, "Failed to record payment");
     return { error: msg };
   }
 }
@@ -299,7 +304,7 @@ export async function allocatePaymentAction(input: FormData | { paymentId: strin
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
     let paymentId: string;
-    let allocations: any[] = [];
+    let allocations: unknown[] = [];
     if (input instanceof FormData) {
       paymentId = String(input.get("paymentId") || "");
       const allocRaw = input.get("allocations");
@@ -319,7 +324,7 @@ export async function allocatePaymentAction(input: FormData | { paymentId: strin
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to allocate payment";
+    const msg = safeMessage(e, "Failed to allocate payment");
     return { error: msg };
   }
 }
@@ -333,12 +338,12 @@ export async function exportPaymentsCsvAction(): Promise<ActionResult<{ csv: str
     const filename = `payments_${new Date().toISOString().slice(0, 10)}.csv`;
     return { success: true, data: { csv, filename } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to export payments";
+    const msg = safeMessage(e, "Failed to export payments");
     return { error: msg };
   }
 }
 
-export async function createExpenseAction(input: FormData | Record<string, any>): Promise<ActionResult<{ id: string }>> {
+export async function createExpenseAction(input: FormData | Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
@@ -356,12 +361,12 @@ export async function createExpenseAction(input: FormData | Record<string, any>)
     const parsed = expenseCreateSchema.safeParse(raw);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const service = await getFinanceService();
-    const id = await service.createExpense(parsed.data as any, auth.userId);
+    const id = await service.createExpense(parsed.data, auth.userId);
     revalidatePath("/finance/expenses");
     revalidatePath("/finance");
     return { success: true, data: { id } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to create expense";
+    const msg = safeMessage(e, "Failed to create expense");
     return { error: msg };
   }
 }
@@ -378,7 +383,7 @@ export async function updateExpenseAction(expenseId: string, input: Record<strin
     revalidatePath("/finance");
     return { success: true, data: { id: expenseId } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to update expense";
+    const msg = safeMessage(e, "Failed to update expense");
     return { error: msg };
   }
 }
@@ -388,13 +393,13 @@ export async function deleteExpenseAction(expenseId: string): Promise<ActionResu
     const auth = await getCurrentAuthUser();
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
-    await service.deleteExpense(expenseId);
+    await service.deleteExpense(expenseId, auth.userId);
     revalidatePath("/finance/expenses");
     revalidatePath("/finance");
     revalidatePath("/finance/receipts");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to delete expense";
+    const msg = safeMessage(e, "Failed to delete expense");
     return { error: msg };
   }
 }
@@ -409,7 +414,7 @@ export async function submitExpenseAction(expenseId: string): Promise<ActionResu
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to submit expense";
+    const msg = safeMessage(e, "Failed to submit expense");
     return { error: msg };
   }
 }
@@ -424,7 +429,7 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to approve expense";
+    const msg = safeMessage(e, "Failed to approve expense");
     return { error: msg };
   }
 }
@@ -444,7 +449,7 @@ export async function rejectExpenseAction(input: FormData | { expenseId: string;
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to reject expense";
+    const msg = safeMessage(e, "Failed to reject expense");
     return { error: msg };
   }
 }
@@ -459,7 +464,7 @@ export async function markExpensePaidAction(expenseId: string): Promise<ActionRe
     revalidatePath("/finance");
     return { success: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to mark expense paid";
+    const msg = safeMessage(e, "Failed to mark expense paid");
     return { error: msg };
   }
 }
@@ -473,7 +478,7 @@ export async function createExpenseCategoryAction(name: string): Promise<ActionR
     revalidatePath("/finance/expenses");
     return { success: true, data: { id } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to create category";
+    const msg = safeMessage(e, "Failed to create category");
     return { error: msg };
   }
 }
@@ -487,7 +492,7 @@ export async function exportExpensesCsvAction(): Promise<ActionResult<{ csv: str
     const filename = `expenses_${new Date().toISOString().slice(0, 10)}.csv`;
     return { success: true, data: { csv, filename } };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to export expenses";
+    const msg = safeMessage(e, "Failed to export expenses");
     return { error: msg };
   }
 }

@@ -33,15 +33,14 @@ export function InvoiceDetailActions({
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingPost, setConfirmingPost] = useState(false);
 
   function handlePrint() {
     window.print();
   }
 
   function handlePost() {
-    if (!confirm(`Are you sure you want to officially post invoice ${invoiceNumber}? This will mark it as posted.`)) {
-      return;
-    }
+    setConfirmingPost(false);
     setError(null);
     startTransition(async () => {
       const res = await postInvoiceAction(invoiceId);
@@ -165,11 +164,19 @@ export function InvoiceDetailActions({
           )}
 
           {/* Post Invoice Button */}
-          {canPost && status === "draft" && (
-            <Button variant="primary" onClick={handlePost} disabled={pending}>
-              {pending ? "Posting..." : "Post Invoice"}
-            </Button>
-          )}
+          {canPost && status === "draft" &&
+            (confirmingPost ? (
+              <>
+                <Button variant="primary" onClick={handlePost} disabled={pending} title={`Make ${invoiceNumber} official. Posted invoices can no longer be edited.`}>
+                  {pending ? "Posting..." : "Confirm post"}
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmingPost(false)} disabled={pending}>Not yet</Button>
+              </>
+            ) : (
+              <Button variant="primary" onClick={() => setConfirmingPost(true)} disabled={pending} title="Make this invoice official">
+                Post Invoice
+              </Button>
+            ))}
 
           {/* Void Invoice Button */}
           {canPost && status !== "voided" && status !== "cancelled" && (

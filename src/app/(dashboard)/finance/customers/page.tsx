@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { CustomerManager } from "@/features/finance/components/customer-manager";
+import type { FinanceService } from "@/server/services/finance.service";
 
 export const metadata: Metadata = {
   title: "Customers | Finance | AnOps ERP",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function FinanceCustomersPage() {
-  let customers: any[] = [];
+  let customers: Awaited<ReturnType<FinanceService["listCustomers"]>> = [];
   let canManage = false;
   let insights = {};
 

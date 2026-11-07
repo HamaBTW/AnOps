@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { InvoiceBuilderForm } from "@/features/finance/components/invoice-builder-form";
 import Link from "next/link";
+import type { FinanceService } from "@/server/services/finance.service";
 
 export const metadata: Metadata = {
   title: "New Invoice | Finance | AnOps ERP",
@@ -15,8 +16,8 @@ export default async function NewInvoicePage({
 }) {
   const { customerId } = await searchParams;
 
-  let customers: any[] = [];
-  let products: any[] = [];
+  let customers: Awaited<ReturnType<FinanceService["listCustomers"]>> = [];
+  let products: Awaited<ReturnType<FinanceService["listInvoiceableProducts"]>> = [];
 
   try {
     const service = await getFinanceService();

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { ExpenseManager } from "@/features/finance/components/expense-manager";
 import { computeExpenseFlags } from "@/features/finance/utils/insights";
+import type { FinanceService } from "@/server/services/finance.service";
 
 export const metadata: Metadata = {
   title: "Expenses | Finance | AnOps ERP",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function FinanceExpensesPage() {
-  let expenses: any[] = [];
+  let expenses: Awaited<ReturnType<FinanceService["listExpenses"]>> = [];
   let canManage = false;
   let canApprove = false;
   let canPay = false;

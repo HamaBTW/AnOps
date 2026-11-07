@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { customerCreateSchema, customerUpdateSchema } from "@/features/finance/schemas/finance.schema";
@@ -48,7 +48,8 @@ function CustomerForm({
     handleSubmit,
     formState: { errors },
   } = useForm<CustomerFormData>({
-    resolver: zodResolver(isEdit ? customerUpdateSchema : customerCreateSchema) as any,
+    // The two schemas take the same fields; the cast only bridges their preprocessed input types.
+    resolver: zodResolver(isEdit ? customerUpdateSchema : customerCreateSchema) as unknown as Resolver<CustomerFormData>,
     mode: "onChange",
     defaultValues: {
       name: initial?.name || "",
@@ -179,6 +180,7 @@ export function CustomerManager({
   const [mode, setMode] = useState<"list" | "create" | { edit: Customer }>("list");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase().trim();
@@ -213,7 +215,7 @@ export function CustomerManager({
   }
 
   async function handleDelete(customer: Customer) {
-    if (!confirm(`Are you sure you want to delete or deactivate "${customer.name}"?`)) return;
+    setConfirmDeleteId(null);
     setPendingDeleteId(customer.id);
     setMessage(null);
     const res = await deleteCustomerAction(customer.id);
@@ -426,13 +428,29 @@ export function CustomerManager({
                             >
                               Edit
                             </button>
-                            <button
-                              onClick={() => handleDelete(c)}
-                              disabled={pendingDeleteId === c.id}
-                              className="text-xs text-[var(--color-status-error)] hover:opacity-80 px-2 py-1 rounded hover:bg-[var(--color-status-error-bg)] font-medium disabled:opacity-50"
-                            >
-                              {pendingDeleteId === c.id ? "..." : "Delete"}
-                            </button>
+                            {confirmDeleteId === c.id ? (
+                              <>
+                                <button
+                                  onClick={() => handleDelete(c)}
+                                  disabled={pendingDeleteId === c.id}
+                                  title="Customers with invoices are deactivated instead of deleted"
+                                  className="text-xs font-semibold px-2 py-1 rounded bg-[var(--color-status-error-bg)] text-[var(--color-status-error)] hover:opacity-80 disabled:opacity-50"
+                                >
+                                  {pendingDeleteId === c.id ? "..." : "Confirm"}
+                                </button>
+                                <button onClick={() => setConfirmDeleteId(null)} className="text-xs font-medium px-2 py-1 rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]">
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(c.id)}
+                                disabled={pendingDeleteId === c.id}
+                                className="text-xs text-[var(--color-status-error)] hover:opacity-80 px-2 py-1 rounded hover:bg-[var(--color-status-error-bg)] font-medium disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </>
                         )}
                       </div>

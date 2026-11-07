@@ -6,6 +6,7 @@ import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/st
 import { ReminderDraft } from "@/features/finance/components/reminder-draft";
 import { SendInvoiceEmail } from "@/features/finance/components/send-invoice-email";
 import { InvoiceHistory } from "@/features/finance/components/invoice-history";
+import type { FinanceService } from "@/server/services/finance.service";
 
 export const metadata: Metadata = {
   title: "Invoice Details | Finance | AnOps ERP",
@@ -35,7 +36,7 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  let invoice: any = null;
+  let invoice: Awaited<ReturnType<FinanceService["getInvoice"]>> | null = null;
   let canPost = false;
   let canManage = false;
   let canAllocate = false;
@@ -185,7 +186,7 @@ export default async function InvoiceDetailPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border-subtle)] print:divide-gray-200">
-              {invoice.lines.map((l: any, idx: number) => (
+              {invoice.lines.map((l, idx) => (
                 <tr key={l.id} className="text-[var(--color-text-primary)] print:text-black">
                   <td className="py-3 px-4 text-xs text-[var(--color-text-secondary)] print:text-gray-500">
                     {idx + 1}

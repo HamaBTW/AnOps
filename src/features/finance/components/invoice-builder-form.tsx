@@ -4,8 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { createInvoiceDraftAction, updateInvoiceDraftAction } from "@/features/finance/actions/finance.actions";
-import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
-import { TextField } from "@/shared/components/ui/text-field";
+import { Button, selectClass } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import { computeLineTotal, roundMoney, stampDutyFor, TIMBRE_FISCAL_TND } from "@/features/finance/utils/money";
 import type { Customer } from "@/features/finance/types";
@@ -58,8 +57,11 @@ export function InvoiceBuilderForm({
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Computed once when the form opens, not on every render.
+  const [{ today, in30Days }] = useState(() => {
+    const now = new Date();
+    return { today: now.toISOString().slice(0, 10), in30Days: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) };
+  });
 
   const [customerId, setCustomerId] = useState(initialInvoice?.customerId || preselectedCustomerId || (customers[0]?.id ?? ""));
   const [currency, setCurrency] = useState<Currency>(initialInvoice?.currency || "TND");
@@ -99,7 +101,7 @@ export function InvoiceBuilderForm({
     );
   }
 
-  function updateLine(index: number, field: keyof FormLine, value: any) {
+  function updateLine<K extends keyof FormLine>(index: number, field: K, value: FormLine[K]) {
     setLines((prev) =>
       prev.map((line, idx) => {
         if (idx !== index) return line;
@@ -266,7 +268,7 @@ export function InvoiceBuilderForm({
             <label className="text-sm font-medium text-[var(--color-text-secondary)]">Currency</label>
             <select
               value={currency}
-              onChange={(e) => setCurrency(e.target.value as any)}
+              onChange={(e) => setCurrency(e.target.value as Currency)}
               className={selectClass}
             >
               <option value="TND">TND (Tunisian Dinar)</option>

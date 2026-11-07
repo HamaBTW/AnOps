@@ -410,3 +410,19 @@ describe("reversing an allocation, and payments after a credit note", () => {
     expect(await code(b.reverseAllocation(alloc.id, "other company", userB))).toBe("NOT_FOUND");
   });
 });
+
+describe("audit trail", () => {
+  it("records who did each finance write, with safe facts only", async () => {
+    const auditor = new ObjectId().toHexString();
+    const svc = new FinanceService({ companyId: h.ctx().companyId.toHexString(), companyRole: "owner", userId: auditor });
+    const c = await svc.createCustomer({ name: "Audited Co", notes: "private note" }, auditor);
+    const inv = await svc.createInvoiceDraft({ customerId: c, currency: "TND", issueDate: "2026-11-01", lines: [{ description: "Secret project", quantity: 1, unitPrice: 50 }] }, auditor);
+    await svc.postInvoice(inv, auditor);
+    const p = await svc.recordPayment({ paymentDate: "2026-11-02", amount: 50, currency: "TND", method: "cash" }, auditor);
+    await svc.allocatePayment(p, [{ invoiceId: inv, amount: 50 }], auditor);
+    const events = await h.db.collection("audit_events").find({ actorUserId: new ObjectId(auditor) }).sort({ occurredAt: 1 }).toArray();
+    expect(events.map((e) => e.action)).toEqual(["finance.customer.created", "finance.invoice.created", "finance.invoice.posted", "finance.payment.recorded", "finance.payment.allocated"]);
+    expect(events.every((e) => String(e.companyId) === String(h.ctx().companyId))).toBe(true);
+    expect(JSON.stringify(events)).not.toMatch(/private note|Secret project/);
+  });
+});

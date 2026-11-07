@@ -126,7 +126,7 @@ export function PaymentManager({
     startTransition(async () => {
       const res = await exportPaymentsCsvAction();
       if (res.error) {
-        alert(res.error);
+        setMessage({ type: "error", text: res.error });
         return;
       }
       if (res.data?.csv) {

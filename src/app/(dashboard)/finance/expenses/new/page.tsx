@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { ExpenseForm } from "@/features/finance/components/expense-form";
 import Link from "next/link";
+import type { FinanceService } from "@/server/services/finance.service";
 
 export const metadata: Metadata = {
   title: "New Expense | Finance | AnOps ERP",
@@ -23,7 +24,7 @@ export default async function NewExpensePage({
 }) {
   const params = await searchParams;
 
-  let categories: any[] = [];
+  let categories: Awaited<ReturnType<FinanceService["listExpenseCategories"]>> = [];
   try {
     const service = await getFinanceService();
     categories = await service.listExpenseCategories();

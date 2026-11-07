@@ -58,8 +58,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   try {
     const service = await getFinanceService();
     [kpi, currencies, openInvoices] = await Promise.all([service.getDashboard(requestedCurrency?.toUpperCase()), service.listActiveCurrencies(), service.listUnpaidInvoices()]);
-  } catch (err: any) {
-    if (err?.digest !== "DYNAMIC_SERVER_USAGE") {
+  } catch (err) {
+    if ((err as { digest?: string })?.digest !== "DYNAMIC_SERVER_USAGE") {
       console.error("[FinancePage] Dashboard error:", err);
     }
   }

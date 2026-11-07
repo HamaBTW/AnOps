@@ -89,7 +89,7 @@ export function ExpenseManager({
   const fmt = (n: number, c: string) =>
     new Intl.NumberFormat("fr-TN", { style: "currency", currency: c || "TND" }).format(n || 0);
 
-  function handleAction(actionFn: () => Promise<any>, successMsg: string) {
+  function handleAction(actionFn: () => Promise<{ error?: string }>, successMsg: string) {
     setMessage(null);
     startTransition(async () => {
       const res = await actionFn();
@@ -119,7 +119,7 @@ export function ExpenseManager({
     startTransition(async () => {
       const res = await exportExpensesCsvAction();
       if (res.error) {
-        alert(res.error);
+        setMessage({ type: "error", text: res.error });
         return;
       }
       if (res.data?.csv) {

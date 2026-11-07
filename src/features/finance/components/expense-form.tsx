@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Sparkles } from "lucide-react";
-import Link from "next/link";
 import { createExpenseAction, submitExpenseAction, updateExpenseAction } from "@/features/finance/actions/finance.actions";
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";

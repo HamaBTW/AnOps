@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { createExpenseAction, submitExpenseAction, updateExpenseAction } from "@/features/finance/actions/finance.actions";
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
 import { TextField } from "@/shared/components/ui/text-field";
 import { FormMessage } from "@/shared/components/ui/form-message";
+import { suggestCategoryAction } from "@/features/finance/actions/finance-ai.actions";
 
 type CategoryOption = {
   id: string;
@@ -44,8 +46,23 @@ export function ExpenseForm({
   const [categoryId, setCategoryId] = useState(
     initialData?.categoryId ||
     categories.find((c) => c.name.toLowerCase() === initialData?.categoryHint?.toLowerCase())?.id ||
-    categories[0]?.id || ""
+    // No silent default: an expense is uncategorized until the person or a suggestion picks one.
+    ""
   );
+  const [suggestion, setSuggestion] = useState<{ categoryId: string; categoryName: string; reason: string; source: "history" | "ai" } | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const lastAsked = useRef("");
+
+  async function askSuggestion() {
+    const key = `${vendor.trim().toLowerCase()}|${description.trim().toLowerCase()}`;
+    if (key === lastAsked.current || (vendor.trim().length < 2 && description.trim().length < 3)) return;
+    lastAsked.current = key;
+    setSuggesting(true);
+    const res = await suggestCategoryAction({ vendor, description });
+    setSuggesting(false);
+    // No suggestion (AI off, busy, nothing fits) simply shows nothing: the field stays manual.
+    setSuggestion(res.data && res.data.categoryId !== categoryId ? res.data : null);
+  }
   const [vendor, setVendor] = useState(initialData?.vendor || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [amount, setAmount] = useState<number | string>(initialData?.amount ?? "");
@@ -135,6 +152,25 @@ export function ExpenseForm({
                 </option>
               ))}
             </select>
+            {suggesting && <p className="text-xs text-[var(--color-text-secondary)]">Finding a category…</p>}
+            {suggestion && !suggesting && (
+              <div role="status" className="flex flex-wrap items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)]/10 px-2.5 py-1.5 text-xs text-[var(--color-text-primary)]">
+                <Sparkles aria-hidden className="size-3.5 shrink-0 text-[var(--color-action-primary)]" />
+                <span className="min-w-0">
+                  <strong>{suggestion.categoryName}</strong>: {suggestion.reason}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryId(suggestion.categoryId);
+                    setSuggestion(null);
+                  }}
+                  className="ml-auto rounded px-2 py-0.5 font-semibold text-[var(--color-action-primary)] hover:bg-[var(--color-action-primary)]/15 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]"
+                >
+                  Use
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Vendor */}
@@ -144,6 +180,7 @@ export function ExpenseForm({
               placeholder="e.g. Ooredoo, Amazon AWS, Shell, Carrefour..."
               value={vendor}
               onChange={(e) => setVendor(e.target.value)}
+              onBlur={askSuggestion}
             />
           </div>
 
@@ -155,6 +192,7 @@ export function ExpenseForm({
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onBlur={askSuggestion}
             />
           </div>
 

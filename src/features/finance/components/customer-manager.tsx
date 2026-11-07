@@ -17,6 +17,7 @@ import { TextField } from "@/shared/components/ui/text-field";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { IconUsers, IconReceipt } from "@/shared/components/ui/brand-icons";
 import type { Customer } from "@/features/finance/types";
+import type { CustomerInsight } from "@/features/finance/utils/insights";
 
 type CustomerFormData = {
   name: string;
@@ -156,12 +157,22 @@ function CustomerForm({
   );
 }
 
+const RISK_STYLE: Record<CustomerInsight["risk"], { label: string; className: string }> = {
+  low: { label: "Reliable payer", className: "bg-[var(--color-status-success-bg)] text-[var(--color-status-success)]" },
+  medium: { label: "Watch", className: "bg-[var(--color-status-warning-bg)] text-[var(--color-status-warning)]" },
+  high: { label: "Payment risk", className: "bg-[var(--color-status-error-bg)] text-[var(--color-status-error)]" },
+  new: { label: "No payment history", className: "bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]" },
+};
+
 export function CustomerManager({
   customers,
   canManage,
+  insights = {},
 }: {
   customers: Customer[];
   canManage: boolean;
+  /** Payment behaviour per customer id, computed from their invoices (see utils/insights). */
+  insights?: Record<string, CustomerInsight>;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -351,6 +362,15 @@ export function CustomerManager({
                   <tr key={c.id} className="hover:bg-[var(--color-bg-subtle)]/40 transition-colors">
                     <td className="py-3 px-4 font-medium text-[var(--color-text-primary)]">
                       <div>{c.name}</div>
+                      {insights[c.id] && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-normal">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${RISK_STYLE[insights[c.id].risk].className}`}>{RISK_STYLE[insights[c.id].risk].label}</span>
+                          <span className="text-[var(--color-text-secondary)]">{insights[c.id].summary}</span>
+                          {insights[c.id].openBalance.map((b) => (
+                            <span key={b.currency} className="text-[var(--color-text-secondary)]">· owes {b.amount.toFixed(2)} {b.currency}</span>
+                          ))}
+                        </div>
+                      )}
                       {c.address && (
                         <div className="text-xs text-[var(--color-text-secondary)] truncate max-w-xs">
                           {c.address}

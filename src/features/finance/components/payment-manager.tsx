@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { allocatePaymentAction, exportPaymentsCsvAction } from "@/features/finance/actions/finance.actions";
+import { Sparkles } from "lucide-react";
+import type { MatchSuggestion } from "@/features/finance/utils/insights";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { FormMessage } from "@/shared/components/ui/form-message";
@@ -36,7 +38,10 @@ export function PaymentManager({
   payments,
   unpaidInvoices,
   canAllocate,
+  suggestions = {},
 }: {
+  /** Best matches per payment id, computed by code from references, amounts and customers. */
+  suggestions?: Record<string, MatchSuggestion[]>;
   payments: PaymentItem[];
   unpaidInvoices: UnpaidInvoice[];
   canAllocate: boolean;
@@ -53,17 +58,20 @@ export function PaymentManager({
   const fmt = (n: number, c: string) =>
     new Intl.NumberFormat("fr-TN", { style: "currency", currency: c || "TND" }).format(n || 0);
 
-  function openAllocateModal(p: PaymentItem) {
+  function openAllocateModal(p: PaymentItem, preset?: MatchSuggestion) {
     setAllocatingPayment(p);
-    setAllocMap({});
+    setAllocMap(preset ? Object.fromEntries(preset.allocations.map((a) => [a.invoiceId, a.amount])) : {});
     setModalError(null);
   }
+
+  // Money is never applied across currencies, so the dialog only offers invoices in the payment's currency.
+  const modalInvoices = allocatingPayment ? unpaidInvoices.filter((inv) => inv.currency === allocatingPayment.currency) : [];
 
   function handleAutoDistribute(p: PaymentItem) {
     let remaining = p.unallocatedAmount || 0;
     const newMap: Record<string, number> = {};
 
-    for (const inv of unpaidInvoices) {
+    for (const inv of unpaidInvoices.filter((i) => i.currency === p.currency)) {
       if (remaining <= 0) break;
       const toApply = Math.min(remaining, inv.balance);
       if (toApply > 0) {
@@ -245,6 +253,16 @@ export function PaymentManager({
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
+                        {canAllocate && isUnallocated && suggestions[p.id]?.[0] && (
+                          <button
+                            onClick={() => openAllocateModal(p, suggestions[p.id][0])}
+                            title={suggestions[p.id][0].reason}
+                            className="mr-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-[var(--color-status-success-bg)] text-[var(--color-status-success)] hover:opacity-80"
+                          >
+                            <Sparkles aria-hidden className="size-3.5 shrink-0" />
+                            Match {suggestions[p.id][0].allocations.length > 1 ? `${suggestions[p.id][0].allocations.length} invoices` : unpaidInvoices.find((i) => i.id === suggestions[p.id][0].allocations[0].invoiceId)?.invoiceNumber}
+                          </button>
+                        )}
                         {canAllocate && isUnallocated && (
                           <button
                             onClick={() => openAllocateModal(p)}
@@ -290,7 +308,7 @@ export function PaymentManager({
               </button>
             </div>
 
-            {unpaidInvoices.length === 0 ? (
+            {modalInvoices.length === 0 ? (
               <div className="py-6 text-center text-sm text-[var(--color-text-secondary)] space-y-2">
                 <div>There are currently no open/unpaid posted invoices to reconcile.</div>
                 <Button variant="secondary" onClick={() => setAllocatingPayment(null)}>
@@ -311,7 +329,7 @@ export function PaymentManager({
                 </div>
 
                 <div className="space-y-2 max-h-60 overflow-y-auto divide-y divide-[var(--color-border-subtle)] border border-[var(--color-border-subtle)] rounded-[var(--radius-control)] p-2">
-                  {unpaidInvoices.map((inv) => {
+                  {modalInvoices.map((inv) => {
                     const allocatedVal = allocMap[inv.id] || "";
                     return (
                       <div key={inv.id} className="pt-2 first:pt-0 flex items-center justify-between gap-3 text-xs">

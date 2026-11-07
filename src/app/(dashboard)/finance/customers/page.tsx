@@ -10,10 +10,11 @@ export const metadata: Metadata = {
 export default async function FinanceCustomersPage() {
   let customers: any[] = [];
   let canManage = false;
+  let insights = {};
 
   try {
     const service = await getFinanceService();
-    customers = await service.listCustomers();
+    [customers, insights] = await Promise.all([service.listCustomers(), service.getCustomerInsights()]);
     canManage = service.hasPermission("finance.customer.manage");
   } catch {
     customers = [];
@@ -31,7 +32,7 @@ export default async function FinanceCustomersPage() {
         </p>
       </div>
 
-      <CustomerManager customers={customers} canManage={canManage} />
+      <CustomerManager customers={customers} canManage={canManage} insights={insights} />
     </div>
   );
 }

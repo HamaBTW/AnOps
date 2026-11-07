@@ -10,6 +10,9 @@ import {
   IconCheck,
 } from "@/shared/components/ui/brand-icons";
 import { FinancialChart } from "@/features/finance/components/financial-chart";
+import { FinanceInsightsPanel } from "@/features/finance/components/finance-insights-panel";
+import { forecastCashFlow } from "@/features/finance/utils/insights";
+import { todayTunis } from "@/server/ai/finance/money";
 
 export const metadata: Metadata = {
   title: "Finance & Invoicing Dashboard | AnOps ERP",
@@ -19,6 +22,7 @@ export const metadata: Metadata = {
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ currency?: string }> }) {
   const { currency: requestedCurrency } = await searchParams;
   let currencies: string[] = [];
+  let openInvoices: Array<{ balance: number; dueDate?: string; currency: string }> = [];
   let kpi = {
     totalInvoiced: 0,
     totalPaid: 0,
@@ -52,7 +56,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
 
   try {
     const service = await getFinanceService();
-    [kpi, currencies] = await Promise.all([service.getDashboard(requestedCurrency?.toUpperCase()), service.listActiveCurrencies()]);
+    [kpi, currencies, openInvoices] = await Promise.all([service.getDashboard(requestedCurrency?.toUpperCase()), service.listActiveCurrencies(), service.listUnpaidInvoices()]);
   } catch (err: any) {
     if (err?.digest !== "DYNAMIC_SERVER_USAGE") {
       console.error("[FinancePage] Dashboard error:", err);
@@ -231,6 +235,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
 
       {/* Visual Chart: Income vs Expenses over Time */}
       <FinancialChart monthlySummary={kpi.monthlySummary} currency={kpi.currency} />
+
+      {(() => {
+        // The current month is still running, so the expense average uses the months before it.
+        const f = forecastCashFlow({ today: todayTunis(), openInvoices: openInvoices.filter((i) => i.currency === kpi.currency), monthlyExpenses: kpi.monthlySummary.slice(0, -1).map((m) => m.expenses) });
+        return <FinanceInsightsPanel currency={kpi.currency} forecast={f.windows} overdueIncluded={f.overdueIncluded} avgMonthlyExpenses={f.avgMonthlyExpenses} />;
+      })()}
 
       {/* Overdue Invoices Alert Table */}
       {kpi.overdueCount > 0 ? (

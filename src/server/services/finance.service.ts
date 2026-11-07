@@ -7,6 +7,7 @@ import { assertPermission, permissionsForRole, workspaceRoleFor } from "@/server
 import type { CompanyRole } from "@/features/company/types";
 import { addAmounts, computeLineTotal, computeTotals, fromCents, toCents } from "@/features/finance/utils/money";
 import { todayTunis } from "@/server/ai/finance/money";
+import { computeCustomerInsight, type CustomerInsight, type InvoiceHistory } from "@/features/finance/utils/insights";
 import { deleteReceiptFile, putReceiptFile, readReceiptFile, type ReceiptSource } from "@/server/finance/receipt-storage";
 
 export type FinanceServiceContext = {
@@ -236,6 +237,34 @@ export class FinanceService {
       createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
       updatedAt: d.updatedAt?.toISOString?.() || new Date().toISOString(),
     }));
+  }
+
+  /** Payment behaviour per customer, computed from their invoices and when each was fully paid. */
+  async getCustomerInsights(): Promise<Record<string, CustomerInsight>> {
+    this.ensurePermission("finance.read");
+    const db = await getDb();
+    const invoices = await db
+      .collection("finance_invoices")
+      .find({ companyId: this.companyId, status: { $in: ["posted", "partially_paid", "paid"] } }, { projection: { customerId: 1, status: 1, currency: 1, issueDate: 1, dueDate: 1, total: 1, balance: 1 } })
+      .toArray();
+    const lastAlloc = await db
+      .collection("finance_payment_allocations")
+      .aggregate<{ _id: ObjectId; at: Date }>([{ $match: { companyId: this.companyId } }, { $group: { _id: "$invoiceId", at: { $max: "$allocatedAt" } } }])
+      .toArray();
+    const paidAt = new Map(lastAlloc.map((a) => [a._id.toHexString(), a.at]));
+    const byCustomer = new Map<string, InvoiceHistory[]>();
+    for (const i of invoices) {
+      const key = i.customerId?.toString();
+      if (!key) continue;
+      const at = paidAt.get(i._id.toHexString());
+      byCustomer.set(key, [
+        ...(byCustomer.get(key) ?? []),
+        { status: i.status, currency: i.currency || "TND", issueDate: i.issueDate, dueDate: i.dueDate, total: i.total || 0, balance: i.balance || 0, paidAt: i.status === "paid" && at ? at.toISOString() : undefined },
+      ]);
+    }
+    const today = todayTunis();
+    const customers = await db.collection("finance_customers").find({ companyId: this.companyId }, { projection: { _id: 1 } }).toArray();
+    return Object.fromEntries(customers.map((c) => [c._id.toHexString(), computeCustomerInsight(byCustomer.get(c._id.toHexString()) ?? [], today)]));
   }
 
   async getCustomer(customerId: string) {
@@ -1039,6 +1068,7 @@ export class FinanceService {
       currency: d.currency,
       method: d.method,
       reference: d.reference,
+      notes: d.notes as string | undefined,
       unallocatedAmount: d.unallocatedAmount || 0,
       createdAt: d.createdAt?.toISOString?.() || new Date().toISOString(),
     }));

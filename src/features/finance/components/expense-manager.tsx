@@ -14,6 +14,7 @@ import {
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
 import { FormMessage } from "@/shared/components/ui/form-message";
+import type { ExpenseFlag } from "@/features/finance/utils/insights";
 
 type ExpenseItem = {
   id: string;
@@ -54,7 +55,10 @@ export function ExpenseManager({
   canManage,
   canApprove,
   canPay,
+  flags = {},
 }: {
+  /** Computed by code (see utils/insights): duplicates, unusual amounts, weekend spend, missing receipts. */
+  flags?: Record<string, ExpenseFlag[]>;
   expenses: ExpenseItem[];
   canManage: boolean;
   canApprove: boolean;
@@ -257,6 +261,24 @@ export function ExpenseManager({
                     </td>
                     <td className="py-3 px-4 font-medium text-[var(--color-text-primary)]">
                       {e.vendor || "—"}
+                      {flags[e.id]?.length ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {flags[e.id].map((f) => (
+                            <span
+                              key={f.code}
+                              title={f.detail}
+                              aria-label={`${f.label}: ${f.detail}`}
+                              className={
+                                f.code === "duplicate" || f.code === "unusual_amount"
+                                  ? "rounded bg-[var(--color-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-status-warning)]"
+                                  : "rounded bg-[var(--color-bg-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text-secondary)]"
+                              }
+                            >
+                              {f.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="py-3 px-4 text-xs">
                       {e.categoryName ? (

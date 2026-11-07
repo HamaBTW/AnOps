@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getFinanceService } from "@/server/services/finance.service";
 import { InvoiceDetailActions } from "@/features/finance/components/invoice-detail-actions";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
+import { ReminderDraft } from "@/features/finance/components/reminder-draft";
 
 export const metadata: Metadata = {
   title: "Invoice Details | Finance | AnOps ERP",
@@ -61,6 +62,10 @@ export default async function InvoiceDetailPage({
         canPost={canPost}
         canManage={canManage}
       />
+
+      {(canManage || canPost) && ["posted", "partially_paid"].includes(invoice.status) && invoice.balance > 0 && (
+        <ReminderDraft invoiceId={invoice.id} overdue={!!invoice.isOverdue} customerEmail={invoice.customer?.email} />
+      )}
 
       {/* Official Invoice Document Card */}
       <div className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-8 shadow-sm space-y-8 print:border-none print:shadow-none print:p-0 print:bg-white print:text-black">

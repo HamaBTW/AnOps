@@ -29,6 +29,8 @@ export const FINANCE_INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, createdAt: -1 }, name: "fin_extraction_created" },
     { key: { companyId: 1, receiptDocumentId: 1 }, name: "fin_extraction_document" },
   ],
+  // One cached AI dashboard summary per company, currency and day.
+  finance_ai_insights: [{ key: { companyId: 1, currency: 1, day: 1 }, name: "fin_ai_insight_day_unique", unique: true }],
   // Staff Telegram receipt capture. One link per member per company; a chat may serve several companies.
   finance_telegram_links: [
     { key: { companyId: 1, userId: 1 }, name: "fin_tg_member_unique", unique: true },

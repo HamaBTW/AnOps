@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { ExpenseManager } from "@/features/finance/components/expense-manager";
+import { computeExpenseFlags } from "@/features/finance/utils/insights";
 
 export const metadata: Metadata = {
   title: "Expenses | Finance | AnOps ERP",
@@ -39,6 +40,7 @@ export default async function FinanceExpensesPage() {
         canManage={canManage}
         canApprove={canApprove}
         canPay={canPay}
+        flags={computeExpenseFlags(expenses)}
       />
     </div>
   );

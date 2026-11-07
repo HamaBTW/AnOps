@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { PaymentManager } from "@/features/finance/components/payment-manager";
+import { suggestPaymentMatches } from "@/features/finance/utils/insights";
 
 export const metadata: Metadata = {
   title: "Payments | Finance | AnOps ERP",
@@ -39,6 +40,7 @@ export default async function FinancePaymentsPage() {
         payments={payments}
         unpaidInvoices={unpaidInvoices}
         canAllocate={canAllocate}
+        suggestions={Object.fromEntries(payments.map((p) => [p.id, suggestPaymentMatches(p, unpaidInvoices)]))}
       />
     </div>
   );

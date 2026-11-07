@@ -33,13 +33,13 @@ Plan: [oussema-finance-plan.md](oussema-finance-plan.md) · Progress log: [ousse
 - [x] **F4.5** Tests for the handler (stubbed Telegram + model) and a local polling path.
 
 ## Phase 2: AI in every screen
-- [ ] **F2.1** Expense auto-categorization (suggestion with a reason) on the expense form.
-- [ ] **F2.2** Expense anomaly flags (deterministic rules + AI explanation) on the list and approval.
-- [ ] **F2.3** Invoice from a description ("Invoice ACME for 10 chairs, due in 30 days") → prefilled builder.
-- [ ] **F2.4** Payment smart match (suggested allocations, ranked, one-click apply).
-- [ ] **F2.5** Overdue reminder email drafted by AI (editable, then sent with F5.2).
-- [ ] **F2.6** Customer insight card (days to pay, risk).
-- [ ] **F2.7** Dashboard AI insights + 30/60/90-day cash-flow forecast.
+- [x] **F2.1** Expense auto-categorization (suggestion with a reason) on the expense form.
+- [x] **F2.2** Expense anomaly flags (deterministic rules + AI explanation) on the list and approval.
+- [-] **F2.3** (moved to F3.1: the AI command center already drafts invoices from text with `/newinvoice <description>`; the Finance Copilot will expose it) Invoice from a description ("Invoice ACME for 10 chairs, due in 30 days") → prefilled builder.
+- [x] **F2.4** Payment smart match (suggested allocations, ranked, one-click apply).
+- [x] **F2.5** Overdue reminder email drafted by AI (editable, then sent with F5.2).
+- [x] **F2.6** Customer insight card (days to pay, risk).
+- [x] **F2.7** Dashboard AI insights + 30/60/90-day cash-flow forecast.
 
 ## Phase 3: Finance AI agent
 - [ ] **F3.1** Finance Copilot panel in `/finance` (finance-scoped orchestrator, aware of the current page).

@@ -180,7 +180,9 @@ Tenant Boundary: Company
 └── Feature Data (Strictly scoped by companyId):
     ├── HR: employees, departments, job_titles, attendance, leave_requests, payslips
     ├── CRM & Sales: customers, leads, opportunities, orders
-    ├── Finance: invoices, expenses, payments
+    ├── Finance: finance_customers, finance_invoices, finance_payments, finance_payment_allocations,
+    │            finance_credit_notes, finance_expenses, finance_receipt_documents (+ GridFS finance_receipts),
+    │            finance_receipt_extractions, finance_telegram_links
     └── Inventory: products, stock_movements, purchase_orders
 ```
 
@@ -210,6 +212,23 @@ npm run db:migrate-tenancy -- --apply # performs them
 ```
 
 The script (`scripts/migrate-multi-tenant.mjs`) keeps legacy company ids, so references stay valid. It makes the legacy owner the company owner, converts memberships to `company_members`, assigns unscoped HR documents to the default company "AnOps Technologies", removes `organizationId`, and renames the old collections with a `_legacy_` prefix. Nothing is deleted. It is idempotent. The older `scripts/migrate-to-multitenant.mjs` uses the same default company and is safe to run before or after it.
+
+## Finance Module
+
+Owner: Oussema. Plan, task list, progress log and manual test guide: `docs/oussema/`.
+
+| Layer | Where |
+|---|---|
+| Pages | `src/app/(dashboard)/finance/**`: dashboard, customers, invoices (list, new, `[id]`, `[id]/edit`), payments, expenses (list, new, `[id]/edit`), receipts, reports. `layout.tsx` adds the Finance Copilot; `error.tsx` keeps errors inside Finance. |
+| Routes | `GET /api/v1/finance/receipts/[id]/file` (stored receipt, company-scoped), `GET /api/v1/exports/finance-reports` (Excel). |
+| Actions | `src/features/finance/actions/*.ts`: thin; only person-facing errors are returned. |
+| Rules and data | `src/server/services/finance.service.ts` (every query scoped by `companyId`, permission checked per method, audit event per write); indexes in `finance.indexes.ts`. |
+| Receipts | `src/server/finance/receipt-storage.ts` (GridFS, type from magic bytes, SHA-256 dedupe), `receipt-extraction.ts` (pure checks), `receipt-ocr.service.ts` (vision model through the AI gate, then a draft expense only after review). |
+| Telegram | `src/server/finance/telegram-receipts.service.ts`, dispatched from the shared bot webhook in `src/server/marketing/telegram.service.ts` (`/start fin_…` and linked staff chats). |
+| AI | `finance-ai.service.ts` (category suggestion, reminders, dashboard insights), `src/server/ai/tools/finance*.ts` (Copilot tools), `orchestrator.ts` scope `"finance"`. |
+| Calculations | `src/features/finance/utils/money.ts` (cents, timbre fiscal), `utils/insights.ts` (flags, payment matching, customer behaviour, forecast). Pure and unit-tested; the screens, the Copilot and the reports use the same functions. |
+
+Rules: money is computed in whole cents and never added across currencies; multi-document writes (allocations, reversals, credit notes, applying a receipt) run in `withTransaction` with conditional updates; posted invoices change only through credit notes, voids or payments; AI proposes, people confirm.
 
 ## Adding New Features
 

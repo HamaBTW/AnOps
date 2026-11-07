@@ -15,9 +15,11 @@ import { Button } from "@/shared/components/ui/button";
 import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/status-badge";
 import { FormMessage } from "@/shared/components/ui/form-message";
 import type { ExpenseFlag } from "@/features/finance/utils/insights";
+import { Paperclip } from "lucide-react";
 
 type ExpenseItem = {
   id: string;
+  receiptDocumentId?: string;
   companyId: string;
   categoryId?: string;
   categoryName?: string;
@@ -261,6 +263,17 @@ export function ExpenseManager({
                     </td>
                     <td className="py-3 px-4 font-medium text-[var(--color-text-primary)]">
                       {e.vendor || "—"}
+                      {e.receiptDocumentId && (
+                        <a
+                          href={`/api/v1/finance/receipts/${e.receiptDocumentId}/file`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-action-primary)] hover:bg-[var(--color-action-primary)]/10"
+                          title="Open the receipt attached to this expense"
+                        >
+                          <Paperclip aria-hidden className="size-3" /> Receipt
+                        </a>
+                      )}
                       {flags[e.id]?.length ? (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {flags[e.id].map((f) => (

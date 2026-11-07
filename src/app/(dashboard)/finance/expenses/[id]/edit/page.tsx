@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Paperclip } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { getFinanceService } from "@/server/services/finance.service";
 import { ExpenseForm } from "@/features/finance/components/expense-form";
@@ -34,6 +35,11 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
           <p className="text-sm text-[var(--color-status-error)]">Rejected: {expense.rejectionReason}. Saving puts it back to draft.</p>
         ) : (
           <p className="text-sm text-[var(--color-text-secondary)]">Draft expenses can be changed until they are submitted.</p>
+        )}
+        {expense.receiptDocumentId && (
+          <a href={`/api/v1/finance/receipts/${expense.receiptDocumentId}/file`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-action-primary)] hover:underline">
+            <Paperclip aria-hidden className="size-4" /> View the attached receipt
+          </a>
         )}
       </div>
       <ExpenseForm

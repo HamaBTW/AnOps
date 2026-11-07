@@ -79,6 +79,17 @@ type Review = {
 const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf";
 const MAX_BYTES = 10 * 1024 * 1024;
 const LOW_CONFIDENCE = 0.6;
+/** Receipts per batch. They are read one after another, so a batch never floods the AI limits. */
+const MAX_BATCH = 10;
+
+type QueueItem = {
+  key: string;
+  name: string;
+  mimeType: string;
+  status: "waiting" | "reading" | "done" | "error";
+  message?: string;
+  review?: Review;
+};
 
 const fileUrl = (documentId: string) => `/api/v1/finance/receipts/${documentId}/file`;
 
@@ -126,6 +137,8 @@ export function ReceiptScanner({
   // Upload
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [batch, setBatch] = useState<File[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [pasteMode, setPasteMode] = useState(false);
   const [pastedText, setPastedText] = useState("");
@@ -148,15 +161,66 @@ export function ReceiptScanner({
     if (localPreview) URL.revokeObjectURL(localPreview);
   }, [localPreview]);
 
+  const fileProblem = (f: File) =>
+    f.size > MAX_BYTES ? "larger than 10 MB" : !ACCEPT.split(",").includes(f.type) && !/\.(jpe?g|png|webp|heic|heif|pdf)$/i.test(f.name) ? "not a photo or PDF" : null;
+
   function pickFile(f: File | null | undefined) {
     setError(null);
     if (!f) return;
     if (f.size > MAX_BYTES) return setError("Receipts can be at most 10 MB.");
-    if (!ACCEPT.split(",").includes(f.type) && !/\.(jpe?g|png|webp|heic|heif|pdf)$/i.test(f.name)) {
-      return setError("Choose a JPEG, PNG, WEBP or HEIC photo, or a PDF.");
-    }
+    if (fileProblem(f)) return setError("Choose a JPEG, PNG, WEBP or HEIC photo, or a PDF.");
     setFile(f);
+    setBatch([]);
     setPasteMode(false);
+  }
+
+  /** One file behaves as before; several become a batch read one after another. */
+  function pickFiles(list: FileList | null | undefined) {
+    const all = list ? Array.from(list) : [];
+    if (all.length <= 1) return pickFile(all[0]);
+    setError(null);
+    const skipped = all.filter((f) => fileProblem(f)).map((f) => `${f.name} (${fileProblem(f)})`);
+    const ok = all.filter((f) => !fileProblem(f));
+    const extra = ok.length > MAX_BATCH ? ok.length - MAX_BATCH : 0;
+    if (skipped.length || extra) setError([skipped.length ? `Skipped: ${skipped.join(", ")}.` : "", extra ? `Only ${MAX_BATCH} receipts at a time; ${extra} left out.` : ""].filter(Boolean).join(" "));
+    setBatch(ok.slice(0, MAX_BATCH));
+    setFile(null);
+    setPasteMode(false);
+  }
+
+  function handleBatch() {
+    const files = batch;
+    setError(null);
+    const items: QueueItem[] = files.map((f, i) => ({ key: `${Date.now()}-${i}`, name: f.name, mimeType: f.type, status: "waiting" }));
+    setQueue(items);
+    setBatch([]);
+    if (inputRef.current) inputRef.current.value = "";
+    const update = (key: string, patch: Partial<QueueItem>) => setQueue((q) => q.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+    startTransition(async () => {
+      let read = 0;
+      for (let i = 0; i < files.length; i++) {
+        update(items[i].key, { status: "reading" });
+        const fd = new FormData();
+        fd.set("receipt", files[i]);
+        if (note.trim()) fd.set("notes", note.trim());
+        const res = await scanReceiptAction(fd);
+        if (res.error || !res.data) {
+          update(items[i].key, { status: "error", message: res.error ?? "Could not be read." });
+          continue;
+        }
+        const d = res.data;
+        read++;
+        const total = d.proposed.total != null ? `${d.proposed.total.toFixed(2)} ${d.proposed.currency ?? "TND"}` : "no total";
+        update(items[i].key, {
+          status: "done",
+          message: d.duplicateFile ? "Already scanned before" : `${d.proposed.vendor ?? "Unknown vendor"} · ${total}${d.warnings.length ? ` · ${d.warnings.length} to check` : ""}`,
+          review: { extractionId: d.extractionId, receiptDocumentId: d.receiptDocumentId, mimeType: items[i].mimeType || null, proposed: d.proposed, warnings: d.warnings, duplicateFile: d.duplicateFile, possibleDuplicateExpenseId: d.possibleDuplicateExpenseId },
+        });
+      }
+      setNote("");
+      toast.success("Batch finished", `${read} of ${files.length} receipts read. Review each one to create its expense.`);
+      router.refresh();
+    });
   }
 
   function openReview(r: Review) {
@@ -270,15 +334,38 @@ export function ReceiptScanner({
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                pickFile(e.dataTransfer.files?.[0]);
+                pickFiles(e.dataTransfer.files);
               }}
               className={cn(
                 "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed p-6 text-center transition-colors focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]",
                 dragging ? "border-[var(--color-action-primary)] bg-[var(--color-action-primary)]/5" : "border-[var(--color-border-control)] hover:bg-[var(--color-bg-subtle)]"
               )}
             >
-              <input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} onChange={(e) => pickFile(e.target.files?.[0])} />
-              {file ? (
+              <input ref={inputRef} type="file" accept={ACCEPT} multiple className="sr-only" tabIndex={-1} onChange={(e) => pickFiles(e.target.files)} />
+              {batch.length > 1 ? (
+                <div className="flex w-full max-w-md items-center gap-3 text-left">
+                  <span className="flex size-16 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)]">
+                    <Upload aria-hidden className="size-7 text-[var(--color-text-secondary)]" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">{batch.length} receipts ready</p>
+                    <p className="truncate text-xs text-[var(--color-text-secondary)]" title={batch.map((f) => f.name).join(", ")}>{batch.map((f) => f.name).join(", ")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Remove the selected files"
+                    title="Remove files"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBatch([]);
+                      if (inputRef.current) inputRef.current.value = "";
+                    }}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]"
+                  >
+                    <X aria-hidden className="size-4" />
+                  </button>
+                </div>
+              ) : file ? (
                 <div className="flex w-full max-w-md items-center gap-3 text-left">
                   {localPreview ? (
                     // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
@@ -310,8 +397,8 @@ export function ReceiptScanner({
                 <>
                   <Upload aria-hidden className="size-8 text-[var(--color-text-secondary)]" />
                   <div>
-                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">Drop a receipt here, or click to choose</p>
-                    <p className="text-xs text-[var(--color-text-secondary)]">JPEG, PNG, WEBP, HEIC or PDF, up to 10 MB. On a phone you can take a photo.</p>
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">Drop receipts here, or click to choose</p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">JPEG, PNG, WEBP, HEIC or PDF, up to 10 MB each, up to {MAX_BATCH} at once. On a phone you can take a photo.</p>
                   </div>
                 </>
               )}
@@ -341,14 +428,59 @@ export function ReceiptScanner({
               {pasteMode ? <ImageIcon aria-hidden className="size-4 shrink-0" /> : <ClipboardPaste aria-hidden className="size-4 shrink-0" />}
               {pasteMode ? "Upload a file instead" : "Paste text instead"}
             </Button>
-            <Button variant="primary" onClick={handleScan} disabled={pending || (!file && !pastedText.trim())}>
+            <Button variant="primary" onClick={batch.length > 1 ? handleBatch : handleScan} disabled={pending || (!file && batch.length < 2 && !pastedText.trim())}>
               {pending && !review ? <Loader2 aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <ScanLine aria-hidden className="size-4 shrink-0" />}
-              {pending && !review ? "Reading receipt..." : "Scan receipt"}
+              {pending && !review ? "Reading..." : batch.length > 1 ? `Scan ${batch.length} receipts` : "Scan receipt"}
             </Button>
           </div>
         </section>
       ) : (
         <InfoNote>You can view scanned receipts, but your role cannot scan new ones.</InfoNote>
+      )}
+
+      {/* Batch progress */}
+      {queue.length > 0 && (
+        <section aria-labelledby="batch-heading" className="rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="batch-heading" className="text-base font-semibold text-[var(--color-text-primary)]">
+              Batch: {queue.filter((q) => q.status === "done" || q.status === "error").length} of {queue.length} processed
+            </h2>
+            {!pending && (
+              <Button variant="ghost" onClick={() => setQueue([])} aria-label="Hide the batch results">
+                <X aria-hidden className="size-4 shrink-0" /> Close
+              </Button>
+            )}
+          </div>
+          <div className="h-1.5 rounded-full bg-[var(--color-bg-subtle)]" role="progressbar" aria-valuemin={0} aria-valuemax={queue.length} aria-valuenow={queue.filter((q) => q.status === "done" || q.status === "error").length}>
+            <div className="h-1.5 rounded-full bg-[var(--color-action-primary)] transition-[width] motion-reduce:transition-none" style={{ width: `${(queue.filter((q) => q.status === "done" || q.status === "error").length / queue.length) * 100}%` }} />
+          </div>
+          <ul className="divide-y divide-[var(--color-border-subtle)]" aria-live="polite">
+            {queue.map((q) => (
+              <li key={q.key} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  {q.status === "reading" ? (
+                    <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-[var(--color-action-primary)] motion-reduce:animate-none" />
+                  ) : q.status === "done" ? (
+                    <CheckCircle2 aria-hidden className="size-4 shrink-0 text-[var(--color-status-success)]" />
+                  ) : q.status === "error" ? (
+                    <AlertTriangle aria-hidden className="size-4 shrink-0 text-[var(--color-status-error)]" />
+                  ) : (
+                    <span aria-hidden className="size-4 shrink-0 rounded-full border border-[var(--color-border-control)]" />
+                  )}
+                  <span className="truncate font-medium text-[var(--color-text-primary)]" title={q.name}>{q.name}</span>
+                  <span className={`truncate text-xs ${q.status === "error" ? "text-[var(--color-status-error)]" : "text-[var(--color-text-secondary)]"}`}>
+                    {q.status === "waiting" ? "Waiting" : q.status === "reading" ? "Reading…" : q.message}
+                  </span>
+                </span>
+                {q.review && (
+                  <Button className="min-h-[36px] px-3 text-xs" onClick={() => openReview(q.review!)}>
+                    <ScanLine aria-hidden className="size-3.5 shrink-0" /> Review
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* Review */}

@@ -5,7 +5,7 @@ Branch: `feat/finance-completion`
 
 ## Status
 - **Current phase:** Phases 0–5 committed (`8b98f9b`, `c45ba58`, `61ad22a`, `6aa418f`, `4c52f4e`); Phase 6 done, not yet committed. Telegram live test: Oussema will check on production.
-- **Still open:** F1.9 bulk receipt upload.
+- **All tasks done** (F2.3 dropped, covered by the Copilot). Not committed yet: the task check below.
 - **Decisions confirmed (2026-11-07):** GridFS for receipt files · Gemini-first vision with Groq fallback · Telegram receipts from linked staff accounts · order Phase 0 → 1 → 4 → 2 → 3 → 5 → 6
 
 ## Done
@@ -57,6 +57,9 @@ Branch: `feat/finance-completion`
 | 2026-11-07 | F6.4 | `npm run finance:seed-demo -- --company <id>` (`scripts/seed-finance-demo.ts`): 6 Tunisian customers, 14 invoices (paid, partly paid, overdue, open, draft, credited; with timbre), 8 payments incl. 2 unallocated for the matcher, 18 expenses in every state incl. a duplicate pair, all through the real FinanceService (numbering, totals, audit). Requires an explicit company; every record is tagged `demo: true`; `--clean` removes exactly those. | Run against a throwaway database: every status produced, 103 audit events; `--clean` removed all demo records and kept a non-demo customer added as a control. |
 | 2026-11-07 | F6.5 | [oussema-finance-manual-test.md](oussema-finance-manual-test.md): a step-by-step test of every screen, Telegram, the Copilot, reports and each role, with expected results on the demo data. `docs/ROLES_AND_PERMISSIONS.md` updated with what each finance permission now covers (credit notes, e-mail, reversals, self-approval rule, Telegram). | Checked against the seed data (overdue count and flags corrected). |
 | 2026-11-07 | F6.6 | Production build (`next build`) succeeds; `tsc` clean for the whole project; Finance lint clean. | See the test line below. |
+| 2026-11-08 | Task check | Every task in the list re-checked against the code. Five descriptions didn't match what was built and were corrected (F0.5 file location, F2.2 flags come from code, F4.4 real commands and hash dedupe, F5.1 credit notes need an open balance, F6.5 docs). Two real gaps were fixed: **F1.8** the receipt is now reachable from the expense (a **Receipt** link on the list and on the edit page), and **F6.5** a Finance section in `docs/ARCHITECTURE.md`. | — |
+| 2026-11-08 | F1.9 | **Bulk upload** on the Receipts page: up to 10 files per batch, invalid ones skipped with a reason, read one after another (respecting AI limits) with a progress bar, a status per file and **Review**. One file keeps the single-scan flow. | In the app: two copies of a receipt plus a zip gave "2 receipts ready" and "Skipped: notes.zip"; the first was read (MONOPRIX · 85.50 TND), the second came back "Already scanned before" with no AI call; Review opened it with the photo. Test scan deleted afterwards. |
+| 2026-11-08 | F6.6 | The HR Copilot test that timed out in the full run passes on its own (46/46): a timing flake under full-suite load, not a failure. | — |
 
 ## Pending / open questions
 - **`vite-node` is not in `package.json`**, but the project's scripts (`telegram:poll`, `marketing:seed-demo`, `finance:seed-demo`, `finance:ocr-check`) call it, so `npm run …` fails on a fresh install. Adding it as a devDependency (`npm i -D vite-node`) fixes it for the whole team; until then use `npx vite-node -c vitest.config.mts scripts/<file>.ts -- …`.

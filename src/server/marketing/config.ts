@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac } from "crypto";
-import { env } from "@/config/env";
+import { env, getBrevoEnv } from "@/config/env";
+import { parseAllowlist } from "@/server/marketing/providers/brevo/config";
 
 /**
  * Marketing integration configuration. Every integration reports its own state. A missing or invalid
@@ -78,4 +79,31 @@ export function getWorkerSecret(): string | null {
  */
 export function unsubscribeSigningKey(): Buffer {
   return createHmac("sha256", env.AUTH_SECRET).update("anops.marketing.unsubscribe.v1").digest();
+}
+
+/**
+ * The controlled-recipient list (MARKETING_SEND_ALLOWLIST), shared by every channel: email addresses, phone numbers
+ * with their plus sign, and Telegram chat ids. Null means no list is set. Read when called, never cached.
+ */
+export function getSendAllowlist(): string[] | null {
+  return parseAllowlist(getBrevoEnv().value.MARKETING_SEND_ALLOWLIST);
+}
+
+/** True only in a production deployment. Read when called. */
+export function isProductionDeployment(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+/**
+ * The central send policy, applied to every channel and provider:
+ *  - list set: only listed destinations may receive a message (a list that parses to nothing allows nobody);
+ *  - list unset, production: every eligible destination may receive one (the normal live behaviour, intentional);
+ *  - list unset, anywhere else: nobody, so a development or test run can never reach arbitrary real recipients.
+ */
+export function isAllowlistedDestination(channel: "email" | "sms" | "telegram", destination: string): boolean {
+  const list = getSendAllowlist();
+  if (!list) return isProductionDeployment();
+  const value = destination.trim().toLowerCase();
+  const key = channel === "sms" && !value.startsWith("+") ? `+${value}` : value;
+  return list.includes(key);
 }

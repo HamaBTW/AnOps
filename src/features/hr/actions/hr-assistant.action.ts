@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuthUser, type CurrentAuthContext } from "@/server/auth/rbac";
-import { consumeRateLimit } from "@/server/security/rate-limit";
+import { resolveAiAccess, assertAiReady } from "@/server/ai/access/access.service";
+import { gatedChat } from "@/server/ai/gate";
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { isAppError } from "@/shared/lib/errors";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { cancelPendingAction, confirmPendingAction } from "@/server/services/hr-ai.service";
 import { runCopilotTurn } from "@/features/hr/ai/hr-copilot";
 import type { ToolContext } from "@/features/hr/ai/tool-registry";
@@ -16,9 +20,9 @@ const chatSchema = z.object({
   userMessage: z.string().trim().min(1).max(2000),
   conversationId: z.string().max(64).optional(),
   uiLanguage: z.string().max(20).optional(),
-  /** Model and provider chosen in the UI selector. Omit for task routing. */
-  model: z.string().max(120).optional(),
-  provider: z.string().max(40).optional(),
+  /** Model and provider chosen in the UI selector. Omit for task routing. The provider must be a known one; the gate still applies. */
+  model: z.string().regex(/^[\w./:-]{1,120}$/).optional(),
+  provider: z.enum(["auto", "groq", "openrouter", "gemini"]).optional(),
   history: z
     .array(z.object({ role: z.string().max(20), content: z.string().max(20_000) }))
     .max(100)
@@ -53,7 +57,8 @@ function toolContext(authUser: CurrentAuthContext, conversationId?: string): Too
 export async function chatWithHRAssistantAction(rawData: unknown): Promise<CopilotChatResult> {
   try {
     const authUser = await requireAuthUser();
-    consumeRateLimit(`hr-copilot:${authUser.userId}`, CHAT_LIMIT_PER_MINUTE, 60_000);
+    const ws = await resolveWorkspace();
+    await consumeSharedRateLimit(ws.db, `user:${ws.userId.toHexString()}:hr-copilot`, CHAT_LIMIT_PER_MINUTE, 60_000);
 
     const parsed = chatSchema.safeParse(rawData);
     if (!parsed.success) {
@@ -61,7 +66,12 @@ export async function chatWithHRAssistantAction(rawData: unknown): Promise<Copil
     }
 
     const { userMessage, conversationId, uiLanguage, model, provider, history } = parsed.data;
+    // Every model call of the copilot goes through the AI gate. Payroll tools exist only with the sensitive-HR switch.
+    const access = await resolveAiAccess(ws);
+    assertAiReady(access);
     const reply = await runCopilotTurn(toolContext(authUser, conversationId), {
+      chat: (options) => gatedChat(ws, { module: "hr", operation: "view", feature: "hr.copilot" }, options),
+      includePayroll: access.grant.canViewSensitiveHr,
       message: userMessage,
       history,
       uiLanguage,
@@ -80,6 +90,8 @@ export async function chatWithHRAssistantAction(rawData: unknown): Promise<Copil
       balanceCard: reply.balanceCard,
     };
   } catch (err) {
+    // Refusals by the AI gate (no access, switched off, limits) are shown as they are; anything else is a fixed message.
+    if (isAppError(err)) return { ok: false, error: err.message };
     console.error("[chatWithHRAssistantAction]", err instanceof Error ? err.message : "unknown");
     return { ok: false, error: UNAVAILABLE };
   }
@@ -91,12 +103,15 @@ const actionIdSchema = z.string().min(1).max(64);
 export async function confirmAiActionAction(actionId: unknown): Promise<AiActionResult> {
   try {
     const authUser = await requireAuthUser();
+    // A change proposed by the copilot is an AI execution: it stops with the kill switch and the company switch.
+    assertAiReady(await resolveAiAccess(await resolveWorkspace()));
     const id = actionIdSchema.safeParse(actionId);
     if (!id.success) return { ok: false, error: "Action not found." };
     const result = await confirmPendingAction(id.data, toolContext(authUser));
     if (result.ok) revalidatePath("/hr");
     return result;
   } catch (err) {
+    if (isAppError(err)) return { ok: false, error: err.message };
     console.error("[confirmAiActionAction]", err instanceof Error ? err.name : "unknown");
     return { ok: false, error: "The action could not be completed. Please try again." };
   }

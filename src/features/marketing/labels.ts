@@ -9,7 +9,7 @@ import type {
 } from "@/features/marketing/types/constants";
 import type { ExclusionReason } from "@/server/marketing/eligibility";
 
-export const CHANNEL_LABELS: Record<MarketingChannel, string> = { email: "Email", sms: "SMS" };
+export const CHANNEL_LABELS: Record<MarketingChannel, string> = { email: "Email", sms: "SMS", telegram: "Telegram" };
 
 export const LIFECYCLE_LABELS: Record<LifecycleStage, string> = {
   lead: "Lead",

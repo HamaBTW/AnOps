@@ -278,7 +278,7 @@ async function main(): Promise<number> {
       try {
         const payslipsBefore = await db.collection("payslips").countDocuments({ companyId: new ObjectId(ctx.companyId) });
         const requestsBefore = await leaveCount(ctx);
-        const turn = () => runCopilotTurn({ ...ctx, conversationId: `eval-${testCase.id}` }, { message: testCase.message });
+        const turn = () => runCopilotTurn({ ...ctx, conversationId: `eval-${testCase.id}` }, { message: testCase.message, chat: (options) => ai.chat(options), includePayroll: true });
         const reply = await turn().catch(async (err: unknown) => {
           if (!(err instanceof Error) || !err.message.includes("All providers failed")) throw err;
           console.log(`      ${testCase.id}: every provider is rate limited, retrying in ${PROVIDER_RETRY_WAIT_MS / 1000}s`);

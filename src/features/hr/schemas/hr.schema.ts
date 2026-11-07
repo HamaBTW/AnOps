@@ -152,6 +152,8 @@ export const payrollGenerateSchema = z.object({
     .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Period must be in YYYY-MM format"),
   employeeIds: z.array(z.string()).optional(),
   workingDaysInMonth: z.coerce.number().min(1).max(31).default(22),
+  /** Explicitly recompute payslips already marked paid. Off by default: paid payslips are otherwise left untouched. */
+  correctPaid: z.boolean().optional(),
 });
 
 // ========================

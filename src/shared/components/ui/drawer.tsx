@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Portal } from "@/shared/components/ui/portal";
 import { cn } from "@/shared/lib/utils";
@@ -27,14 +27,16 @@ export function Drawer({
   children: React.ReactNode;
 }) {
   const titleId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // The panel is rendered by a portal one tick after `open`, so focus is moved when it actually exists.
+  const [panelMounted, setPanelMounted] = useState(false);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !panelMounted) return;
     const opener = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -70,7 +72,7 @@ export function Drawer({
       document.body.style.overflow = previousOverflow;
       opener?.focus?.();
     };
-  }, [open]);
+  }, [open, panelMounted]);
 
   if (!open) return null;
 
@@ -79,7 +81,10 @@ export function Drawer({
       <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-stretch sm:justify-end">
         <div aria-hidden onClick={onClose} className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
         <div
-          ref={panelRef}
+          ref={(node) => {
+            panelRef.current = node;
+            setPanelMounted(node !== null);
+          }}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
@@ -90,7 +95,7 @@ export function Drawer({
             "animate-in fade-in slide-in-from-bottom-4 duration-200 sm:slide-in-from-right-4 sm:slide-in-from-bottom-0 motion-reduce:animate-none"
           )}
         >
-          <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border-subtle)] px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-subtle)] px-4 py-4 sm:px-6">
             <div className="min-w-0">
               <h2 id={titleId} className="text-base font-semibold text-[var(--color-text-primary)]">{title}</h2>
               {description && <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">{description}</p>}
@@ -103,7 +108,7 @@ export function Drawer({
             >
               <X aria-hidden className="size-5" />
             </button>
-          </header>
+          </div>
           <div className="overflow-y-auto overscroll-contain px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-6">{children}</div>
         </div>
       </div>

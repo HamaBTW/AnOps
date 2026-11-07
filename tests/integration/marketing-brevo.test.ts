@@ -50,12 +50,16 @@ async function postEvent(body: unknown, token = WEBHOOK_TOKEN): Promise<{ status
 }
 
 beforeAll(async () => {
+  // These tests drive the real dispatch engine with fake providers and no recipient allowlist. Outside production the central
+  // policy refuses every destination (see marketing-allowlist.test.ts), so they run as a production deployment.
+  vi.stubEnv("NODE_ENV", "production");
   h = await createHarness();
   shared.db = h.db;
   owner = h.ctx("owner");
 });
 
 afterAll(async () => {
+  vi.unstubAllEnvs();
   await h.cleanup();
 });
 

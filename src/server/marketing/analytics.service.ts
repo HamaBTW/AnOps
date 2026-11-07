@@ -1,12 +1,12 @@
 import "server-only";
 import { MARKETING_COLLECTIONS, type CampaignDoc, type DeliveryDoc, type DeliveryEventDoc } from "@/server/marketing/documents";
-import type { CampaignStatus, DeliveryStatus, LifecycleStage } from "@/features/marketing/types/constants";
+import type { CampaignStatus, DeliveryStatus, LifecycleStage, MarketingChannel } from "@/features/marketing/types/constants";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { requireMarketing, scopeOf, toObjectId } from "@/server/marketing/common";
 import { getConfiguredProviders } from "@/server/marketing/providers";
 import { AppError } from "@/shared/lib/errors";
 import { PERMISSIONS } from "@/server/security/permissions";
-import { CAMPAIGN_STATUSES } from "@/features/marketing/types/constants";
+import { CAMPAIGN_STATUSES, MARKETING_CHANNELS } from "@/features/marketing/types/constants";
 import { DELIVERY_STATUS_ORDER } from "@/server/marketing/campaign.service";
 import { SOCIAL_POST_STATUSES, type SocialPostStatus } from "@/features/marketing/types/constants";
 
@@ -25,7 +25,10 @@ export type DashboardDto = {
   unsubscribes: number;
   socialPosts: { byStatus: Record<SocialPostStatus, number>; publishedConfirmed: number };
   ai: { generationsLast30Days: number; byStatus: Record<string, number> };
-  integrations: { email: boolean; sms: boolean };
+  integrations: { email: boolean; sms: boolean; telegram: boolean };
+  /** Campaign counts and provider-accepted deliveries per channel. */
+  channels: Record<MarketingChannel, { campaigns: number; accepted: number }>;
+  telegram: { connectedContacts: number; blockedContacts: number };
 };
 
 /**
@@ -39,7 +42,7 @@ export async function getDashboard(ctx: WorkspaceContext): Promise<DashboardDto>
   const scope = scopeOf(ctx);
   const since = new Date(Date.now() - 30 * DAY_MS);
 
-  const [contactTotal, contactActive, lifecycle, audienceTotal, audienceActive, campaignGroups, deliveryGroups, unsubscribes, postGroups, publishedConfirmed, aiTotal, aiGroups] =
+  const [contactTotal, contactActive, lifecycle, audienceTotal, audienceActive, campaignGroups, deliveryGroups, unsubscribes, postGroups, publishedConfirmed, aiTotal, aiGroups, campaignsByChannel, acceptedByChannel, telegramGroups] =
     await Promise.all([
       db.collection(MARKETING_COLLECTIONS.contacts).countDocuments(scope),
       db.collection(MARKETING_COLLECTIONS.contacts).countDocuments({ ...scope, isActive: true }),
@@ -48,11 +51,14 @@ export async function getDashboard(ctx: WorkspaceContext): Promise<DashboardDto>
       db.collection(MARKETING_COLLECTIONS.audiences).countDocuments({ ...scope, isActive: true }),
       db.collection(MARKETING_COLLECTIONS.campaigns).aggregate<{ _id: CampaignStatus; count: number }>([{ $match: scope }, { $group: { _id: "$status", count: { $sum: 1 } } }]).toArray(),
       db.collection(MARKETING_COLLECTIONS.deliveries).aggregate<{ _id: DeliveryStatus; count: number }>([{ $match: scope }, { $group: { _id: "$status", count: { $sum: 1 } } }]).toArray(),
-      db.collection(MARKETING_COLLECTIONS.consentEvents).countDocuments({ ...scope, status: "withdrawn", source: "unsubscribe_link" }),
+      db.collection(MARKETING_COLLECTIONS.consentEvents).countDocuments({ ...scope, status: "withdrawn", source: { $in: ["unsubscribe_link", "telegram_stop"] } }),
       db.collection(MARKETING_COLLECTIONS.socialPosts).aggregate<{ _id: SocialPostStatus; count: number }>([{ $match: scope }, { $group: { _id: "$status", count: { $sum: 1 } } }]).toArray(),
       db.collection(MARKETING_COLLECTIONS.socialPosts).countDocuments({ ...scope, status: "published", externalPostId: { $type: "string" } }),
       db.collection(MARKETING_COLLECTIONS.aiGenerations).countDocuments({ ...scope, createdAt: { $gte: since } }),
       db.collection(MARKETING_COLLECTIONS.aiGenerations).aggregate<{ _id: string; count: number }>([{ $match: { ...scope, createdAt: { $gte: since } } }, { $group: { _id: "$status", count: { $sum: 1 } } }]).toArray(),
+      db.collection(MARKETING_COLLECTIONS.campaigns).aggregate<{ _id: MarketingChannel; count: number }>([{ $match: scope }, { $group: { _id: "$channel", count: { $sum: 1 } } }]).toArray(),
+      db.collection(MARKETING_COLLECTIONS.deliveries).aggregate<{ _id: MarketingChannel; count: number }>([{ $match: { ...scope, status: { $in: ["sent", "delivered", "bounced", "complained"] } } }, { $group: { _id: "$channel", count: { $sum: 1 } } }]).toArray(),
+      db.collection(MARKETING_COLLECTIONS.telegramSubscriptions).aggregate<{ _id: string; count: number }>([{ $match: scope }, { $group: { _id: "$status", count: { $sum: 1 } } }]).toArray(),
     ]);
 
   const byLifecycle = zeroed(LIFECYCLE_KEYS);
@@ -65,6 +71,11 @@ export async function getDashboard(ctx: WorkspaceContext): Promise<DashboardDto>
   for (const row of postGroups) postStatus[row._id] = row.count;
   const aiStatus: Record<string, number> = {};
   for (const row of aiGroups) aiStatus[row._id] = row.count;
+
+  const channels = Object.fromEntries(MARKETING_CHANNELS.map((channel) => [channel, { campaigns: 0, accepted: 0 }])) as DashboardDto["channels"];
+  for (const row of campaignsByChannel) if (channels[row._id]) channels[row._id].campaigns = row.count;
+  for (const row of acceptedByChannel) if (channels[row._id]) channels[row._id].accepted = row.count;
+  const telegramCount = (status: string) => telegramGroups.find((row) => row._id === status)?.count ?? 0;
 
   const providers = getConfiguredProviders();
   return {
@@ -83,14 +94,16 @@ export async function getDashboard(ctx: WorkspaceContext): Promise<DashboardDto>
     unsubscribes,
     socialPosts: { byStatus: postStatus, publishedConfirmed },
     ai: { generationsLast30Days: aiTotal, byStatus: aiStatus },
-    integrations: { email: Boolean(providers.email), sms: Boolean(providers.sms) },
+    integrations: { email: Boolean(providers.email), sms: Boolean(providers.sms), telegram: Boolean(providers.telegram) },
+    channels,
+    telegram: { connectedContacts: telegramCount("active"), blockedContacts: telegramCount("blocked") },
   };
 }
 
 export type CampaignReportDto = {
   campaignId: string;
   name: string;
-  channel: "email" | "sms";
+  channel: MarketingChannel;
   status: CampaignStatus;
   snapshot: { matched: number; eligible: number; suppressed: number; exclusions: Record<string, number> } | null;
   deliveries: Record<DeliveryStatus, number>;
@@ -106,6 +119,11 @@ export type CampaignReportDto = {
     clickRate: number | null;
   };
   openTracking: "provider_reported" | "not_reported";
+  /**
+   * Which metrics the channel can report at all. Telegram gives no delivery receipt, bounce, open or click
+   * signal, so those are "unsupported" rather than zero and the UI must not show a percentage for them.
+   */
+  support: { delivery: boolean; bounce: boolean; opens: boolean; clicks: boolean };
   timeline: { day: string; sent: number }[];
   definitions: Record<string, string>;
 };
@@ -164,17 +182,24 @@ export async function getCampaignReport(ctx: WorkspaceContext, campaignIdRaw: st
     accepted,
     unsubscribes,
     rates: {
-      deliveryRate: rate(delivered, accepted),
-      bounceRate: rate(counts.bounced, accepted),
-      complaintRate: rate(counts.complained, accepted),
+      deliveryRate: campaign.channel === "telegram" ? null : rate(delivered, accepted),
+      bounceRate: campaign.channel === "telegram" ? null : rate(counts.bounced, accepted),
+      complaintRate: campaign.channel === "telegram" ? null : rate(counts.complained, accepted),
       failureRate: rate(counts.failed, eligible),
       openRateEstimate: hasOpenEvents ? rate(opened, delivered) : null,
       clickRate: hasOpenEvents || clicked > 0 ? rate(clicked, delivered) : null,
     },
-    openTracking: hasOpenEvents ? "provider_reported" : "not_reported",
+    openTracking: campaign.channel === "telegram" ? "not_reported" : hasOpenEvents ? "provider_reported" : "not_reported",
+    support:
+      campaign.channel === "telegram"
+        ? { delivery: false, bounce: false, opens: false, clicks: false }
+        : { delivery: true, bounce: true, opens: true, clicks: true },
     timeline: timeline.map((row) => ({ day: row._id, sent: row.sent })),
     definitions: {
-      accepted: "Messages the provider accepted: sent, delivered, bounced or complained.",
+      accepted:
+        campaign.channel === "telegram"
+          ? "Messages Telegram accepted and returned a message id for. Telegram does not report delivery or reading, so this is not a delivered count."
+          : "Messages the provider accepted: sent, delivered, bounced or complained.",
       deliveryRate: "Delivered ÷ accepted. Delivery receipts depend on the provider.",
       bounceRate: "Bounced ÷ accepted.",
       complaintRate: "Complained ÷ accepted.",

@@ -158,3 +158,28 @@ describe("GroqProvider.complete", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 });
+
+describe("GroqProvider reasoning budget and rejection logging", () => {
+  it("asks gpt-oss models for low reasoning effort, so thinking cannot use up the reply budget", async () => {
+    vi.stubEnv("GROQ_API_KEYS", "gsk_test_one");
+    createMock.mockResolvedValueOnce(completion("{}"));
+    // Economy mode is the caller's choice (extraction and routing do not need deep reasoning); without it the model decides.
+    await new GroqProvider().complete({ messages, jsonObject: true, economy: true });
+    expect(createMock.mock.calls[0][0]).toMatchObject({ model: "openai/gpt-oss-120b", reasoning_effort: "low", response_format: { type: "json_object" } });
+    createMock.mockResolvedValueOnce(completion("{}"));
+    await new GroqProvider().complete({ messages, jsonObject: true });
+    expect(createMock.mock.calls[1][0]).not.toHaveProperty("reasoning_effort");
+    createMock.mockResolvedValueOnce(completion("{}"));
+    await new GroqProvider().complete({ messages, model: "allam-2-7b", economy: true });
+    expect(createMock.mock.calls[2][0]).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("keeps only the short machine code of a rejection in the error, never the provider's message or the request", async () => {
+    vi.stubEnv("GROQ_API_KEYS", "gsk_test_one");
+    createMock.mockRejectedValueOnce(Object.assign(apiError(400, "echoed secret request text"), { error: { error: { code: "json_validate_failed", message: "echoed secret request text" } } }));
+    const failure = await new GroqProvider().complete({ messages }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(AiProviderError);
+    expect((failure as Error).message).toContain("HTTP 400, json_validate_failed");
+    expect((failure as Error).message).not.toContain("echoed secret");
+  });
+});

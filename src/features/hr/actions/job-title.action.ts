@@ -87,7 +87,10 @@ export async function reseedDefaultsAction(): Promise<ActionResult<boolean>> {
 
 export async function fetchJobTitleStaffAction(title: string): Promise<ActionResult<Employee[]>> {
   try {
-    const employees = await getEmployeesByJobTitle(title);
+    const user = await requireAuthUser();
+    // Colleagues' names only: salary is stripped for everyone but HR administrators.
+    const all = await getEmployeesByJobTitle(title, user.companyId);
+    const employees = user.isAdmin ? all : all.filter((e) => e.status === "active").map((e) => ({ ...e, baseSalary: 0, dateOfBirth: undefined }));
     return { success: true, data: employees };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load staff for this title.";

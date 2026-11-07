@@ -104,4 +104,18 @@ export const MARKETING_INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, requestedBy: 1, createdAt: -1 }, name: "mkt_ai_user_time" },
     { key: { companyId: 1, createdAt: -1 }, name: "mkt_ai_company_time" },
   ],
+  [MARKETING_COLLECTIONS.telegramSubscriptions]: [
+    { key: { companyId: 1, contactId: 1 }, name: "mkt_tg_sub_contact_unique", unique: true },
+    { key: { companyId: 1, chatId: 1 }, name: "mkt_tg_sub_chat_unique", unique: true },
+    { key: { companyId: 1, status: 1 }, name: "mkt_tg_sub_status" },
+  ],
+  [MARKETING_COLLECTIONS.telegramLinkTokens]: [
+    // Expired and consumed tokens are removed by MongoDB's TTL monitor.
+    { key: { expiresAt: 1 }, name: "mkt_tg_token_ttl", expireAfterSeconds: 0 },
+    { key: { companyId: 1, contactId: 1 }, name: "mkt_tg_token_contact" },
+  ],
+  [MARKETING_COLLECTIONS.telegramUpdates]: [
+    // Update ids only need to be remembered long enough to absorb Telegram's retries.
+    { key: { receivedAt: 1 }, name: "mkt_tg_update_ttl", expireAfterSeconds: 7 * 86_400 },
+  ],
 };

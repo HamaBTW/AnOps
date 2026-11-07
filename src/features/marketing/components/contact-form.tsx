@@ -10,7 +10,7 @@ import { createContactAction, updateContactAction } from "@/features/marketing/a
 import { Button, selectClass } from "@/shared/components/ui/button";
 import { useToast } from "@/shared/components/ui/toast";
 import { TextField } from "@/shared/components/ui/text-field";
-import { CONTACT_SOURCES, LIFECYCLE_STAGES, type MarketingChannel } from "@/features/marketing/types/constants";
+import { CONTACT_SOURCES, LIFECYCLE_STAGES, type DirectContactChannel } from "@/features/marketing/types/constants";
 import { LIFECYCLE_HINTS, LIFECYCLE_LABELS, SOURCE_HINTS, SOURCE_LABELS } from "@/features/marketing/labels";
 import type { ContactDto } from "@/server/marketing/contact.service";
 import type { ConsentDto } from "@/server/marketing/consent.service";
@@ -24,13 +24,13 @@ export type ContactFormValues = {
   source: (typeof CONTACT_SOURCES)[number];
   lifecycleStage: (typeof LIFECYCLE_STAGES)[number];
   isActive: boolean;
-  consent: Record<MarketingChannel, boolean>;
+  consent: Record<DirectContactChannel, boolean>;
 };
 
 const checkboxClass =
   "mt-0.5 h-4 w-4 shrink-0 rounded-[calc(var(--radius-control)*0.5)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] accent-[var(--color-action-primary)] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]";
 
-const CHANNEL_COPY: Record<MarketingChannel, { name: string; needs: string; consentHint: string }> = {
+const CHANNEL_COPY: Record<DirectContactChannel, { name: string; needs: string; consentHint: string }> = {
   email: {
     name: "Email marketing",
     needs: "Add an email address above to enable this.",
@@ -59,7 +59,7 @@ export function ContactForm({
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const initialConsent: Record<MarketingChannel, boolean> = {
+  const initialConsent: Record<DirectContactChannel, boolean> = {
     email: contact?.consent?.email?.status === "granted",
     sms: contact?.consent?.sms?.status === "granted",
   };
@@ -93,7 +93,7 @@ export function ContactForm({
   const selectedEmail = watch("email");
   const selectedPhone = watch("phone");
   const consent = watch("consent");
-  const hasAddress: Record<MarketingChannel, boolean> = {
+  const hasAddress: Record<DirectContactChannel, boolean> = {
     email: selectedEmail.trim() !== "",
     sms: selectedPhone.trim() !== "",
   };
@@ -328,10 +328,10 @@ function ConsentOption({
   registration,
 }: {
   id: string;
-  channel: MarketingChannel;
+  channel: DirectContactChannel;
   checked: boolean;
   hasAddress: boolean;
-  registration: UseFormRegisterReturn<`consent.${MarketingChannel}`>;
+  registration: UseFormRegisterReturn<`consent.${DirectContactChannel}`>;
 }) {
   return (
     <label

@@ -262,7 +262,7 @@ export async function generateReplenishmentProposal(
     horizonDays: input.horizonDays,
   }).slice(0, MAX_CANDIDATE_PRODUCTS);
 
-  const rationale = await generateRationales(lines.map((line) => toRationaleInput(line, input.horizonDays)));
+  const rationale = await generateRationales(ctx, lines.map((line) => toRationaleInput(line, input.horizonDays)));
   for (const line of lines) {
     line.rationale = rationale.byProductId.get(idKey(line.productId)) ?? null;
   }

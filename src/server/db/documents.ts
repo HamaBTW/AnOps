@@ -1,6 +1,7 @@
 import "server-only";
 import type { ObjectId } from "mongodb";
 import type { UnitOfMeasure } from "@/shared/domain/units";
+import type { AiModuleGrant, AiModuleKey, AiOperation, AiRisk } from "@/shared/domain/ai";
 
 export { UNITS_OF_MEASURE, type UnitOfMeasure } from "@/shared/domain/units";
 
@@ -29,6 +30,14 @@ export const COLLECTIONS = {
   manufacturingBoms: "manufacturing_boms",
   manufacturingWorkOrders: "manufacturing_work_orders",
   purchaseReplenishmentProposals: "purchase_replenishment_proposals",
+  aiSettings: "ai_settings",
+  aiAccessGrants: "ai_access_grants",
+  aiConversations: "ai_conversations",
+  aiPendingActions: "ai_pending_actions",
+  aiUsage: "ai_usage",
+  aiNotices: "ai_notices",
+  aiUsageModels: "ai_usage_models",
+  rateLimits: "rate_limits",
 } as const;
 
 /** Every tenant-owned document carries exactly this scope. There is no other tenancy level. */
@@ -337,4 +346,266 @@ export type ReplenishmentProposalDoc = TenantScope & {
   createdAt: Date;
   updatedAt: Date;
   version: number;
+};
+
+/**
+ * AI Command Center persistence. Every document carries companyId; conversation, pending-action,
+ * usage and notice documents also carry the owning userId. Only server/ai/data/* touches these
+ * collections, and always through a scoped filter.
+ */
+
+export type AiSettingsDoc = TenantScope & {
+  _id: ObjectId;
+  enabled: boolean;
+  retentionDays: number;
+  /** Company-wide token ceiling per UTC day across all members. 0 means no company limit. */
+  dailyTokenBudget: number;
+  /** Default per-member token ceiling per UTC day when a grant sets none. 0 means no limit. */
+  defaultUserDailyTokenCap: number;
+  version: number;
+  updatedBy: ObjectId;
+  updatedAt: Date;
+};
+
+export type AiAccessGrantDoc = TenantScope & {
+  _id: ObjectId;
+  userId: ObjectId;
+  enabled: boolean;
+  modules: Partial<Record<AiModuleKey, AiModuleGrant>>;
+  /** Owner-only flags, off by default. */
+  canAuditTranscripts: boolean;
+  canViewSensitiveHr: boolean;
+  /** Per-member token ceiling per UTC day. null falls back to the company default. */
+  dailyTokenCap: number | null;
+  version: number;
+  updatedBy: ObjectId;
+  updatedAt: Date;
+};
+
+export type AiMessagePart =
+  | { type: "text"; text: string }
+  | { type: "tool_status"; tool: string; status: "running" | "done" | "failed"; summary?: string }
+  | {
+      type: "confirmation";
+      actionId: string;
+      tool: string;
+      risk: AiRisk;
+      summary: string;
+      requiresTyped: boolean;
+      typedPhrase: string | null;
+      details: AiDiffRow[];
+    }
+  | AiRecordTablePart
+  | AiRecordCardPart
+  | AiFormPart
+  | AiEntryChoicePart
+  | AiDraftPromptPart
+  | { type: "error"; code: string; message: string }
+  | {
+      type: "access_summary";
+      state: string;
+      modules: { module: AiModuleKey; operations: AiOperation[] }[];
+      tokenCap: number;
+      usedToday: number;
+    };
+
+/** One line of a before/after review, built on the server from the validated change. */
+export type AiDiffRow = { label: string; before?: string; after: string };
+
+export type AiBadge = { label: string; tone: "success" | "warning" | "error" | "neutral" | "info" };
+
+/** A button on a row or card. The command and args are sent back to the server, which validates and re-authorises them. */
+export type AiAction = { label: string; command: string; args: Record<string, string | number | boolean>; step?: "start" | "manual" | "select" | "draft" };
+
+export type AiRecordTablePart = {
+  type: "record_table";
+  title: string;
+  columns: { key: string; label: string; align?: "left" | "right" }[];
+  rows: { id: string; cells: Record<string, string>; badge?: AiBadge; actions?: AiAction[] }[];
+  total: number;
+  emptyMessage: string;
+  /** Next and previous page requests. */
+  paging?: { page: number; totalPages: number; command: string; args: Record<string, string | number | boolean> };
+};
+
+export type AiRecordCardPart = {
+  type: "record_card";
+  title: string;
+  subtitle?: string;
+  badges?: AiBadge[];
+  fields: { label: string; value: string }[];
+  sections?: { title: string; rows: { label: string; value: string }[] }[];
+  actions?: AiAction[];
+};
+
+/** One column of a line-item field (order lines, BOM components, receipt lines). */
+export type AiLineColumn = {
+  name: string;
+  label: string;
+  /** "readonly" shows a value the person cannot change (a product name, a remaining quantity). */
+  kind: "text" | "select" | "readonly";
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  align?: "right";
+};
+
+export type AiLinesSpec = {
+  columns: AiLineColumn[];
+  /** Rows come from the record (a receipt's order lines): none can be added or removed. */
+  fixedRows?: boolean;
+  addLabel?: string;
+  maxRows: number;
+  /** Adds a "fill all remaining" shortcut: copies column `from` into column `to` on every row. */
+  fillRemaining?: { from: string; to: string };
+};
+
+export type AiFormField = {
+  name: string;
+  label: string;
+  /** "lines": `value` is a JSON array of rows (objects of strings). */
+  kind: "text" | "textarea" | "number" | "select" | "checkbox" | "lines";
+  lines?: AiLinesSpec;
+  required?: boolean;
+  value?: string | boolean;
+  hint?: string;
+  placeholder?: string;
+  options?: { value: string; label: string }[];
+};
+
+/** Where a draft value came from. Verified on the server; the model's own claim is never taken at face value. */
+export type AiProvenance = "you" | "found" | "inferred" | "default";
+
+/** Extra data on a form that an AI draft prefilled: provenance per field, open questions and, for edits, the original values. */
+export type AiDraftMeta = {
+  sourceText: string;
+  /** The record being edited or acted on, when the command has one. */
+  targetId?: string;
+  provenance: Record<string, AiProvenance>;
+  questions: { field?: string; question: string }[];
+  /** Line-item fields: provenance per cell, one entry per row, in row order. */
+  lineProvenance?: Record<string, Record<string, AiProvenance>[]>;
+  /** Edits only: the record's values before any change. */
+  original?: Record<string, string | boolean>;
+  changed?: string[];
+};
+
+export type AiEntryChoicePart = {
+  type: "entry_choice";
+  title: string;
+  description: string;
+  command: string;
+  /** Carried to either path, for example text typed after the command. */
+  args: Record<string, string | number | boolean>;
+  manual: { label: string; description: string };
+  ai: { label: string; description: string };
+  placeholder: string;
+  examples: string[];
+};
+
+export type AiDraftPromptPart = {
+  type: "draft_prompt";
+  title: string;
+  command: string;
+  args: Record<string, string | number | boolean>;
+  placeholder: string;
+  examples: string[];
+  submitLabel: string;
+};
+
+export type AiFormPart = {
+  type: "form";
+  title: string;
+  description?: string;
+  command: string;
+  /** Sent back unchanged with the submitted values, for example the selected record id. */
+  context: Record<string, string | number | boolean>;
+  fields: AiFormField[];
+  submitLabel: string;
+  draft?: AiDraftMeta;
+};
+
+export type AiMessageDoc = {
+  id: string;
+  role: "user" | "assistant";
+  parts: AiMessagePart[];
+  createdAt: Date;
+};
+
+export type AiConversationDoc = TenantScope & {
+  _id: ObjectId;
+  userId: ObjectId;
+  title: string;
+  messages: AiMessageDoc[];
+  messageCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  /** TTL anchor: updatedAt plus the company's retention days. */
+  expiresAt: Date;
+};
+
+
+export type AiPendingActionStatus = "pending" | "executing" | "executed" | "failed" | "cancelled" | "expired";
+
+export type AiPendingActionDoc = TenantScope & {
+  _id: ObjectId;
+  userId: ObjectId;
+  conversationId: ObjectId | null;
+  toolName: string;
+  module: AiModuleKey | "core";
+  operation: AiOperation;
+  risk: AiRisk;
+  args: Record<string, unknown>;
+  argsHash: string;
+  /** Built on the server from the validated args. The model never writes this text. */
+  summary: string;
+  requiresTyped: boolean;
+  typedPhrase: string | null;
+  /** Server-computed facts the run step needs (current version, names). Hashed with args. */
+  context: Record<string, unknown>;
+  details: AiDiffRow[];
+  grantVersion: number;
+  status: AiPendingActionStatus;
+  statusReason: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  resolvedAt: Date | null;
+};
+
+export type AiUsageDoc = TenantScope & {
+  _id: ObjectId;
+  /** null on the company-wide row. */
+  userId: ObjectId | null;
+  /** UTC day, YYYY-MM-DD. */
+  day: string;
+  tokens: number;
+  requests: number;
+  toolCalls: number;
+  errors: number;
+  updatedAt: Date;
+  /** Rows written after the retention change expire on their own (TTL). Older rows have none. */
+  expiresAt?: Date;
+};
+
+/** Measured tokens per provider and model for one company and UTC day. Counters only. */
+export type AiUsageModelDoc = TenantScope & {
+  _id: ObjectId;
+  day: string;
+  provider: string;
+  model: string;
+  tokens: number;
+  calls: number;
+  updatedAt: Date;
+  expiresAt: Date;
+};
+
+export type AiNoticeDoc = TenantScope & {
+  _id: ObjectId;
+  userId: ObjectId;
+  kind: "transcript_audited";
+  byUserId: ObjectId;
+  conversationId: ObjectId;
+  createdAt: Date;
+  readAt: Date | null;
+  /** TTL anchor. */
+  expiresAt: Date;
 };

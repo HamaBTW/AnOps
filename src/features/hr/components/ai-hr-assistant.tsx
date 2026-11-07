@@ -137,6 +137,7 @@ export function AIHRAssistant({
   return (
     <>
       <AgentChatPanel
+        allowModelChoice
         agentName="HR Copilot"
         agentDescription={
           <span className="flex items-center gap-1">

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { ObjectId } from "mongodb";
-import { ai } from "@/server/ai";
+import type { AiChatOptions, AiChatResult } from "@/server/ai";
 import clientPromise from "@/server/db/client";
 import { ensureIndexes } from "@/server/db/indexes";
 import { HR_AI_COLLECTIONS } from "@/server/services/hr-ai.indexes";
@@ -224,10 +224,10 @@ function toCard(
   };
 }
 
-async function askModel(facts: RequestFacts) {
+async function askModel(facts: RequestFacts, chat: (options: AiChatOptions) => Promise<AiChatResult>) {
   const content = JSON.stringify(factsForModel(facts));
   for (let attempt = 1; attempt <= MODEL_ATTEMPTS; attempt++) {
-    const result = await ai.chat({
+    const result = await chat({
       taskType: "advisor_json",
       jsonObject: true,
       temperature: 0.1,
@@ -257,7 +257,8 @@ export type AdvisorOutcome =
 export async function getLeaveRecommendation(
   requestId: string,
   actor: AiActor,
-  options: { refresh?: boolean } = {}
+  /** `chat` is the gated model call. Without it the card is always the rules card: this service cannot reach a provider. */
+  options: { refresh?: boolean; chat?: (options: AiChatOptions) => Promise<AiChatResult> } = {}
 ): Promise<AdvisorOutcome> {
   const facts = await gatherRequestFacts(requestId, actor.companyId);
   if (!facts) return { status: "not_found" };
@@ -296,13 +297,13 @@ export async function getLeaveRecommendation(
   const template = templateRecommendation(facts, blockers);
 
   // A blocked request is decided by rules, so asking a model would add nothing.
-  if (!options.refresh || blockers.length > 0) {
+  if (!options.refresh || !options.chat || blockers.length > 0) {
     return { status: "ok", card: toCard(template, facts, { blocked: blockers.length > 0, origin: "rules", generatedAt: now }) };
   }
 
   const started = Date.now();
   try {
-    const answer = await askModel(facts);
+    const answer = await askModel(facts, options.chat);
     await logAiEvent(actor, {
       eventType: "TOOL_CALL",
       toolName: "approval_advisor",

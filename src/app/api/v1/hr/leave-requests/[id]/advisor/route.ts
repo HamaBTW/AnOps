@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentAuthUser } from "@/server/auth/rbac";
+import { gatedChat } from "@/server/ai/gate";
+import { resolveWorkspace } from "@/server/tenancy/workspace";
 import { getLeaveRecommendation } from "@/server/services/hr-advisor.service";
 
 const paramsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i) });
@@ -20,6 +22,10 @@ async function respond(context: RouteContext, refresh: boolean) {
   if (!params.success) return errorResponse("NOT_FOUND", "Leave request not found.", 404);
 
   try {
+    // The model runs only on "Refresh analysis", and only through the AI gate (switches, the admin's own HR grant, limits, budget).
+    // If the gate refuses, the rules card is shown instead.
+    const ws = refresh ? await resolveWorkspace().catch(() => null) : null;
+    const chat = ws ? (options: Parameters<typeof gatedChat>[2]) => gatedChat(ws, { module: "hr", operation: "view", feature: "hr.advisor" }, options) : undefined;
     const outcome = await getLeaveRecommendation(
       params.data.id,
       {
@@ -29,7 +35,7 @@ async function respond(context: RouteContext, refresh: boolean) {
         role: user.role,
         actorName: user.employee?.fullName || user.email,
       },
-      { refresh }
+      { refresh, chat }
     );
     if (outcome.status === "not_found") return errorResponse("NOT_FOUND", "Leave request not found.", 404);
     if (outcome.status !== "ok") return errorResponse("CONFLICT", "This request is no longer pending.", 409);

@@ -24,6 +24,7 @@ listed as implemented here is not implemented.
 | Social posts (draft, schedule, publish, cancel, ambiguous-result handling) | Implemented, tested with a fake publisher |
 | AI copywriter (drafts, approval, copy into campaign/post) | Implemented, tested with a fake AI provider |
 | Analytics (dashboard, campaign report, rates with denominators) | Implemented, tested |
+| Telegram (third channel: connect, consent, campaigns, `/stop`, notifications) | Implemented; unit and integration tested against a mocked Telegram API. **Not verified against a live bot** (§14) |
 | CRM / Sales integration | Contract defined (§3). No CRM code consumes it yet |
 
 ## 2. Domain entities and collections
@@ -48,6 +49,7 @@ All collections are prefixed `marketing_` and every document carries `companyId`
 | `marketing_social_oauth_states` | Single-use OAuth states (SHA-256 of the state) | TTL on `expiresAt` |
 | `marketing_social_posts` | Post drafts, schedules and publication records | Status machine (§6) |
 | `marketing_ai_generations` | AI drafts, approval status, model metadata | Company and user indexes |
+| `marketing_telegram_subscriptions` / `_link_tokens` / `_updates` | Telegram chat links, hashed single-use tokens, processed update ids | See §14.1 |
 
 Indexes are declared in `src/server/marketing/indexes.ts` and merged into `src/server/db/indexes.ts`. They run
 through the existing idempotent `ensureIndexes()`.
@@ -95,6 +97,7 @@ API routes:
 | `/api/v1/marketing/worker` | POST | `Authorization: Bearer MARKETING_WORKER_SECRET` | Runs a bounded batch of due jobs |
 | `/api/v1/marketing/webhooks/delivery` | POST | `x-anops-signature` HMAC | Records provider delivery events |
 | `/api/v1/marketing/social/callback` | GET | Session + single-use OAuth state | Completes Facebook Page connection |
+| `/api/v1/marketing/webhooks/telegram` | POST | `X-Telegram-Bot-Api-Secret-Token` | Receives Telegram updates (`/start`, `/stop`, blocked) |
 
 Server actions live in `src/features/marketing/actions/`. Every action validates input with the shared Zod schema,
 resolves the workspace, checks permission in the service, and returns `ActionResult`.
@@ -410,3 +413,134 @@ social and AI tests mock the Meta configuration, Graph API and AI provider. No r
 - No contact merge or duplicate-resolution workflow. Two contacts with the same email in one company are blocked at creation; existing duplicates created by other means must be resolved by hand.
 - No contact import (CSV). Contacts are created one at a time.
 - No Instagram publishing, no provider-side revocation on disconnect, and no social post analytics.
+- Telegram: not verified against a live bot; no delivery, read or click data exists; `/stop` applies to every company that linked the chat; rich formatting (HTML/MarkdownV2), media and inline buttons are not supported; the polling script is for development only.
+
+## 14. Telegram channel
+
+Telegram is a third campaign channel next to email and SMS. It uses the same contacts, audiences, templates, campaigns,
+approval workflow, snapshot, `marketing_jobs` worker, deliveries and reports. There is no separate Telegram engine.
+**Status: implemented and tested with a mocked Telegram API. Not verified against a live bot.** The checks below under
+"Live verification" are still to be done by someone holding the real bot token.
+
+### 14.1 Data
+
+| Collection | Purpose | Key constraints |
+| --- | --- | --- |
+| `marketing_telegram_subscriptions` | One linked chat per contact (`chatId`, `username`, `status` active / blocked / disconnected, bounded `history`) | Unique `(companyId, contactId)` and unique `(companyId, chatId)` |
+| `marketing_telegram_link_tokens` | Single-use connection tokens, stored as SHA-256 only | TTL on `expiresAt` (15 minutes) |
+| `marketing_telegram_updates` | Processed Telegram `update_id`s, so a retry is a no-op | TTL of 7 days |
+
+Consent, suppression and deliveries reuse the existing collections with `channel: "telegram"`. The suppression destination and
+the delivery destination are the chat id. `providerMessageId` is stored as `<chatId>:<messageId>` because Telegram message ids
+are only unique within a chat and the delivery index requires a globally unique value.
+
+### 14.2 Connecting a contact
+
+1. A user with `marketing.contact.manage` opens a contact and presses **Connect Telegram**. The server creates a 256-bit random
+   token, stores only its hash (15 minute expiry) and returns `https://t.me/<bot>?start=<token>`. Creating a new link deletes
+   unused earlier links for that contact.
+2. The customer opens the link and presses Start. Telegram posts `/start <token>` to the webhook.
+3. The webhook consumes the token atomically (`consumedAt: null` and not expired), reads the company and contact from the stored
+   token, and writes the chat id. Replays, expired and unknown tokens all answer "invalid".
+4. The contact page polls every 4 seconds while a link is waiting and flips to **Connected**.
+
+Rules: only private chats are linked; a chat already linked to a *different* contact of the same company is refused; the same
+Telegram account can be linked to contacts of different companies independently; no browser request can supply a chat id.
+**Connecting is not consent.** It records no consent event.
+
+### 14.3 Consent and eligibility
+
+- `telegram` is a third consent channel. Email or SMS consent never authorises it.
+- Recording Telegram consent (contact page, consent form) needs an active chat link and the `marketing.consent.manage` permission.
+- Saving the contact form never grants or withdraws Telegram consent (the form only manages email and SMS).
+- Eligibility adds one check for Telegram: an `active` subscription must exist (otherwise `missing_destination`, shown as
+  "No valid address or chat"). The same rule set runs at approval, at snapshot creation and immediately before each send.
+- `/stop` (sent in the chat) withdraws Telegram consent, adds the chat to the suppression list and attributes the opt-out to the most
+  recent Telegram campaign. Because one bot serves every company and the customer cannot name one, `/stop` applies to **every company**
+  that linked that chat. A later explicit consent grant by a team member lifts the `/stop` suppression for that chat. Bounce or manual
+  suppressions are not lifted.
+- If Telegram reports the bot was blocked or the chat does not exist, the subscription becomes `blocked` and later campaigns skip it.
+  The customer must press Start on a new link. Telegram's `my_chat_member` updates (blocked / unblocked) do the same.
+
+### 14.4 Messages
+
+Plain text only. No `parse_mode` is ever sent, so customer-supplied values cannot become markup. Allowed variables: `{{first_name}}`,
+`{{last_name}}`, `{{company_name}}`. There is no subject, no design and no unsubscribe link. Every message ends with a blank line and
+`Send /stop to stop receiving marketing messages.` The body limit is 4,096 minus that footer (`TELEGRAM_BODY_MAX`). A message that
+would exceed Telegram's 4,096 limit after variable substitution fails with `CONTENT_INVALID`; nothing is truncated.
+
+### 14.5 Sending
+
+- Provider: `src/server/marketing/providers/telegram/` (`config.ts`, `client.ts`, `adapters.ts`). Registered only when
+  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` and `TELEGRAM_WEBHOOK_SECRET` are all valid.
+- Pacing: 50 ms between sends (about 20 per second, under Telegram's documented 30 per second broadcast limit), sequential, inside the
+  existing 20-delivery batch.
+- Errors: HTTP 429 is retryable and the retry is never earlier than Telegram's `retry_after`. 403 (blocked), 400 chat not found, 401
+  and 400 bad content are definite failures and are not retried. Timeouts, 5xx, an unreadable reply, or an `ok` reply without a message
+  id are `AMBIGUOUS_SEND` and are never retried automatically.
+- `sent` means Telegram accepted the message and returned a message id. **Telegram gives no delivery, read or click signal**, so
+  `delivered`, `opened` and `clicked` are never recorded for it.
+- `MARKETING_SEND_ALLOWLIST` also applies to Telegram; list chat ids (digits) there for controlled first sends.
+
+### 14.6 Analytics
+
+Telegram reports show Eligible, Suppressed, Accepted by Telegram, Failed, Pending and Unsubscribes. Delivery rate, bounce rate,
+complaint rate, open rate and click rate are marked **"Not reported by Telegram"** instead of showing 0 %. The Overview has a Channels
+summary with campaigns, accepted messages and connected / unreachable contacts per channel.
+
+### 14.7 Notification service for other modules
+
+`sendTelegramNotification(db, { companyId, contactId, message, purpose, actorUserId, requestId })` in
+`src/server/marketing/telegram-notify.ts`. The destination is always read from the stored subscription of that company and contact;
+callers cannot pass a chat id. `purpose: "transactional"` needs an active chat link but no marketing consent and adds no opt-out
+line. `purpose: "marketing"` runs the full eligibility rules and adds the opt-out line. The result is audited without the text.
+No other module calls it yet.
+
+### 14.8 Setup
+
+1. In Telegram, open `@BotFather` and send `/newbot`. Name it **AnOps Notifications** and choose a username ending in `bot`. BotFather
+   returns the token. Optionally set the description with `/setdescription` (text in `docs/TELEGRAM_INTEGRATION.md` section 2) and the
+   command list with `/setcommands`: `start - Connect your account` and `stop - Stop marketing messages`.
+2. Set in the server environment (never with a `NEXT_PUBLIC_` prefix):
+   ```env
+   TELEGRAM_BOT_TOKEN=<token from BotFather>
+   TELEGRAM_BOT_USERNAME=<username without @>
+   TELEGRAM_WEBHOOK_SECRET=<openssl rand -hex 32>
+   ```
+3. Set `APP_URL` to the public **HTTPS** address, then open **Marketing -> Integrations**. Press **Test connection** (calls `getMe`;
+   sends nothing) and **Register webhook** (calls `setWebhook` with the secret and `allowed_updates: message, my_chat_member`, then reads
+   `getWebhookInfo` back and only reports success if Telegram shows the same address).
+4. The webhook endpoint is `POST /api/v1/marketing/webhooks/telegram`. It requires the `X-Telegram-Bot-Api-Secret-Token` header, compared
+   in constant time. Wrong or missing secret: 401. Not configured: 503. Bad body: 400 / 413. Processing failure: 500 so Telegram retries.
+5. Local development (no public address): run `npm run telegram:poll`. It refuses to start while a webhook is registered; remove one
+   with `npm run telegram:poll -- --delete-webhook`. Never run polling and a webhook together.
+6. A worker must still call `/api/v1/marketing/worker` every minute (section 7). Telegram campaigns wait for it like any other.
+
+### 14.9 Live verification still required
+
+Nothing in this repository has been run against Telegram itself. Before relying on it: (1) press Test connection with the real token;
+(2) register the webhook and confirm the page says confirmed; (3) connect your own account through a link and receive the reply;
+(4) grant consent, approve and send a campaign to yourself (use `MARKETING_SEND_ALLOWLIST=<your chat id>`); (5) send `/stop` and
+confirm a new campaign skips you; (6) block the bot, send again, and confirm the contact turns Unreachable.
+
+### 14.10 Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| Integrations says Setup needed and names a variable | The variable is missing or malformed (token must look like `123456:ABC...`, secret 32-256 of `A-Za-z0-9_-`) |
+| Test fails with `AUTH_REJECTED` | Wrong or revoked token. Re-issue it in BotFather |
+| Test fails with `USERNAME_MISMATCH` | `TELEGRAM_BOT_USERNAME` is not the bot that owns the token |
+| Register webhook button missing | `APP_URL` is local or not HTTPS. Use polling locally |
+| Pressing Start does nothing | Webhook not registered, secret mismatch (check the 401s in your logs), or polling is not running |
+| "Link is invalid" reply | Expired (15 min), already used, or replaced by a newer link |
+| Contact shows Unreachable | The customer blocked the bot. Ask for a new link |
+| Campaign shows everyone suppressed | No Telegram consent recorded, or the chat is not linked. See the exclusion breakdown |
+
+### 14.11 Security notes
+
+The bot token stays on the server and is never put in a DTO, log or error message (the API URL contains it, so request URLs are never
+logged). Link tokens and OAuth-style secrets are hashed at rest. Webhook updates are validated with Zod, deduplicated by `update_id`
+(the claim is released if processing fails, so Telegram's retry still works) and never trusted for company identity. Link creation,
+disconnects and the integration actions are rate limited per user. Audit events: `marketing.telegram.link_created`, `.connected`,
+`.disconnected`, `.stopped`, `.blocked`, `.unblocked`, `.notification_sent`, `.notification_failed`, plus the existing consent and
+campaign events. Webhook-driven events use the contact's last editor as the audit actor because no user is present.

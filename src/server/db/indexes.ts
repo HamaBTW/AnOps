@@ -93,6 +93,51 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { companyId: 1, orderNumber: 1 }, name: "wo_number_unique", unique: true },
     { key: { companyId: 1, status: 1, createdAt: -1 }, name: "wo_status_time" },
   ],
+  [COLLECTIONS.aiSettings]: [{ key: { companyId: 1 }, name: "ai_settings_company_unique", unique: true }],
+  [COLLECTIONS.aiAccessGrants]: [
+    { key: { companyId: 1, userId: 1 }, name: "ai_grant_member_unique", unique: true },
+    { key: { companyId: 1, enabled: 1 }, name: "ai_grant_enabled" },
+  ],
+  [COLLECTIONS.aiConversations]: [
+    { key: { companyId: 1, userId: 1, updatedAt: -1 }, name: "ai_conversation_owner_time" },
+    // Retention: documents leave when expiresAt passes. The service sets expiresAt on every write.
+    { key: { expiresAt: 1 }, name: "ai_conversation_ttl", expireAfterSeconds: 0 },
+  ],
+  [COLLECTIONS.aiPendingActions]: [
+    { key: { companyId: 1, userId: 1, status: 1, createdAt: -1 }, name: "ai_pending_owner_status" },
+    // Outcome rows stay a day past expiry so a late confirm gets a precise answer, then they are removed.
+    { key: { expiresAt: 1 }, name: "ai_pending_ttl", expireAfterSeconds: 86_400 },
+  ],
+  [COLLECTIONS.aiUsage]: [
+    { key: { companyId: 1, day: 1, userId: 1 }, name: "ai_usage_day_member_unique", unique: true },
+    // Rows written after this change carry expiresAt (400 days). Older rows have none and are kept.
+    { key: { expiresAt: 1 }, name: "ai_usage_ttl", expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $exists: true } } },
+  ],
+  [COLLECTIONS.aiUsageModels]: [
+    { key: { companyId: 1, day: 1, provider: 1, model: 1 }, name: "ai_usage_model_day_unique", unique: true },
+    { key: { expiresAt: 1 }, name: "ai_usage_model_ttl", expireAfterSeconds: 0 },
+  ],
+  // Shared rate-limit windows. Each window is one document and leaves by TTL, so the collection never grows.
+  [COLLECTIONS.rateLimits]: [{ key: { expiresAt: 1 }, name: "rate_limit_ttl", expireAfterSeconds: 0 }],
+  [COLLECTIONS.aiNotices]: [
+    { key: { companyId: 1, userId: 1, createdAt: -1 }, name: "ai_notice_owner_time" },
+    { key: { expiresAt: 1 }, name: "ai_notice_ttl", expireAfterSeconds: 0 },
+  ],
+  // Community. Every query filters on companyId first; these back the list, thread and chat reads.
+  blog_posts: [
+    { key: { companyId: 1, status: 1, updatedAt: -1 }, name: "blog_company_status_time" },
+    { key: { companyId: 1, slug: 1 }, name: "blog_company_slug" },
+  ],
+  forum_topics: [{ key: { companyId: 1, isPinned: -1, lastReplyAt: -1 }, name: "topic_company_pinned_time" }],
+  forum_replies: [{ key: { companyId: 1, topicId: 1, createdAt: 1 }, name: "reply_company_topic_time" }],
+  comments: [{ key: { companyId: 1, targetType: 1, targetId: 1, createdAt: -1 }, name: "comment_company_target_time" }],
+  content_categories: [{ key: { companyId: 1, name: 1 }, name: "category_company_name" }],
+  chat_conversations: [
+    { key: { companyId: 1, status: 1, lastMessageAt: -1 }, name: "chat_company_status_time" },
+    { key: { companyId: 1, visitorUserId: 1, lastMessageAt: -1 }, name: "chat_company_visitor_time" },
+  ],
+  chat_messages: [{ key: { companyId: 1, conversationId: 1, sentAt: 1 }, name: "chatmsg_company_conversation_time" }],
+  ai_summaries: [{ key: { companyId: 1, blogPostId: 1, generatedAt: -1 }, name: "summary_company_post_time" }],
   ...MARKETING_INDEXES,
   ...HR_AI_INDEXES,
 };

@@ -27,7 +27,7 @@ function runTests() {
 
   // Sat 2026-10-10 to Sun 2026-10-11
   const weekendOnly = calculateBusinessDays("2026-10-10", "2026-10-11");
-  assert(weekendOnly === 1, `Weekend fallback should be at least 1 day`);
+  assert(weekendOnly === 0, `A weekend-only period has no working days`);
   console.log("  ✓ Business days calculation passed");
 
   // Test 2: Standard net salary with zero unpaid leave

@@ -52,6 +52,8 @@ export type AiCompletionOptions = {
   economy?: boolean;
   /** Tools the model may call. Results come back in `AiCompletionResult.toolCalls`. */
   tools?: AiToolDefinition[];
+  /** Aborts the provider request, for example when the person closes the stream. */
+  signal?: AbortSignal;
 };
 
 export type AiCompletionResult = {

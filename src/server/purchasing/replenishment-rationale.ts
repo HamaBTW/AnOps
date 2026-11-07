@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
-import { ai } from "@/server/ai";
+import { gatedComplete } from "@/server/ai/gate";
+import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { groqModelOverride } from "@/server/ai/config";
 
 /**
@@ -136,7 +137,7 @@ export function parseRationales(text: string, factsById: Map<string, RationaleFa
   return result;
 }
 
-export async function generateRationales(lines: RationaleFacts[]): Promise<RationaleOutcome> {
+export async function generateRationales(ctx: WorkspaceContext, lines: RationaleFacts[]): Promise<RationaleOutcome> {
   const empty = new Map<string, string>();
   if (lines.length === 0) {
     return { status: "unavailable", provider: null, model: null, byProductId: empty };
@@ -144,7 +145,7 @@ export async function generateRationales(lines: RationaleFacts[]): Promise<Ratio
 
   const factsById = new Map(lines.map((line) => [line.productId, line]));
   try {
-    const result = await ai.complete({
+    const result = await gatedComplete(ctx, { module: "purchasing", operation: "create", feature: "purchasing.rationale" }, {
       provider: "groq",
       model: groqModelOverride(),
       jsonObject: true,

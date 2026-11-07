@@ -155,3 +155,37 @@ export function getBrevoEnv(): { value: BrevoEnv; issues: string[] } {
       };
   return brevoEnvCache;
 }
+
+/**
+ * Telegram bot settings. Validated lazily like the Brevo settings, so a malformed value disables only the
+ * Telegram channel. Errors name variables and rules, never values. These are server-only: no NEXT_PUBLIC_ name.
+ */
+const telegramEnvSchema = z.object({
+  TELEGRAM_BOT_TOKEN: z.string().regex(/^\d{5,20}:[A-Za-z0-9_-]{30,80}$/, "must look like <bot id>:<secret>").optional(),
+  TELEGRAM_BOT_USERNAME: z
+    .string()
+    .regex(/^@?[A-Za-z][A-Za-z0-9_]{4,31}$/, "must be a Telegram username such as AnOpsNotificationsBot")
+    .optional(),
+  TELEGRAM_WEBHOOK_SECRET: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{32,256}$/, "must be 32-256 characters of letters, digits, _ or -")
+    .optional(),
+});
+
+export type TelegramEnv = z.infer<typeof telegramEnvSchema>;
+
+let telegramEnvCache: { value: TelegramEnv; issues: string[] } | null = null;
+
+export function getTelegramEnv(): { value: TelegramEnv; issues: string[] } {
+  if (telegramEnvCache) return telegramEnvCache;
+  const blank = (value: string | undefined) => (value && value.trim() !== "" ? value.trim() : undefined);
+  const parsed = telegramEnvSchema.safeParse({
+    TELEGRAM_BOT_TOKEN: blank(process.env.TELEGRAM_BOT_TOKEN),
+    TELEGRAM_BOT_USERNAME: blank(process.env.TELEGRAM_BOT_USERNAME),
+    TELEGRAM_WEBHOOK_SECRET: blank(process.env.TELEGRAM_WEBHOOK_SECRET),
+  });
+  telegramEnvCache = parsed.success
+    ? { value: parsed.data, issues: [] }
+    : { value: {}, issues: parsed.error.issues.map((issue) => `${String(issue.path[0])}: ${issue.message}`) };
+  return telegramEnvCache;
+}

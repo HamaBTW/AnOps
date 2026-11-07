@@ -13,6 +13,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/stubs/env-defaults.ts"],
+    globalSetup: ["tests/stubs/require-mongo.ts"],
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },

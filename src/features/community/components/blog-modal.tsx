@@ -15,6 +15,8 @@ interface BlogModalProps {
   categories: ContentCategory[];
   postToEdit?: BlogPost | null;
   onSaved?: (post: BlogPost) => void;
+  /** Only administrators publish. Everyone else saves drafts. */
+  canPublish?: boolean;
 }
 
 export function BlogModal({
@@ -23,6 +25,7 @@ export function BlogModal({
   categories,
   postToEdit,
   onSaved,
+  canPublish = false,
 }: BlogModalProps) {
   if (!isOpen) return null;
 
@@ -39,6 +42,7 @@ export function BlogModal({
         categories={categories}
         postToEdit={postToEdit}
         onSaved={onSaved}
+        canPublish={canPublish}
       />
     </div>
   );
@@ -49,7 +53,9 @@ function BlogModalForm({
   categories,
   postToEdit,
   onSaved,
+  canPublish,
 }: {
+  canPublish: boolean;
   onClose: () => void;
   categories: ContentCategory[];
   postToEdit?: BlogPost | null;
@@ -66,7 +72,7 @@ function BlogModalForm({
   );
   const [coverImage, setCoverImage] = useState(postToEdit?.coverImage || "");
   const [status, setStatus] = useState<"draft" | "published">(
-    postToEdit?.status === "draft" ? "draft" : "published"
+    !canPublish || postToEdit?.status === "draft" || !postToEdit ? "draft" : "published"
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -252,6 +258,9 @@ function BlogModalForm({
         </div>
 
         <div className="flex items-center justify-between pt-2">
+          {!canPublish ? (
+            <p className="text-xs text-[var(--color-text-secondary)]">Saved as a draft. An administrator publishes it.</p>
+          ) : (
           <div className="flex items-center gap-2">
             <label className="text-xs font-semibold text-[var(--color-text-primary)]">
               Status:
@@ -281,6 +290,7 @@ function BlogModalForm({
               </button>
             </div>
           </div>
+          )}
 
           <div className="flex items-center gap-2">
             <button

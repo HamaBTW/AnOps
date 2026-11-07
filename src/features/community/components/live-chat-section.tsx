@@ -134,7 +134,7 @@ export function LiveChatSection({
     const bodyToSend = inputBody.trim();
     setInputBody("");
 
-    const localId = "temp_" + Math.random().toString(36).slice(2, 9);
+    const localId = `temp_${crypto.randomUUID()}`;
     const tempMsg: ChatMessage = {
       id: localId,
       companyId: activeConversation?.companyId || "",
@@ -152,8 +152,6 @@ export function LiveChatSection({
       const res = await sendChatMessageAction({
         conversationId: selectedConvId,
         body: bodyToSend,
-        senderType: "agent",
-        messageType: "text",
       });
 
       if (res.success && res.data) {

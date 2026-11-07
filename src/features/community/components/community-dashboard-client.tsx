@@ -31,7 +31,7 @@ interface CommunityDashboardClientProps {
   initialStats: CommunityDashboardStats;
   currentUserId?: string;
   currentUserName?: string;
-  userRole?: string;
+  access: { canWrite: boolean; canSupport: boolean; canAdmin: boolean };
   companyName: string;
 }
 
@@ -43,13 +43,13 @@ export function CommunityDashboardClient({
   initialStats,
   currentUserId,
   currentUserName = "Fatma",
-  userRole = "hr_admin",
+  access,
   companyName,
 }: CommunityDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<string>("blogs");
-  const isAdmin = userRole === "hr_admin" || userRole === "admin" || userRole === "owner";
+  const isAdmin = access.canAdmin;
 
-  const tabs = [
+  const allTabs = [
     {
       id: "blogs",
       label: "Blog & Knowledge Articles",
@@ -76,6 +76,9 @@ export function CommunityDashboardClient({
       aiBadge: true,
     },
   ];
+
+  // The support console is for support agents; everyone else reaches support through the chat widget.
+  const tabs = allTabs.filter((tab) => tab.id !== "chat" || access.canSupport);
 
   return (
     <div className="space-y-6 pb-12">
@@ -177,6 +180,8 @@ export function CommunityDashboardClient({
             categories={initialCategories}
             currentUserId={currentUserId}
             currentUserName={currentUserName}
+            canWrite={access.canWrite}
+            canAdmin={access.canAdmin}
           />
         )}
 
@@ -187,10 +192,11 @@ export function CommunityDashboardClient({
             currentUserId={currentUserId}
             currentUserName={currentUserName}
             isAdmin={isAdmin}
+            canWrite={access.canWrite}
           />
         )}
 
-        {activeTab === "chat" && (
+        {activeTab === "chat" && access.canSupport && (
           <LiveChatSection
             initialConversations={initialConversations}
             currentUserId={currentUserId}

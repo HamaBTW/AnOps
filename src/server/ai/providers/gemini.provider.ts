@@ -6,6 +6,8 @@ import { KeyPool } from "@/server/ai/key-pool";
 import type { AiMessage, AiProvider, AiCompletionOptions, AiCompletionResult, AiToolDefinition } from "@/server/ai/types";
 import { AiProviderError } from "@/server/ai/types";
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
 /**
  * Free Gemini models (Gemini flash variants + Gemma family).
  * Full list: https://ai.google.dev/gemini-api/docs/models/gemini
@@ -90,7 +92,7 @@ export class GeminiProvider implements AiProvider {
               }
             : {}),
           ...(options.tools?.length ? { tools: toGeminiTools(options.tools) } : {}),
-        });
+        }, { timeout: REQUEST_TIMEOUT_MS, ...(options.signal ? { signal: options.signal } : {}) });
         const text = result.response.text();
         const toolCalls = result.response.functionCalls()?.map((call, index) => ({
           id: `gemini-call-${index}`,

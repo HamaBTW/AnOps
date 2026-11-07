@@ -1,7 +1,6 @@
 import "server-only";
 
-import { ai } from "@/server/ai";
-import type { AiChatResult, AiMessage, AiTaskType } from "@/server/ai";
+import type { AiChatOptions, AiChatResult, AiMessage, AiTaskType } from "@/server/ai";
 import { getEmployees } from "@/server/services/hr.service";
 import { cancellationBlocker, logAiEvent } from "@/server/services/hr-ai.service";
 import { formatDateYMD } from "@/features/hr/utils/date-utils";
@@ -61,6 +60,13 @@ export type CopilotInput = {
   uiLanguage?: string;
   provider?: string;
   model?: string;
+  /**
+   * How the copilot reaches a model. Always the AI gate (access, kill switch, limits, token budget); the copilot has no other
+   * way to call a provider.
+   */
+  chat: (options: AiChatOptions) => Promise<AiChatResult>;
+  /** Payroll tools exist for this member only when they hold the sensitive-HR switch. */
+  includePayroll: boolean;
 };
 
 export type CopilotReply = {
@@ -224,6 +230,9 @@ function rememberPolicyAnswer(key: string, reply: CopilotReply): void {
  *
  * @throws Error when every provider fails and there is nothing useful to show instead.
  */
+/** Tools that put salary or payroll figures in front of the model. They need the sensitive-HR switch. */
+export const PAYROLL_TOOLS = new Set(["get_my_payroll_preview", "generate_payroll_preview"]);
+
 export async function runCopilotTurn(ctx: ToolContext, input: CopilotInput): Promise<CopilotReply> {
   const blocked = await checkInput(ctx, input.message);
   if (blocked) return blocked;
@@ -233,7 +242,7 @@ export async function runCopilotTurn(ctx: ToolContext, input: CopilotInput): Pro
     return emptyReply({ text: noEmployeeProfile(detectChatLanguage(input.message)) });
   }
 
-  const tools = toolsForContext(HR_TOOLS, ctx);
+  const tools = toolsForContext(HR_TOOLS, ctx).filter((t) => input.includePayroll || !PAYROLL_TOOLS.has(t.name));
   const fast = (await tryFastAnswer(ctx, input.message, tools)) ?? (await tryDirectCancel(ctx, input.message, tools));
   if (fast) return fast;
 
@@ -276,7 +285,7 @@ export async function runCopilotTurn(ctx: ToolContext, input: CopilotInput): Pro
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const useTools = offerTools && round < MAX_TOOL_ROUNDS;
     try {
-      last = await ai.chat({
+      last = await input.chat({
         taskType,
         messages: useTools ? messages : [{ role: "system", content: ANSWER_PROMPT }, ...messages.slice(1)],
         tools: useTools ? definitions : undefined,

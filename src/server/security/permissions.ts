@@ -10,6 +10,8 @@ import { AppError } from "@/shared/lib/errors";
 export const PERMISSIONS = {
   HR_READ: "hr.read",
   HR_MANAGE: "hr.manage",
+  /** HR changes and approvals made through the AI Command Center: owners and admins only, matching the HR server actions. */
+  HR_ADMIN: "hr.admin",
   HR_ATTENDANCE_RECORD: "hr.attendance.record",
   INVENTORY_READ: "inventory.read",
   INVENTORY_PRODUCT_MANAGE: "inventory.product.manage",
@@ -47,6 +49,18 @@ export const PERMISSIONS = {
   MARKETING_SOCIAL_MANAGE: "marketing.social.manage",
   MARKETING_SOCIAL_PUBLISH: "marketing.social.publish",
   MARKETING_AI_GENERATE: "marketing.ai.generate",
+  /** Approvals and sends made through the AI Command Center: owners and admins only. The ceiling for AI approve and delete cells. */
+  MARKETING_ADMIN: "marketing.admin",
+  COMMUNITY_READ: "community.read",
+  /** Draft articles, start forum topics, reply and comment. Operators and above. */
+  COMMUNITY_WRITE: "community.write",
+  /** Answer live-chat conversations as an agent and close them. Operators and above. */
+  COMMUNITY_SUPPORT: "community.support",
+  /** Publish, archive, pin and delete community content, and seed demo data. Owners and admins only. The ceiling for AI approve and delete cells. */
+  COMMUNITY_ADMIN: "community.admin",
+  /** Owner/admin only. Using AI needs no role permission: the company grant plus each cell's own module permission is the gate. */
+  AI_ACCESS_MANAGE: "ai.access.manage",
+  AI_USAGE_VIEW: "ai.usage.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -78,6 +92,7 @@ const READ_PERMISSIONS: Permission[] = [
   PERMISSIONS.FINANCE_READ,
   PERMISSIONS.FINANCE_REPORT_VIEW,
   PERMISSIONS.MARKETING_READ,
+  PERMISSIONS.COMMUNITY_READ,
 ];
 
 /**
@@ -117,6 +132,8 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
     PERMISSIONS.MARKETING_SOCIAL_MANAGE,
     PERMISSIONS.MARKETING_SOCIAL_PUBLISH,
     PERMISSIONS.MARKETING_AI_GENERATE,
+    PERMISSIONS.COMMUNITY_WRITE,
+    PERMISSIONS.COMMUNITY_SUPPORT,
   ],
   viewer: [...READ_PERMISSIONS],
 };

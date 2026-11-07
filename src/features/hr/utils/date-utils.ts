@@ -27,8 +27,8 @@ export function calculateBusinessDays(
     cur.setDate(cur.getDate() + 1);
   }
 
-  // If start and end are on a single weekend or holiday day, keep at least 1 or 0
-  return count > 0 ? count : 1;
+  // A period with no working day (a weekend, a public holiday) is zero days, never rounded up to one.
+  return count;
 }
 
 export function calculateLeaveDays(
@@ -38,7 +38,8 @@ export function calculateLeaveDays(
   halfDayOption?: "morning" | "afternoon"
 ): number {
   if (halfDayOption && startDateStr === endDateStr) {
-    return 0.5;
+    // Half a day only when that day is a working day.
+    return calculateBusinessDays(startDateStr, endDateStr, publicHolidayDates) > 0 ? 0.5 : 0;
   }
   return calculateBusinessDays(startDateStr, endDateStr, publicHolidayDates);
 }

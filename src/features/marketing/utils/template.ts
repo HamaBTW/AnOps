@@ -15,6 +15,14 @@ export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 export const EMAIL_SUBJECT_MAX = 150;
 export const EMAIL_BODY_MAX = 10_000;
 export const SMS_BODY_MAX = 480;
+/** Telegram's hard limit for one text message is 4096 characters. */
+export const TELEGRAM_MESSAGE_MAX = 4096;
+/** Opt-out wording appended to every Telegram campaign message. */
+export const TELEGRAM_OPT_OUT_FOOTER = "Send /stop to stop receiving marketing messages.";
+/** Authors get the limit minus the footer and its separating blank line, so the rendered message always fits. */
+export const TELEGRAM_BODY_MAX = TELEGRAM_MESSAGE_MAX - TELEGRAM_OPT_OUT_FOOTER.length - 2;
+/** Variables that make sense in a chat message. There is no unsubscribe link: the opt-out is /stop. */
+export const TELEGRAM_VARIABLES = ["first_name", "last_name", "company_name"] as const;
 
 /** Any {{…}} is a token. Anything not on the allowlist is rejected by validation, never sent literally. */
 const TOKEN = /\{\{\s*([^{}]*?)\s*\}\}/g;

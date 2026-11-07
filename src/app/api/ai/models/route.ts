@@ -1,25 +1,27 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/server/auth";
+import { assertAiReady, resolveAiAccess } from "@/server/ai/access/access.service";
 import { fetchAllProviderModels } from "@/server/ai/fetch-models";
+import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { isAppError } from "@/shared/lib/errors";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/ai/models
  *
- * Returns the live list of available models from every configured AI provider.
- * Requires an authenticated session.
- * Results are effectively cached for 5 minutes via the server-side fetch cache.
+ * Lists the models the configured providers offer, for people who may use AI. It makes outbound calls with the server's own
+ * provider key, so it follows the same rules as every other AI path: a signed-in member of an active company, with the platform
+ * and company switches on and an AI grant of their own. Anyone else gets the reason, and no provider call is made.
  */
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const ctx = await resolveWorkspace();
+    assertAiReady(await resolveAiAccess(ctx));
     const providers = await fetchAllProviderModels();
-    return NextResponse.json({ providers });
+    return NextResponse.json({ providers }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    console.error("[GET /api/ai/models]", err);
+    if (isAppError(err)) return NextResponse.json({ error: err.message }, { status: err.status, headers: { "Cache-Control": "no-store" } });
+    console.error("[GET /api/ai/models]", err instanceof Error ? err.name : "unknown");
     return NextResponse.json({ error: "Failed to fetch models" }, { status: 500 });
   }
 }

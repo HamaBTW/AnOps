@@ -18,6 +18,7 @@ const FREE_MODELS = [
   "google/gemma-4-26b-a4b-it:free",
 ];
 
+const REQUEST_TIMEOUT_MS = 20_000;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export class OpenRouterProvider implements AiProvider {
@@ -75,6 +76,8 @@ export class OpenRouterProvider implements AiProvider {
           "X-Title": "AnOps",
         },
         body: JSON.stringify(body),
+        // A fallback provider must never hang a request: bounded like the primary, and cancelled with the caller.
+        signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
       throw new AiProviderError(

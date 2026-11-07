@@ -114,8 +114,8 @@ export const sendChatMessageSchema = z.object({
     .trim()
     .min(1, "Message cannot be empty")
     .max(4000, "Message cannot exceed 4,000 characters"),
-  senderType: z.enum(["visitor", "agent", "bot", "system"]).default("agent"),
-  messageType: z.enum(["text", "system", "faq_answer"]).default("text"),
+  // The sender's role and the message type are decided by the server (who started the conversation, who may answer it).
+  // Clients can neither choose them nor post as the bot or the system, so they are not part of the input.
 });
 
 export type SendChatMessageInput = z.infer<typeof sendChatMessageSchema>;

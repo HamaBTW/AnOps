@@ -61,6 +61,7 @@ export class GroqProvider implements AiProvider {
     let lastFailure = "no attempt made";
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (options.signal?.aborted) throw new AiProviderError(this.name, "Request cancelled", false);
       let apiKey: string;
       try {
         apiKey = this.pool.next();
@@ -73,7 +74,7 @@ export class GroqProvider implements AiProvider {
 
       let response: ChatCompletion;
       try {
-        response = (await client.chat.completions.create(buildRequest(model, options))) as ChatCompletion;
+        response = (await client.chat.completions.create(buildRequest(model, options), options.signal ? { signal: options.signal } : undefined)) as ChatCompletion;
       } catch (err: unknown) {
         const status = errorStatus(err);
 

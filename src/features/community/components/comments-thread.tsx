@@ -14,6 +14,8 @@ interface CommentsThreadProps {
   initialComments?: Comment[];
   currentUserId?: string;
   currentUserName?: string;
+  canWrite?: boolean;
+  canAdmin?: boolean;
 }
 
 export function CommentsThread({
@@ -22,6 +24,8 @@ export function CommentsThread({
   initialComments = [],
   currentUserId,
   currentUserName: _currentUserName,
+  canWrite = false,
+  canAdmin = false,
 }: CommentsThreadProps) {
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [body, setBody] = useState("");
@@ -66,6 +70,7 @@ export function CommentsThread({
       </div>
 
       {/* Comment Input */}
+      {canWrite && (
       <form onSubmit={handleSubmit} className="space-y-2">
         <div className="relative rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] focus-within:border-[var(--color-action-primary)] transition-colors">
           <textarea
@@ -93,11 +98,12 @@ export function CommentsThread({
           <p className="text-xs text-[var(--color-destructive)]">{errorMsg}</p>
         )}
       </form>
+      )}
 
       {/* Comment List */}
       {comments.length === 0 ? (
         <p className="text-xs text-[var(--color-text-secondary)] py-2 italic">
-          No comments yet. Be the first to share your perspective!
+          No comments yet.
         </p>
       ) : (
         <div className="space-y-3 pt-1">
@@ -128,7 +134,7 @@ export function CommentsThread({
                         })}
                       </span>
                     </div>
-                    {isAuthor && (
+                    {((isAuthor && canWrite) || canAdmin) && (
                       <button
                         type="button"
                         onClick={() => handleDelete(comment.id)}

@@ -44,6 +44,9 @@ import {
   formatDateYMD,
 } from "@/features/hr/utils/date-utils";
 
+/** Names and titles come from people (and now from AI drafts): they are matched literally, never as a pattern. */
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const DEFAULT_DEPARTMENTS = DEFAULT_STRUCTURE.departments;
 
 const DEFAULT_JOB_TITLES = DEFAULT_STRUCTURE.jobTitles;
@@ -260,7 +263,7 @@ export async function createDepartment(name: string, description: string | undef
 
   const existing = await db.collection("departments").findOne({
     ...filter,
-    name: { $regex: new RegExp(`^${trimmed}$`, "i") },
+    name: { $regex: new RegExp(`^${escapeRegExp(trimmed)}$`, "i") },
   });
   if (existing) {
     throw new Error(`Department "${trimmed}" already exists.`);
@@ -294,7 +297,7 @@ export async function updateDepartment(id: string, name: string, description: st
   const duplicate = await db.collection("departments").findOne({
     _id: { $ne: objId },
     ...filter,
-    name: { $regex: new RegExp(`^${trimmed}$`, "i") },
+    name: { $regex: new RegExp(`^${escapeRegExp(trimmed)}$`, "i") },
   });
   if (duplicate) {
     throw new Error(`Department "${trimmed}" already exists.`);
@@ -416,7 +419,7 @@ export async function ensureJobTitle(title: string, departmentId: string | undef
 
   const existing = await db.collection("job_titles").findOne({
     ...filter,
-    title: { $regex: new RegExp(`^${trimmed}$`, "i") },
+    title: { $regex: new RegExp(`^${escapeRegExp(trimmed)}$`, "i") },
   });
 
   if (existing) {
@@ -461,7 +464,7 @@ export async function updateJobTitle(id: string, title: string, departmentId: st
   const dup = await db.collection("job_titles").findOne({
     _id: { $ne: objId },
     ...filter,
-    title: { $regex: new RegExp(`^${trimmed}$`, "i") },
+    title: { $regex: new RegExp(`^${escapeRegExp(trimmed)}$`, "i") },
   });
   if (dup) throw new Error(`A job title "${trimmed}" already exists.`);
 
@@ -472,7 +475,7 @@ export async function updateJobTitle(id: string, title: string, departmentId: st
   );
 
   await db.collection("employees").updateMany(
-    { jobTitle: { $regex: new RegExp(`^${oldTitle}$`, "i") }, ...filter },
+    { jobTitle: { $regex: new RegExp(`^${escapeRegExp(oldTitle)}$`, "i") }, ...filter },
     { $set: { jobTitle: trimmed, updatedAt: new Date() } }
   );
 
@@ -516,11 +519,13 @@ export async function deleteJobTitle(id: string, companyId: string): Promise<voi
 }
 
 
-export async function getEmployeesByJobTitle(title: string): Promise<Employee[]> {
+export async function getEmployeesByJobTitle(title: string, companyId: string): Promise<Employee[]> {
   const db = await getDb();
+  // Always company-scoped: a title is a label, and every company has its own "Manager".
+  const cId = requireCompanyId(companyId);
   const docs = await db
     .collection("employees")
-    .find({ jobTitle: { $regex: new RegExp(`^${title}$`, "i") } })
+    .find({ companyId: cId, jobTitle: { $regex: new RegExp(`^${escapeRegExp(title)}$`, "i") } })
     .sort({ status: 1, fullName: 1 })
     .toArray();
 
@@ -563,9 +568,9 @@ export async function getEmployees(filters: EmployeeFilterParams, companyId: str
   if (filters.search && filters.search.trim()) {
     const term = filters.search.trim();
     query.$or = [
-      { fullName: { $regex: term, $options: "i" } },
-      { email: { $regex: term, $options: "i" } },
-      { jobTitle: { $regex: term, $options: "i" } },
+      { fullName: { $regex: escapeRegExp(term), $options: "i" } },
+      { email: { $regex: escapeRegExp(term), $options: "i" } },
+      { jobTitle: { $regex: escapeRegExp(term), $options: "i" } },
     ];
   }
 
@@ -1150,10 +1155,13 @@ export async function getSoldeDeConge(
   const yearEnd = `${year}-12-31`;
 
   // Fetch transactions for employee
+  // Reservations and releases are commitments made today for leave that may start later, so they count immediately.
+  // Filtering them by their effective date hid every approved future leave from the balance (and a release of one
+  // then cancelled a different reservation). Accruals, taken days and adjustments stay as-of the date.
   const txDocs = await db.collection("leave_transactions").find({
     companyId: cId,
     employeeId,
-    effectiveDate: { $lte: asOf },
+    $or: [{ effectiveDate: { $lte: asOf } }, { transactionType: { $in: ["RESERVATION", "RELEASE"] } }],
   }).toArray();
 
   // If no transactions exist, auto-bootstrap initial accrual from hire date
@@ -1375,8 +1383,10 @@ export async function createManualAdjustment(
   input: LeaveAdjustmentInput,
   adminUserId: string,
   adminName: string,
-  companyId: string
+  companyId: string,
+  actor?: HrActor
 ): Promise<LeaveTransactionRecord> {
+  if (actor && !actor.isAdmin) throw new Error("Forbidden: Only HR administrators can adjust leave balances.");
   const cId = requireCompanyId(companyId);
   const emp = await getEmployeeById(input.employeeId, companyId);
   if (!emp) throw new Error("Employee not found.");
@@ -1626,11 +1636,19 @@ export async function createLeaveRequest(data: LeaveRequestInput, companyId: str
   };
 }
 
+/**
+ * Who is asking, for callers that act on someone's behalf (the AI Command Center). Optional so existing callers
+ * (server actions, which check roles themselves) are unchanged; when given, the service enforces it too.
+ */
+export type HrActor = { isAdmin: boolean; employeeId?: string | null };
+
 export async function reviewLeaveRequest(
   input: LeaveReviewInput,
   reviewerName = "HR Administrator",
-  companyId: string
+  companyId: string,
+  actor?: HrActor
 ): Promise<LeaveRequest> {
+  if (actor && !actor.isAdmin) throw new Error("Forbidden: Only HR administrators can review leave requests.");
   const db = await getDb();
   if (!ObjectId.isValid(input.requestId)) {
     throw new Error("Invalid leave request ID.");
@@ -1644,9 +1662,15 @@ export async function reviewLeaveRequest(
     throw new Error("Leave request not found.");
   }
 
+  // Only a pending request can be decided. Without this a second approval posted a second reservation and deducted the leave twice.
+  if (existing.status !== "pending") {
+    throw new Error(`Only pending requests can be reviewed. This one is ${String(existing.status)}.`);
+  }
+
   const newStatus: LeaveStatus = input.action === "approve" ? "approved" : "rejected";
   const days = Number(existing.days) || 1;
   const isPaid = Boolean(existing.isPaid);
+  let overdraftDays = 0;
 
   if (input.action === "approve" && isPaid) {
     const currentYear = new Date(existing.startDate as string).getFullYear();
@@ -1659,46 +1683,13 @@ export async function reviewLeaveRequest(
           `Insufficient Solde de congé: Requested ${days} days but only ${solde.available} days are available. An admin override reason is mandatory to approve an overdraft.`
         );
       }
-
-      // Log overdraft adjustment
-      const overdraftDays = days - solde.available;
-      await createLeaveTransaction(
-        {
-          companyId,
-          employeeId: existing.employeeId as string,
-          employeeName: existing.employeeName as string,
-          leaveTypeId: existing.leaveTypeId as string | undefined,
-          transactionType: "ADJUSTMENT",
-          days: overdraftDays,
-          effectiveDate: formatDateYMD(new Date()),
-          referenceId: input.requestId,
-          description: `Exceptional overdraft approval: ${input.overrideReason.trim()}`,
-          createdBy: reviewerName,
-        },
-        companyId
-      );
+      overdraftDays = days - solde.available;
     }
-
-    // Post RESERVATION transaction to lock the balance
-    await createLeaveTransaction(
-      {
-        companyId,
-        employeeId: existing.employeeId as string,
-        employeeName: existing.employeeName as string,
-        leaveTypeId: existing.leaveTypeId as string | undefined,
-        transactionType: "RESERVATION",
-        days,
-        effectiveDate: existing.startDate as string,
-        referenceId: input.requestId,
-        description: `Reservation for leave request #${input.requestId.slice(-6)} (${existing.startDate} → ${existing.endDate})`,
-        createdBy: reviewerName,
-      },
-      companyId
-    );
   }
 
-  await db.collection("leave_requests").updateOne(
-    filter,
+  // Claim the decision atomically: of two concurrent reviews exactly one wins.
+  const claim = await db.collection("leave_requests").updateOne(
+    { ...filter, status: "pending" },
     {
       $set: {
         status: newStatus,
@@ -1709,6 +1700,49 @@ export async function reviewLeaveRequest(
       },
     }
   );
+  if (claim.matchedCount === 0) throw new Error("This request was already decided by someone else.");
+
+  if (input.action === "approve" && isPaid) {
+    try {
+      if (overdraftDays > 0) {
+        await createLeaveTransaction(
+          {
+            companyId,
+            employeeId: existing.employeeId as string,
+            employeeName: existing.employeeName as string,
+            leaveTypeId: existing.leaveTypeId as string | undefined,
+            transactionType: "ADJUSTMENT",
+            days: overdraftDays,
+            effectiveDate: formatDateYMD(new Date()),
+            referenceId: input.requestId,
+            description: `Exceptional overdraft approval: ${(input.overrideReason ?? "").trim()}`,
+            createdBy: reviewerName,
+          },
+          companyId
+        );
+      }
+      // Post RESERVATION transaction to lock the balance
+      await createLeaveTransaction(
+        {
+          companyId,
+          employeeId: existing.employeeId as string,
+          employeeName: existing.employeeName as string,
+          leaveTypeId: existing.leaveTypeId as string | undefined,
+          transactionType: "RESERVATION",
+          days,
+          effectiveDate: existing.startDate as string,
+          referenceId: input.requestId,
+          description: `Reservation for leave request #${input.requestId.slice(-6)} (${existing.startDate} → ${existing.endDate})`,
+          createdBy: reviewerName,
+        },
+        companyId
+      );
+    } catch (error) {
+      // The ledger could not be written, so the decision must not stand.
+      await db.collection("leave_requests").updateOne(filter, { $set: { status: "pending", updatedAt: new Date() }, $unset: { reviewedBy: "", reviewedAt: "" } });
+      throw error;
+    }
+  }
 
   const updated = await db.collection("leave_requests").findOne(filter);
   if (!updated) throw new Error("Could not load updated leave request.");
@@ -1738,7 +1772,8 @@ export async function cancelLeaveRequest(
   requestId: string,
   reason: string,
   actorName = "Employee",
-  companyId: string
+  companyId: string,
+  actor?: HrActor
 ): Promise<LeaveRequest> {
   const db = await getDb();
   if (!ObjectId.isValid(requestId)) throw new Error("Invalid leave request ID.");
@@ -1750,34 +1785,42 @@ export async function cancelLeaveRequest(
   if (!existing) throw new Error("Leave request not found.");
 
   if (existing.status === "cancelled") throw new Error("Request is already cancelled.");
+  // Own-record rule: a non-admin can cancel only their own request.
+  if (actor && !actor.isAdmin && existing.employeeId !== actor.employeeId) throw new Error("Forbidden: You may only cancel your own leave requests.");
+  // Rejected requests have nothing to cancel, and a taken one has already been consumed and posted to the ledger.
+  if (existing.status !== "pending" && existing.status !== "approved") throw new Error(`A ${String(existing.status)} request cannot be cancelled.`);
+
+  // Claim the cancellation atomically, then release the reservation, so two cancels can never release it twice.
+  const claim = await db.collection("leave_requests").updateOne(
+    { ...filter, status: existing.status },
+    { $set: { status: "cancelled", cancellationReason: reason, updatedAt: new Date() } }
+  );
+  if (claim.matchedCount === 0) throw new Error("This request changed while you were cancelling it. Open it again.");
 
   // If request was approved and paid, release the reservation transaction
   if (existing.status === "approved" && existing.isPaid) {
     const days = Number(existing.days) || 1;
-    await createLeaveTransaction(
-      {
-        companyId,
-        employeeId: existing.employeeId as string,
-        employeeName: existing.employeeName as string,
-        leaveTypeId: existing.leaveTypeId as string | undefined,
-        transactionType: "RELEASE",
-        days,
-        effectiveDate: formatDateYMD(new Date()),
-        referenceId: requestId,
-        description: `Release reservation (request cancelled): ${reason}`,
-        createdBy: actorName,
-      },
-      companyId
-    );
+    try {
+      await createLeaveTransaction(
+        {
+          companyId,
+          employeeId: existing.employeeId as string,
+          employeeName: existing.employeeName as string,
+          leaveTypeId: existing.leaveTypeId as string | undefined,
+          transactionType: "RELEASE",
+          days,
+          effectiveDate: formatDateYMD(new Date()),
+          referenceId: requestId,
+          description: `Release reservation (request cancelled): ${reason}`,
+          createdBy: actorName,
+        },
+        companyId
+      );
+    } catch (error) {
+      await db.collection("leave_requests").updateOne(filter, { $set: { status: existing.status, updatedAt: new Date() }, $unset: { cancellationReason: "" } });
+      throw error;
+    }
   }
-
-  await db.collection("leave_requests").updateOne(filter, {
-    $set: {
-      status: "cancelled",
-      cancellationReason: reason,
-      updatedAt: new Date(),
-    },
-  });
 
   const updated = await db.collection("leave_requests").findOne(filter);
   return {
@@ -2166,13 +2209,13 @@ export async function calculateEmployeePayrollPreview(
     .collection("leave_requests")
     .find({
       employeeId,
-      status: "approved",
+      // "taken" is an approved request whose dates have passed (set by syncTakenLeaveRequests); it is still unpaid leave.
+      status: { $in: ["approved", "taken"] },
       isPaid: false,
       ...({ companyId: cId }),
-      $or: [
-        { startDate: { $gte: monthStart, $lte: monthEnd } },
-        { endDate: { $gte: monthStart, $lte: monthEnd } },
-      ],
+      // Any overlap with the month, including a leave that starts before it and ends after it.
+      startDate: { $lte: monthEnd },
+      endDate: { $gte: monthStart },
     })
     .toArray();
 
@@ -2202,11 +2245,17 @@ export async function calculateEmployeePayrollPreview(
   };
 }
 
+/**
+ * Generates (or refreshes) payslips. A payslip already marked paid is never touched, so regenerating a month cannot
+ * downgrade a paid payslip or change what was paid. The one controlled correction path is `allowPaidCorrection`: it
+ * recomputes the amounts of a paid payslip, keeps it marked paid, and records when it was corrected.
+ */
 export async function generatePayslips(
   period: string,
   employeeIds: string[] | undefined,
   workingDaysInMonth: number,
-  companyId: string
+  companyId: string,
+  options: { allowPaidCorrection?: boolean } = {}
 ): Promise<PayslipRecord[]> {
   const db = await getDb();
   const cId = requireCompanyId(companyId);
@@ -2242,6 +2291,18 @@ export async function generatePayslips(
       ...({ companyId: cId }),
       generatedAt: new Date(),
     };
+
+    const already = await db.collection("payslips").findOne({ employeeId: empId, period, ...({ companyId: cId }) });
+    if (already?.status === "paid" && !options.allowPaidCorrection) {
+      const [existing] = await getPayslips({ period, employeeId: empId }, cId.toString());
+      if (existing) generated.push(existing);
+      continue;
+    }
+    const correcting = already?.status === "paid";
+    if (correcting) {
+      (payslipDoc as Record<string, unknown>).status = "paid";
+      (payslipDoc as Record<string, unknown>).correctedAt = new Date();
+    }
 
     // Upsert payslip for same employee & period to avoid duplicates
     const res = await db.collection("payslips").findOneAndUpdate(

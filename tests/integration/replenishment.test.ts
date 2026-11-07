@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHarness, parsed, type TestHarness } from "../helpers/workspace";
+import { enableAi } from "../helpers/ai";
 import { productInputSchema, stockMoveInputSchema, warehouseInputSchema } from "@/features/inventory/schemas/inventory.schema";
 import { purchaseOrderInputSchema, supplierInputSchema } from "@/features/purchasing/schemas/purchasing.schema";
 import { createProduct, createWarehouse } from "@/server/inventory/catalog.service";
@@ -18,7 +19,7 @@ import { COLLECTIONS, type ReplenishmentProposalDoc } from "@/server/db/document
 
 /** Groq is replaced by a scripted fake. The real provider is covered in tests/unit/groq-provider.test.ts. */
 const { completeMock } = vi.hoisted(() => ({ completeMock: vi.fn() }));
-vi.mock("@/server/ai", () => ({ ai: { complete: completeMock } }));
+vi.mock("@/server/ai", () => ({ ai: { complete: completeMock, status: () => [{ name: "Fake", available: true, models: [] }] } }));
 
 let h: TestHarness;
 let warehouseId: string;
@@ -31,6 +32,8 @@ async function generate(ctx = h.ctx(), horizonDays = 14) {
 
 beforeAll(async () => {
   h = await createHarness();
+  // Rationale generation runs behind the AI gate: the proposing member holds a live Purchasing AI grant.
+  await enableAi(h, h.ctx(), { purchasing: { view: true, create: true } });
   warehouseId = (await createWarehouse(h.ctx(), parsed(warehouseInputSchema, { name: "Main", code: "MAIN", address: "", isActive: true }))).id;
   supplierId = (
     await createSupplier(

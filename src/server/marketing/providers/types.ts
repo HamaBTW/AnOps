@@ -9,12 +9,15 @@ import type { MarketingChannel } from "@/features/marketing/types/constants";
 export class ProviderError extends Error {
   readonly code: string;
   readonly retryable: boolean;
+  /** Minimum wait the provider asked for (for example Telegram's retry_after). Dispatch never retries sooner. */
+  readonly retryAfterMs: number | null;
 
-  constructor(code: string, message: string, retryable: boolean) {
+  constructor(code: string, message: string, retryable: boolean, retryAfterMs: number | null = null) {
     super(message);
     this.name = "ProviderError";
     this.code = code;
     this.retryable = retryable;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

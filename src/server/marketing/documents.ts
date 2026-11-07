@@ -13,6 +13,7 @@ import type {
   MarketingChannel,
   SocialPlatform,
   SocialPostStatus,
+  TelegramSubscriptionStatus,
 } from "@/features/marketing/types/constants";
 import type { EmailDesign } from "@/features/marketing/utils/email-design";
 
@@ -55,6 +56,9 @@ export const MARKETING_COLLECTIONS = {
   socialOauthStates: "marketing_social_oauth_states",
   socialPosts: "marketing_social_posts",
   aiGenerations: "marketing_ai_generations",
+  telegramSubscriptions: "marketing_telegram_subscriptions",
+  telegramLinkTokens: "marketing_telegram_link_tokens",
+  telegramUpdates: "marketing_telegram_updates",
 } as const;
 
 export type ContactDoc = TenantScope & {
@@ -96,7 +100,7 @@ export type ContactTagDoc = TenantScope & {
 };
 
 export type ConsentStatus = "granted" | "withdrawn";
-export type ConsentSource = "manual" | "import" | "form" | "unsubscribe_link" | "api";
+export type ConsentSource = "manual" | "import" | "form" | "unsubscribe_link" | "telegram_stop" | "api";
 
 /** Append-only consent history. Never updated or deleted. */
 export type ConsentEventDoc = TenantScope & {
@@ -337,7 +341,7 @@ export type AiGenerationDoc = TenantScope & {
   requestedBy: ObjectId;
   productDescription: string;
   targetAudience: string;
-  channel: "email" | "sms" | "facebook_page";
+  channel: "email" | "sms" | "telegram" | "facebook_page";
   tone: string;
   goal: string;
   language: "en" | "fr" | "ar";
@@ -353,4 +357,41 @@ export type AiGenerationDoc = TenantScope & {
   createdAt: Date;
   updatedAt: Date;
   version: number;
+};
+
+/**
+ * One Telegram chat linked to one contact. The chat id is only ever written by the webhook after a
+ * single-use token proved ownership; no browser request can set it. Unique per (company, contact) and per
+ * (company, chat), so one Telegram account cannot be attached to two contacts of the same company.
+ */
+export type TelegramSubscriptionDoc = TenantScope & {
+  _id: ObjectId;
+  contactId: ObjectId;
+  chatId: string;
+  username: string | null;
+  status: TelegramSubscriptionStatus;
+  connectedAt: Date;
+  disconnectedAt: Date | null;
+  blockedAt: Date | null;
+  lastErrorCode: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  version: number;
+};
+
+/** Single-use connection token. Only the SHA-256 is stored; the raw value exists only in the deep link. */
+export type TelegramLinkTokenDoc = TenantScope & {
+  /** SHA-256 of the token. */
+  _id: string;
+  contactId: ObjectId;
+  createdBy: ObjectId;
+  createdAt: Date;
+  expiresAt: Date;
+  consumedAt: Date | null;
+};
+
+/** Processed webhook updates. Telegram update ids are unique per bot, so the id alone is the dedupe key. */
+export type TelegramUpdateDoc = {
+  _id: number;
+  receivedAt: Date;
 };

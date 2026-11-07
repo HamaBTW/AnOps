@@ -1,7 +1,7 @@
 import "server-only";
 
-import { ai } from "@/server/ai";
-import { BaseAgent } from "@/server/ai/base-agent";
+import { askWith, BaseAgent, type AgentComplete } from "@/server/ai/base-agent";
+import { isAppError } from "@/shared/lib/errors";
 import type { AgentContext } from "@/server/ai/base-agent";
 
 export interface ArticleSummaryResult {
@@ -15,6 +15,7 @@ export interface ArticleSummaryResult {
  * Fulfills AnOps.md Module 5 requirement: "Generates quick 3-bullet summaries for blog posts."
  */
 export async function summarizeBlogArticle(
+  complete: AgentComplete,
   title: string,
   body: string
 ): Promise<ArticleSummaryResult> {
@@ -43,7 +44,8 @@ ${body.slice(0, 8000)}
 `;
 
   try {
-    const rawResponse = await ai.ask(
+    const rawResponse = await askWith(
+      complete,
       prompt,
       "You are an expert content summarizer. You only output valid JSON conforming to the requested schema."
     );
@@ -66,6 +68,8 @@ ${body.slice(0, 8000)}
       modelVersion: "anops-ai-master-v1",
     };
   } catch (error) {
+    // A refusal by the AI gate (no access, switched off, over a limit) is shown to the person, never hidden behind a fallback.
+    if (isAppError(error)) throw error;
     // Graceful fallback if AI is offline or returns unparseable output
     console.warn("AI article summarization fell back to extraction:", error);
     const sentences = body
@@ -153,6 +157,7 @@ export class CommunitySupportAgent extends BaseAgent {
  * Generates quick reply suggestions for human support agents based on the conversation history.
  */
 export async function generateSupportReplySuggestions(
+  complete: AgentComplete,
   lastVisitorMessage: string
 ): Promise<string[]> {
   const prompt = `A visitor just asked the following question in live support chat:
@@ -163,7 +168,8 @@ Output strictly as a JSON array of 3 strings:
 ["reply option 1", "reply option 2", "reply option 3"]`;
 
   try {
-    const raw = await ai.ask(
+    const raw = await askWith(
+      complete,
       prompt,
       "You are a helpful customer support co-pilot. Output only a valid JSON array of 3 short replies."
     );
@@ -173,6 +179,7 @@ Output strictly as a JSON array of 3 strings:
       return parsed.slice(0, 3).map((r) => String(r).trim());
     }
   } catch (err) {
+    if (isAppError(err)) throw err;
     console.warn("AI quick reply suggestions fallback:", err);
   }
 

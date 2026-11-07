@@ -55,12 +55,13 @@ function getDefaultSelection(): ModelSelection {
 }
 
 /** Fetch live models from /api/ai/models — cached by browser for the session. */
-function useLiveProviders() {
+function useLiveProviders(enabled: boolean) {
   const [providers, setProviders] = useState<ProviderModels[]>([AUTO_PROVIDER]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     fetch("/api/ai/models")
       .then((r) => r.json())
@@ -77,7 +78,7 @@ function useLiveProviders() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
 
   return { providers, loading, fetchError };
 }
@@ -95,6 +96,8 @@ type ProviderBadge = {
 };
 
 type AgentChatPanelProps = {
+  /** Off by default: the server chooses the provider and the model. Only a caller whose server action honours a choice turns it on. */
+  allowModelChoice?: boolean;
   /** Display name shown in the header */
   agentName: string;
   /** Short description shown below the name */
@@ -298,6 +301,7 @@ export function AgentChatPanel({
   onAction,
   onSendMessage,
   className,
+  allowModelChoice = false,
 }: AgentChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     initMessage(welcomeMessage),
@@ -309,7 +313,7 @@ export function AgentChatPanel({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [selection, setSelection] = useState<ModelSelection>(getDefaultSelection());
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const { providers, loading: providersLoading, fetchError } = useLiveProviders();
+  const { providers, loading: providersLoading, fetchError } = useLiveProviders(allowModelChoice);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -648,7 +652,7 @@ export function AgentChatPanel({
         <div className="border-t border-[var(--color-border-subtle)] p-3 sm:p-4 bg-[var(--color-bg-surface)] rounded-b-[var(--radius-card)]">
 
           {/* Model selector row */}
-          <div className="mb-2 flex items-center gap-2 relative" ref={selectorRef}>
+          <div className={cn("mb-2 flex items-center gap-2 relative", !allowModelChoice && "hidden")} ref={selectorRef}>
             <button
               type="button"
               onClick={() => setSelectorOpen((v) => !v)}

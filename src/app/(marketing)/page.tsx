@@ -80,7 +80,7 @@ export default function HomePage() {
               prepares the work and waits for your confirmation.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href="/register" className={`${btnPrimary} h-12 px-6`}>
+              <Link href="/trial" className={`${btnPrimary} h-12 px-6`}>
                 Start free
                 <IconArrowRight size={14} />
               </Link>
@@ -282,7 +282,7 @@ export default function HomePage() {
             title="Start with one app. Grow when you are ready."
             action={<TextLink href="/pricing">Compare all plans</TextLink>}
           />
-          <ol className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <ol className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {plans.map((plan, index) => (
               <li
                 key={plan.id}
@@ -293,7 +293,7 @@ export default function HomePage() {
                 <p className="text-sm font-semibold text-[var(--color-text-primary)]">{plan.name}</p>
                 <p className="mt-3 font-[family-name:var(--font-heading)] text-lg font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{plan.price}</p>
                 <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
-                  {plan.companies} · {plan.applications}
+                  {plan.applications} · unlimited users
                 </p>
                 {plan.highlight && (
                   <span className="absolute -top-3 left-5 rounded-full bg-[var(--color-action-primary)] px-2.5 py-0.5 text-[11px] font-semibold text-[#111F1D]">{plan.highlight}</span>

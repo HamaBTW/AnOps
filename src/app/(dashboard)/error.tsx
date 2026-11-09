@@ -36,7 +36,7 @@ export default function Error({
             Try again
           </button>
           <a
-            href="/dashboard"
+            href="/anops"
             className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-5 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
           >
             Go to dashboard

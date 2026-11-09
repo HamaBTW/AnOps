@@ -6,24 +6,22 @@ import { IconArrowRight } from "@/shared/components/ui/brand-icons";
 import { plans, type Plan } from "@/shared/config/site";
 import { cn } from "@/shared/lib/utils";
 
-type Answers = { companies: "one" | "many" | null; apps: "one" | "many" | null; ai: "standard" | "advanced" | null };
+type Answers = { apps: "one" | "few" | "many" | null; ai: "no" | "yes" | null };
 
 const questions: { key: keyof Answers; label: string; options: { value: string; label: string }[] }[] = [
-  { key: "companies", label: "How many companies will you manage?", options: [{ value: "one", label: "One" }, { value: "many", label: "Several" }] },
-  { key: "apps", label: "How many applications do you need?", options: [{ value: "one", label: "Just one" }, { value: "many", label: "Several" }] },
-  { key: "ai", label: "How much do you rely on AI?", options: [{ value: "standard", label: "Command Center is enough" }, { value: "advanced", label: "Advanced + early access" }] },
+  { key: "apps", label: "How many applications do you need?", options: [{ value: "one", label: "Just one" }, { value: "few", label: "2 to 4" }, { value: "many", label: "5 or more" }] },
+  { key: "ai", label: "Do you want AI features?", options: [{ value: "no", label: "Not now" }, { value: "yes", label: "Yes" }] },
 ];
 
 function recommend(answers: Answers): Plan["id"] | null {
-  if (!answers.companies || !answers.apps || !answers.ai) return null;
-  if (answers.ai === "advanced") return "ultra";
-  if (answers.companies === "many") return "pro";
-  if (answers.apps === "many") return "standard";
-  return "free";
+  if (!answers.apps || !answers.ai) return null;
+  if (answers.apps === "many") return answers.ai === "yes" ? "maxops" : "allops";
+  if (answers.apps === "few" || answers.ai === "yes") return "custom";
+  return "oneops";
 }
 
 export function PlanFinder() {
-  const [answers, setAnswers] = useState<Answers>({ companies: null, apps: null, ai: null });
+  const [answers, setAnswers] = useState<Answers>({ apps: null, ai: null });
   const result = recommend(answers);
   const plan = plans.find((item) => item.id === result);
 
@@ -71,7 +69,7 @@ export function PlanFinder() {
               <p className="mt-2 font-[family-name:var(--font-heading)] text-4xl font-semibold tracking-[-0.04em] text-[var(--color-text-primary)]">{plan.name}</p>
               <p className="mt-3 text-sm leading-relaxed text-[var(--color-text-secondary)]">{plan.description}</p>
               <p className="mt-3 text-sm font-semibold text-[var(--color-text-primary)]">
-                {plan.companies} · {plan.applications} · {plan.price}
+                {plan.applications} · {plan.price}{plan.id === "custom" && answers.ai === "yes" ? " + AI add-on" : ""}
               </p>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
@@ -81,7 +79,7 @@ export function PlanFinder() {
               </Link>
               <button
                 type="button"
-                onClick={() => setAnswers({ companies: null, apps: null, ai: null })}
+                onClick={() => setAnswers({ apps: null, ai: null })}
                 className="min-h-[44px] rounded-[var(--radius-control)] px-3 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               >
                 Start over
@@ -92,7 +90,7 @@ export function PlanFinder() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Suggested plan</p>
             <p className="mt-3 text-sm leading-relaxed text-[var(--color-text-secondary)]">
-              Answer the three questions and we will point you to the plan that fits. Larger organizations with specific requirements can ask for a
+              Answer two questions and we will point you to the plan that fits. Larger organizations with specific requirements can ask for a
               Custom plan.
             </p>
           </div>

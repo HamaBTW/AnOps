@@ -16,7 +16,7 @@ export default async function OnboardingPage() {
 
   const companies = await getUserCompanies(session.user.id);
   if (companies.length > 0) {
-    redirect("/hr");
+    redirect("/anops");
   }
 
   return (

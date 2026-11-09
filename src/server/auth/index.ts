@@ -74,6 +74,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           throw new BannedError();
         }
 
+        // A new owner whose activation window ended can no longer sign in: the organization is being removed.
+        if (!user.emailVerified && user.provisionalUntil instanceof Date && user.provisionalUntil <= new Date()) {
+          console.warn(`[auth] sign-in blocked for ${normalizedEmail}: activation window expired`);
+          return null;
+        }
+
         const status: AccountStatus =
           (user.status as AccountStatus | undefined) ??
           (user.emailVerified ? "active" : "unverified");

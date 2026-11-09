@@ -3,47 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Megaphone, Sparkles } from "lucide-react";
 import {
   IconGrid,
-  IconUsers,
-  IconReceipt,
-  IconWallet,
-  IconPackage,
-  IconShoppingCart,
-  IconBarChart,
-  IconDocument,
-  IconNotification,
   IconSettings,
   IconChevronDown,
   IconLogOut,
-  IconUser,
   IconHelpCircle,
   IconClose,
   IconProfileCard,
   IconBuilding,
 } from "@/shared/components/ui/brand-icons";
+import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
+import { APPLICATIONS, applicationForPath, visibleNavItems, type Application, type ApplicationId } from "@/shared/domain/applications";
 import { cn } from "@/shared/lib/utils";
 import { logoutAction } from "@/features/auth/actions/auth.action";
-
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: IconGrid },
-  { name: "AnOps AI", href: "/ai", icon: Sparkles },
-  { name: "Company", href: "/company", icon: IconBuilding },
-  { name: "HR & Payroll", href: "/hr", icon: IconProfileCard },
-  { name: "CRM", href: "/crm", icon: IconUsers },
-  { name: "Sales", href: "/sales", icon: IconReceipt },
-  { name: "Finance", href: "/finance", icon: IconWallet },
-  { name: "Inventory", href: "/inventory", icon: IconPackage },
-  { name: "Purchasing", href: "/purchasing", icon: IconShoppingCart },
-  { name: "Manufacturing", href: "/manufacturing", icon: IconSettings },
-  { name: "Marketing", href: "/marketing", icon: Megaphone },
-  { name: "Blogs & Community", href: "/community", icon: IconDocument },
-  { name: "Projects", href: "/projects", icon: IconBarChart },
-  { name: "Documents", href: "/documents", icon: IconDocument },
-  { name: "Notifications", href: "/notifications", icon: IconNotification },
-  { name: "Administration", href: "/admin", icon: IconSettings },
-];
 
 type SidebarUser = {
   name: string;
@@ -57,19 +30,93 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function isActive(pathname: string, href: string, exact?: boolean) {
+  return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Navigation owned by the current application: identity, grouped pages (collapsible), current page highlighted. */
+function AppNavigation({ app, pathname, permissions, aiFeatures, onNavigate }: { app: Application; pathname: string; permissions: ReadonlySet<string>; aiFeatures: boolean; onNavigate?: () => void }) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const groups = visibleNavItems(app, { aiFeatures, permissions });
+  const single = groups.length === 1;
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-3 rounded-[14px] px-2 py-2" style={{ ["--accent" as string]: app.accent }}>
+        <AnimatedIcon icon={app.icon} size={40} play="never" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{app.name}</p>
+          <p className="truncate text-xs text-[var(--color-text-secondary)]">{app.tagline}</p>
+        </div>
+      </div>
+      {groups.map((group) => {
+        const isCollapsed = collapsed[group.label] ?? false;
+        return (
+          <div key={group.label} className="mb-2">
+            {!single && (
+              <button
+                type="button"
+                aria-expanded={!isCollapsed}
+                onClick={() => setCollapsed((c) => ({ ...c, [group.label]: !isCollapsed }))}
+                className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              >
+                {group.label}
+                <IconChevronDown size={11} className={cn("transition-transform", isCollapsed && "-rotate-90")} />
+              </button>
+            )}
+            {!isCollapsed && (
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = isActive(pathname, item.href, item.exact);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "flex min-h-[40px] items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 text-sm transition-colors",
+                          active ? "bg-[var(--color-action-primary)] font-semibold text-[var(--color-action-on-primary)]" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
+                        )}
+                      >
+                        <span aria-hidden="true" className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-[var(--color-action-on-primary)]" : "bg-[var(--color-border-control)]")} />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Sidebar({
   className,
   user,
   mobileOpen = false,
   onMobileClose,
+  allowedApps = [],
+  permissions = [],
+  aiFeatures = true,
+  orgId,
 }: {
   className?: string;
   user: SidebarUser;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  allowedApps?: ApplicationId[];
+  permissions?: string[];
+  aiFeatures?: boolean;
+  orgId?: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const currentApp = applicationForPath(pathname);
+  const permissionSet = new Set(permissions);
+  const installed = APPLICATIONS.filter((app) => allowedApps.includes(app.id));
 
   useEffect(() => {
     setOpen(false);
@@ -88,7 +135,7 @@ export function Sidebar({
       )}
     >
       <div className="flex h-[72px] items-center justify-between px-4 sm:px-5">
-        <Link href="/dashboard" className="flex items-center" onClick={onMobileClose}>
+        <Link href="/anops" className="flex items-center" onClick={onMobileClose} aria-label="AnOps home">
           {/* Light mode: dark logo; Dark mode: white logo */}
           <img
             src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-dark.svg"
@@ -114,41 +161,29 @@ export function Sidebar({
       </div>
 
       {/* min-h-0 + overflow-y-auto: on short viewports the links scroll instead of being clipped. */}
-      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 py-2">
-        <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">
-          Navigation
-        </div>
-        <ul className="space-y-0.5">
-          {navigation.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <li key={item.name}>
-                <Link
-                  href={item.href}
-                  onClick={onMobileClose}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "group flex items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2.5 min-h-[44px] text-sm transition-colors",
-                    active
-                      ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)] font-semibold"
-                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
-                  )}
-                >
-                  <item.icon
-                    size={16}
-                    className={cn(
-                      "shrink-0",
-                      active
-                        ? "text-[var(--color-action-on-primary)]"
-                        : "text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)]"
-                    )}
-                  />
-                  <span className="truncate">{item.name}</span>
+      <nav aria-label={currentApp ? `${currentApp.name} navigation` : "Applications"} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 py-2">
+        <Link
+          href="/anops"
+          onClick={onMobileClose}
+          className="mb-3 flex min-h-[40px] items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
+        >
+          <IconGrid size={15} />
+          All applications
+        </Link>
+        {currentApp ? (
+          <AppNavigation key={currentApp.id} app={currentApp} pathname={pathname} permissions={permissionSet} aiFeatures={aiFeatures} onNavigate={onMobileClose} />
+        ) : (
+          <ul className="space-y-0.5">
+            {installed.map((app) => (
+              <li key={app.id}>
+                <Link href={app.href} onClick={onMobileClose} className="flex min-h-[44px] items-center gap-2.5 rounded-[var(--radius-control)] px-2 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]">
+                  <AnimatedIcon icon={app.icon} size={28} play="never" />
+                  <span className="truncate">{app.name}</span>
                 </Link>
               </li>
-            );
-          })}
-        </ul>
+            ))}
+          </ul>
+        )}
       </nav>
 
       <div className="shrink-0 border-t border-[var(--color-border-subtle)] p-2">
@@ -177,18 +212,20 @@ export function Sidebar({
 
         {open && (
           <div className="mt-1 space-y-0.5 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-1 shadow-[0_10px_40px_-10px_rgba(17,31,29,0.25)]">
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
+            <Link href="/profile" onClick={onMobileClose} className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
               <IconProfileCard size={16} className="text-[var(--color-text-secondary)]" />
               Profile
-            </button>
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
-              <IconSettings size={16} className="text-[var(--color-text-secondary)]" />
-              Settings
-            </button>
-            <button className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
+            </Link>
+            {orgId && (
+              <Link href={`/organization/${orgId}/settings`} onClick={onMobileClose} className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
+                <IconSettings size={16} className="text-[var(--color-text-secondary)]" />
+                Organization settings
+              </Link>
+            )}
+            <Link href="/help" onClick={onMobileClose} className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 min-h-[44px] text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
               <IconHelpCircle size={16} className="text-[var(--color-text-secondary)]" />
               Help
-            </button>
+            </Link>
             <Link
               href="/"
               onClick={onMobileClose}

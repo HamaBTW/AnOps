@@ -8,6 +8,9 @@ export type Company = {
   currency: string;
   industry?: string;
   logoUrl?: string;
+  /** "pending" until the owner confirms the activation email; legacy companies have no value (active). */
+  activationStatus?: "pending" | "active";
+  activationDeadline?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -17,7 +20,7 @@ export type CompanyMember = {
   companyId: string;
   userId: string;
   role: CompanyRole;
-  status: "active" | "invited";
+  status: "active" | "invited" | "suspended";
   userEmail?: string;
   userName?: string;
   createdAt?: string;

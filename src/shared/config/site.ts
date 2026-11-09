@@ -1,3 +1,5 @@
+import { formatMoney, quotePrice } from "@/shared/domain/plans";
+
 export const siteName = "AnOps";
 export const siteTagline = "One platform. Every operation.";
 export const siteDescription =
@@ -47,8 +49,9 @@ export const footerGroups = [
   },
 ] as const;
 
+
 export type Plan = {
-  id: "free" | "standard" | "pro" | "ultra" | "custom";
+  id: "oneops" | "custom" | "allops" | "maxops";
   name: string;
   price: string;
   priceNote: string;
@@ -61,102 +64,93 @@ export type Plan = {
   highlight?: string;
 };
 
-/** Prices are not published yet: never put a number here until billing is defined. */
+const usd = (plan: "allops" | "maxops" | "custom", appCount?: number) => formatMoney(quotePrice({ plan, currency: "usd", interval: "month", appCount }).total, "usd");
+const eur = (plan: "allops" | "maxops" | "custom", appCount?: number) => formatMoney(quotePrice({ plan, currency: "eur", interval: "month", appCount }).total, "eur");
+
+/** Public plan cards. Prices are computed from src/shared/domain/plans.ts (single source of truth). */
 export const plans: Plan[] = [
   {
-    id: "free",
-    name: "Free",
+    id: "oneops",
+    name: "OneOps",
     price: "Free",
-    priceNote: "No card required",
-    audience: "Try AnOps on one area of your business",
-    description: "One company and one application of your choice.",
-    companies: "1 company",
+    priceNote: "Forever · no card",
+    audience: "Run one area of your business",
+    description: "One application of your choice, free forever.",
+    companies: "Per organization",
     applications: "1 application",
-    features: ["One company workspace", "Choose one available application", "Members and roles", "Upgrade at any time"],
-    cta: { label: "Create a free account", href: "/register" },
-  },
-  {
-    id: "standard",
-    name: "Standard",
-    price: "To be announced",
-    priceNote: "Pricing published before launch",
-    audience: "A single business running on connected apps",
-    description: "One company with every application, sharing one set of records.",
-    companies: "1 company",
-    applications: "All applications",
-    features: ["Everything in Free", "All available applications", "AnOps AI Command Center", "Records shared across apps"],
-    cta: { label: "Talk to us", href: "/contact" },
-    highlight: "Most teams start here",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "To be announced",
-    priceNote: "Pricing published before launch",
-    audience: "Groups and businesses with several entities",
-    description: "Several companies with every application and one login.",
-    companies: "Multiple companies",
-    applications: "All applications",
-    features: ["Everything in Standard", "Multiple companies", "Company switcher with isolated data", "Per-company roles"],
-    cta: { label: "Talk to us", href: "/contact" },
-  },
-  {
-    id: "ultra",
-    name: "Ultra",
-    price: "To be announced",
-    priceNote: "Pricing published before launch",
-    audience: "Teams that want the most from AI",
-    description: "Everything in Pro, plus advanced AI capabilities and early access to new AI features.",
-    companies: "Multiple companies",
-    applications: "All applications",
-    features: ["Everything in Pro", "Advanced AI capabilities", "Early access to new AI features"],
-    cta: { label: "Talk to us", href: "/contact" },
+    features: ["One application, chosen once", "Unlimited users", "No expiration", "AI features not included"],
+    cta: { label: "Try it free", href: "/trial" },
   },
   {
     id: "custom",
     name: "Custom",
-    price: "Custom quote",
-    priceNote: "After a conversation",
-    audience: "Larger organizations with specific needs",
-    description: "A tailored setup for enterprise requirements.",
-    companies: "Tailored",
-    applications: "Tailored",
-    features: ["Tailored companies and applications", "Requirements discussed with our team", "Quoted for your organization"],
-    cta: { label: "Contact us", href: "/contact" },
+    price: `from ${usd("custom", 2)}`,
+    priceNote: `per month for 2 applications · from ${eur("custom", 2)} in EUR`,
+    audience: "Pay only for the applications you use",
+    description: "2 to 9 applications, always priced below AllOps.",
+    companies: "Per organization",
+    applications: "2–9 applications",
+    features: ["US$9 / €8 per application", `Never more than ${usd("custom", 9)}/month`, "Unlimited users", "Optional AI add-on"],
+    cta: { label: "Start a 15-day trial", href: "/trial" },
+  },
+  {
+    id: "allops",
+    name: "AllOps",
+    price: usd("allops"),
+    priceNote: `per month · ${eur("allops")} in EUR`,
+    audience: "A business running on connected apps",
+    description: "Every application in one workspace.",
+    companies: "Per organization",
+    applications: "10 applications · no AI",
+    features: ["10 applications (all except AnOps AI)", "Unlimited users", "Records shared across apps", "No AI features anywhere"],
+    cta: { label: "Start a 15-day trial", href: "/trial" },
+    highlight: "Best value",
+  },
+  {
+    id: "maxops",
+    name: "MaxOps",
+    price: usd("maxops"),
+    priceNote: `per month · ${eur("maxops")} in EUR`,
+    audience: "Teams that want the most from AI",
+    description: "Every application with the complete AI ecosystem.",
+    companies: "Per organization",
+    applications: "All 11 applications",
+    features: ["Everything in AllOps", "AnOps AI Command Center", "AI features in every application", "Advanced AI capabilities"],
+    cta: { label: "Start a 15-day trial", href: "/trial" },
   },
 ];
 
-export const comparisonRows: { label: string; values: [string, string, string, string, string] }[] = [
-  { label: "Companies", values: ["1", "1", "Multiple", "Multiple", "Tailored"] },
-  { label: "Applications", values: ["1 of your choice", "All", "All", "All", "Tailored"] },
-  { label: "Members and roles", values: ["Included", "Included", "Included", "Included", "Included"] },
-  { label: "Records shared across apps", values: ["—", "Included", "Included", "Included", "Included"] },
-  { label: "AnOps AI Command Center", values: ["If chosen as your app", "Included", "Included", "Included", "Tailored"] },
-  { label: "Advanced AI capabilities", values: ["—", "—", "—", "Included", "Tailored"] },
-  { label: "Early access to AI features", values: ["—", "—", "—", "Included", "Tailored"] },
-  { label: "Price", values: ["Free", "To be announced", "To be announced", "To be announced", "Quoted"] },
+export const comparisonRows: { label: string; values: [string, string, string, string] }[] = [
+  { label: "Applications", values: ["1, chosen once", "2–9 of your choice", "10 (no AnOps AI)", "All 11"] },
+  { label: "Users", values: ["Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Records shared across apps", values: ["—", "Included", "Included", "Included"] },
+  { label: "AnOps AI application", values: ["—", "With AI add-on", "—", "Included"] },
+  { label: "AI features inside applications", values: ["—", "With AI add-on", "—", "Included"] },
+  { label: "Monthly price (USD)", values: ["Free", `${usd("custom", 2)}–${usd("custom", 9)}`, usd("allops"), usd("maxops")] },
+  { label: "Monthly price (EUR)", values: ["Free", `${eur("custom", 2)}–${eur("custom", 9)}`, eur("allops"), eur("maxops")] },
+  { label: "Annual billing", values: ["—", "2 months free", "2 months free", "2 months free"] },
 ];
 
 export const pricingFaq = [
   {
-    question: "Which applications can I choose on the Free plan?",
-    answer: "Any application marked Available. CRM and Sales are coming soon and can be chosen once they are released.",
+    question: "How does the free trial work?",
+    answer: "Select two or three applications at sign-up for a 15-day trial with AI features included. No card is needed. When it ends, choose AllOps, MaxOps or Custom, or keep one application free with OneOps.",
   },
   {
-    question: "Why are prices not shown yet?",
-    answer: "Paid plan prices and billing terms are still being defined. They will be published on this page before paid plans open. We will not charge you without clear terms.",
+    question: "Is OneOps really free forever?",
+    answer: "Yes. One application, unlimited users, no expiration. The application is chosen once and cannot be changed later. AI features are not included.",
   },
   {
-    question: "Can I move between plans?",
-    answer: "Yes. You can start on Free and move to Standard, Pro or Ultra when you need more applications or companies.",
+    question: "Do you charge per user?",
+    answer: "No. Every plan includes unlimited users. Prices are per organization.",
   },
   {
-    question: "What is the difference between Pro and Ultra?",
-    answer: "Both include multiple companies and all applications. Ultra adds advanced AI capabilities and early access to new AI features.",
+    question: "What is the difference between AllOps and MaxOps?",
+    answer: "AllOps includes 10 applications and no AI at all: AnOps AI is not available and no application has AI features. MaxOps adds AnOps AI (the 11th application) and the AI features inside every application.",
   },
   {
-    question: "Is my data separated between companies?",
-    answer: "Yes. Each company is an isolated workspace. People only see the companies they are members of, with the role they have there.",
+    question: "How is payment handled?",
+    answer: "Payments are processed securely by Stripe in US dollars or euros. Prices exclude applicable taxes. You can cancel at any time; access continues until the end of the paid period and your data is preserved.",
   },
 ] as const;
 
@@ -169,7 +163,7 @@ export const faqItems = [
   {
     question: "Do we need every app?",
     answer:
-      "No. Choose the apps you need. The Free plan includes one company and one application; Standard and above include every application.",
+      "No. Choose the apps you need. OneOps keeps one application free forever, Custom covers 2 to 9, AllOps includes 10 (no AI) and MaxOps all 11 with AI.",
   },
   {
     question: "Can AI change records or send orders on its own?",
@@ -184,12 +178,12 @@ export const faqItems = [
   {
     question: "How do we discuss pricing?",
     answer:
-      "Prices for Standard, Pro and Ultra will be published before paid plans open. Custom plans are quoted after a conversation about your needs.",
+      "Prices are on the pricing page: OneOps is free, Custom starts at US$18 per month, AllOps is US$49 and MaxOps US$99, with unlimited users.",
   },
 ] as const;
 
 export const gettingStarted = [
   { step: "Explore the apps", detail: "Browse the directory and check the status of each application.", href: "/apps" },
-  { step: "Compare plans", detail: "See what Free, Standard, Pro, Ultra and Custom include.", href: "/pricing" },
+  { step: "Compare plans", detail: "See what OneOps, Custom, AllOps and MaxOps include.", href: "/pricing" },
   { step: "Talk to us", detail: "Tell us about your operations and we will discuss the right setup.", href: "/contact" },
 ] as const;

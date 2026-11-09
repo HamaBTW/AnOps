@@ -11,6 +11,7 @@ import {
   violations,
 } from "@/server/ai/access/capabilities";
 import { recordAudit } from "@/server/audit/audit.service";
+import { getEntitlements } from "@/server/platform/subscription.service";
 import { COLLECTIONS, type AiAccessGrantDoc, type AiSettingsDoc } from "@/server/db/documents";
 import { withTransaction, type Tx } from "@/server/db/transactions";
 import {
@@ -129,7 +130,7 @@ const NO_GRANT: AiGrantView = {
   isDefault: false,
 };
 
-export type AiAccessState = "ready" | "platform_disabled" | "company_disabled" | "not_granted" | "inactive";
+export type AiAccessState = "ready" | "platform_disabled" | "plan_excluded" | "company_disabled" | "not_granted" | "inactive";
 
 export type AiAccess = {
   state: AiAccessState;
@@ -148,10 +149,11 @@ export type AiAccess = {
  */
 export async function resolveAiAccess(ctx: AiActorContext): Promise<AiAccess> {
   const scope = aiScope(ctx);
-  const [settingsDoc, grantDoc, member] = await Promise.all([
+  const [settingsDoc, grantDoc, member, entitlements] = await Promise.all([
     scope.settings.findOne(),
     scope.grants.findOne({ userId: ctx.userId }),
     loadLiveMember(ctx.db, ctx.companyId, ctx.userId),
+    getEntitlements(ctx.db, ctx.companyId),
   ]);
   const settings = settingsView(settingsDoc);
 
@@ -161,6 +163,8 @@ export async function resolveAiAccess(ctx: AiActorContext): Promise<AiAccess> {
   let state: AiAccessState = "ready";
   // The platform switch (AI_KILL_SWITCH) wins over everything and is read on every call, so it takes effect on the next request.
   if (isAiKillSwitchOn()) state = "platform_disabled";
+  // Subscription entitlement: OneOps and AllOps never include AI features (MaxOps, Custom + AI add-on, or a trial do).
+  else if (!entitlements.aiFeatures) state = "plan_excluded";
   else if (!member) state = "inactive";
   else if (!settings.enabled) state = "company_disabled";
   else if (!grant.enabled) state = "not_granted";
@@ -185,6 +189,7 @@ export function assertAiReady(access: AiAccess): void {
   if (access.state === "ready") return;
   const messages: Record<Exclude<AiAccessState, "ready">, string> = {
     platform_disabled: "AI is temporarily switched off for the whole platform. Try again later.",
+    plan_excluded: "AI features are not included in your organization's plan. They are part of MaxOps and the Custom AI add-on.",
     company_disabled: "AI is not enabled for this company. Ask an owner or administrator.",
     not_granted: "AI access is not enabled for your account. Ask an owner or administrator.",
     inactive: "Your account is not active in this company.",

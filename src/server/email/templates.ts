@@ -96,6 +96,33 @@ export function passwordResetEmail(name: string, token: string): RenderedEmail {
   };
 }
 
+export function organizationActivationEmail(name: string, organizationName: string, token: string, hours: number): RenderedEmail {
+  const url = `${getAppUrl()}/activate?token=${encodeURIComponent(token)}`;
+  const heading = "Activate your organization";
+  const body = `<p style="margin:0;">Hi ${escapeHtml(name)},</p>
+    <p style="margin:12px 0 0 0;">Your AnOps workspace for <strong>${escapeHtml(organizationName)}</strong> is ready. Confirm this email address to activate it.</p>
+    <p style="margin:12px 0 0 0;">The organization and its data are reserved for ${hours} hours. If it is not activated in time, it is removed automatically.</p>
+    <p style="margin:12px 0 0 0;">If you didn&apos;t create this organization, you can safely ignore this email.</p>`;
+  return {
+    subject: `Activate ${organizationName} on AnOps`,
+    html: layout(heading, body, "Activate organization", url),
+    text: `Hi ${name},\n\nActivate your AnOps organization "${organizationName}" within ${hours} hours:\n${url}\n\nIf it is not activated in time, it is removed automatically. If you didn't create this organization, ignore this email.\n`,
+  };
+}
+
+export function invitationEmail(input: { inviterName: string; organizationName: string; roleLabel: string; token: string; days: number }): RenderedEmail {
+  const url = `${getAppUrl()}/invite?token=${encodeURIComponent(input.token)}`;
+  const heading = `Join ${input.organizationName} on AnOps`;
+  const body = `<p style="margin:0;">${escapeHtml(input.inviterName)} invited you to join <strong>${escapeHtml(input.organizationName)}</strong> on AnOps as <strong>${escapeHtml(input.roleLabel)}</strong>.</p>
+    <p style="margin:12px 0 0 0;">This invitation can be used once and expires in ${input.days} days.</p>
+    <p style="margin:12px 0 0 0;">If you weren&apos;t expecting it, you can safely ignore this email.</p>`;
+  return {
+    subject: `${input.inviterName} invited you to ${input.organizationName} on AnOps`,
+    html: layout(heading, body, "Accept invitation", url),
+    text: `${input.inviterName} invited you to join ${input.organizationName} on AnOps as ${input.roleLabel}.\n\nAccept (single use, expires in ${input.days} days):\n${url}\n`,
+  };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")

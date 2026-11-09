@@ -5,6 +5,7 @@ import { AppError } from "@/shared/lib/errors";
 import { MARKETING_INDEXES } from "@/server/marketing/indexes";
 import { HR_AI_INDEXES } from "@/server/services/hr-ai.indexes";
 import { FINANCE_INDEXES } from "@/server/services/finance.indexes";
+import { PLATFORM_INDEXES } from "@/server/platform/collections";
 
 /**
  * Index definitions for every company-scoped collection (HR, inventory, purchasing, manufacturing),
@@ -161,7 +162,11 @@ export function ensureIndexes(db: Db): Promise<void> {
 }
 
 async function createAll(db: Db): Promise<void> {
-  for (const [collectionName, indexes] of Object.entries(INDEXES)) {
+  const all: Record<string, IndexDescription[]> = { ...INDEXES };
+  for (const [collectionName, indexes] of Object.entries(PLATFORM_INDEXES)) {
+    all[collectionName] = [...(all[collectionName] ?? []), ...indexes];
+  }
+  for (const [collectionName, indexes] of Object.entries(all)) {
     await db.collection(collectionName).createIndexes(indexes);
   }
 }

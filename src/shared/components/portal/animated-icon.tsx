@@ -41,7 +41,7 @@ export function AnimatedIcon({ icon, size = 48, play = "hover", className, tile 
           height={128}
           decoding="async"
           loading="lazy"
-          className={cn(img, play === "always" && "motion-safe:invisible")}
+          className={img}
         />
         {play !== "never" && (
           // eslint-disable-next-line @next/next/no-img-element -- animated WebP, next/image would drop the animation
@@ -51,9 +51,11 @@ export function AnimatedIcon({ icon, size = 48, play = "hover", className, tile 
             width={256}
             height={256}
             decoding="async"
-            loading="lazy"
+            loading={play === "always" ? "eager" : "lazy"}
             className={cn(
               img,
+              // Opaque tile colour: the animation covers the poster once loaded, and the poster shows while it loads.
+              tile && "bg-[#F7F7F2]",
               "hidden",
               play === "always" ? "motion-safe:block" : "motion-safe:group-hover:block motion-safe:group-focus-visible:block"
             )}

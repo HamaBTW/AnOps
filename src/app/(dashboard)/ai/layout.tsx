@@ -1,8 +1,10 @@
 import { ModuleTabs } from "@/shared/components/layout/module-tabs";
 import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { PERMISSIONS } from "@/server/security/permissions";
+import { requireAppAccess } from "@/server/platform/access";
 
 export default async function AiLayout({ children }: { children: React.ReactNode }) {
+  await requireAppAccess("ai");
   const ctx = await getPageWorkspace();
   const tabs = [{ label: "Assistant", href: "/ai", exact: true }];
   // The tab is a convenience. The access page and every action behind it check the permission again.

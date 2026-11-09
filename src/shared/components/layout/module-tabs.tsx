@@ -10,7 +10,7 @@ export type ModuleTab = { label: string; href: string; /** Match only this exact
 export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Module sections" className="-mx-1 overflow-x-auto">
+    <nav aria-label="Module sections" className="-mx-1 overflow-x-auto lg:hidden">
       <ul className="flex min-w-max gap-1 border-b border-[var(--color-border-subtle)] px-1">
         {tabs.map((tab) => {
           const active = pathname === tab.href || (!tab.exact && pathname.startsWith(`${tab.href}/`));

@@ -6,6 +6,7 @@ import { Sidebar } from "@/shared/components/layout/sidebar";
 import { Topbar } from "@/shared/components/layout/topbar";
 
 import type { Company } from "@/features/company/types";
+import type { ApplicationId } from "@/shared/domain/applications";
 
 type ShellUser = {
   name: string;
@@ -17,11 +18,17 @@ export function DashboardShell({
   user,
   companies = [],
   activeCompanyId,
+  allowedApps = [],
+  permissions = [],
+  aiFeatures = true,
 }: {
   children: React.ReactNode;
   user: ShellUser;
   companies?: Company[];
   activeCompanyId?: string;
+  allowedApps?: ApplicationId[];
+  permissions?: string[];
+  aiFeatures?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -42,6 +49,10 @@ export function DashboardShell({
         user={user}
         mobileOpen={sidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
+        allowedApps={allowedApps}
+        permissions={permissions}
+        aiFeatures={aiFeatures}
+        orgId={activeCompanyId}
       />
       {sidebarOpen && (
         <button
@@ -56,6 +67,9 @@ export function DashboardShell({
           onMenuClick={() => setSidebarOpen(true)}
           companies={companies}
           activeCompanyId={activeCompanyId}
+          allowedApps={allowedApps}
+          permissions={permissions}
+          aiFeatures={aiFeatures}
         />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
           <div className="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">

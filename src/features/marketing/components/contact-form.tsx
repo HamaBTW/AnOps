@@ -1,5 +1,6 @@
 "use client";
 
+import { Switch } from "@/shared/components/ui/switch";
 import { useRouter } from "next/navigation";
 import { useTransition, type ComponentType } from "react";
 import { Controller, useForm, type Resolver, type UseFormRegisterReturn } from "react-hook-form";
@@ -241,26 +242,7 @@ export function ContactForm({
                   Turn off to pause this contact without deleting their history. Inactive contacts are never sent to.
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={field.value}
-                aria-labelledby="active-label"
-                aria-describedby="active-hint"
-                onClick={() => field.onChange(!field.value)}
-                className={cn(
-                  "relative inline-flex h-7 w-12 shrink-0 items-center rounded-[var(--radius-pill)] transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)]",
-                  field.value ? "bg-[var(--color-action-primary)]" : "bg-[var(--color-border-control)]"
-                )}
-              >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform",
-                    field.value ? "translate-x-6" : "translate-x-1"
-                  )}
-                />
-              </button>
+              <Switch checked={field.value} labelledBy="active-label" describedBy="active-hint" onChange={(next) => field.onChange(next)} />
             </div>
           )}
         />

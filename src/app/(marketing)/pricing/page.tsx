@@ -4,8 +4,8 @@ import { Faq } from "@/shared/components/marketing/faq";
 import { btnPrimary, btnSecondary, container } from "@/shared/components/marketing/styles";
 import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { PlanFinder } from "@/shared/components/portal/plan-finder";
-import { CtaBand, Notice, PageHero, SectionHeading, delay } from "@/shared/components/portal/sections";
-import { IconArrowRight, IconCheck } from "@/shared/components/ui/brand-icons";
+import { CtaBand, PageHero, SectionHeading, delay } from "@/shared/components/portal/sections";
+import { IconCheck } from "@/shared/components/ui/brand-icons";
 import { comparisonRows, plans, pricingFaq } from "@/shared/config/site";
 import { cn } from "@/shared/lib/utils";
 
@@ -16,28 +16,22 @@ export const metadata: Metadata = {
 };
 
 const icons: Record<string, string> = {
-  free: "wired-lineal-501-coupon-free-morph-rotate.webp",
-  standard: "wired-lineal-12-layers-hover-slide.webp",
-  pro: "wired-lineal-3308-building-office-in-reveal.webp",
-  ultra: "wired-lineal-256x256-ai-chip-hover-pinch.webp",
-  custom: "wired-lineal-456-handshake-hover-pinch.webp",
+  oneops: "wired-lineal-501-coupon-free-morph-rotate.webp",
+  custom: "wired-lineal-12-layers-hover-slide.webp",
+  allops: "wired-lineal-3510-flow-chart-hover-pinch.webp",
+  maxops: "wired-lineal-256x256-ai-chip-hover-pinch.webp",
 };
 
 export default function PricingPage() {
-  const tiers = plans.filter((plan) => plan.id !== "custom");
-  const custom = plans.find((plan) => plan.id === "custom");
+  const tiers = plans;
 
   return (
     <>
       <PageHero
         eyebrow="Pricing"
-        title="Start free. Add apps and companies as you grow."
-        lead="Every plan is built on the same platform. The difference is how many companies you run and how many applications you use."
-      >
-        <div className="mt-6 max-w-xl">
-          <Notice>Prices for Standard, Pro and Ultra are not published yet. They will appear here, with billing terms, before paid plans open.</Notice>
-        </div>
-      </PageHero>
+        title="Unlimited users. Pay for applications, not people."
+        lead="Start with one application free forever, try up to three for 15 days, then pick the plan that fits. Every plan includes unlimited users."
+      />
 
       <section className={`${container} py-14 sm:py-20`} aria-label="Plans">
         <ol className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -65,8 +59,8 @@ export default function PricingPage() {
               <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{plan.priceNote}</p>
               <dl className="mt-6 grid grid-cols-2 gap-2 text-sm">
                 <div className="rounded-[10px] bg-[var(--color-bg-subtle)] p-3">
-                  <dt className="text-xs text-[var(--color-text-secondary)]">Companies</dt>
-                  <dd className="mt-0.5 font-semibold text-[var(--color-text-primary)]">{plan.companies}</dd>
+                  <dt className="text-xs text-[var(--color-text-secondary)]">Users</dt>
+                  <dd className="mt-0.5 font-semibold text-[var(--color-text-primary)]">Unlimited</dd>
                 </div>
                 <div className="rounded-[10px] bg-[var(--color-bg-subtle)] p-3">
                   <dt className="text-xs text-[var(--color-text-secondary)]">Applications</dt>
@@ -82,7 +76,7 @@ export default function PricingPage() {
                 ))}
               </ul>
               <div className="mt-auto pt-8">
-                <Link href={plan.cta.href} className={cn(plan.highlight || plan.id === "free" ? btnPrimary : btnSecondary, "w-full")}>
+                <Link href={plan.cta.href} className={cn(plan.highlight || plan.id === "oneops" ? btnPrimary : btnSecondary, "w-full")}>
                   {plan.cta.label}
                 </Link>
               </div>
@@ -90,21 +84,13 @@ export default function PricingPage() {
           ))}
         </ol>
 
-        {custom && (
-          <div data-reveal className="group mt-4 flex flex-col gap-6 rounded-[20px] portal-ink p-6 sm:p-8 md:flex-row md:items-center">
-            <AnimatedIcon icon={icons.custom} size={56} />
-            <div className="flex-1">
-              <h2 className="font-[family-name:var(--font-heading)] text-xl font-semibold">{custom.name}</h2>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                {custom.description} {custom.features.join(" · ")}.
-              </p>
-            </div>
-            <Link href={custom.cta.href} className={`${btnPrimary} shrink-0`}>
-              {custom.cta.label}
-              <IconArrowRight size={14} />
-            </Link>
-          </div>
-        )}
+        <p className="mt-6 text-sm text-[var(--color-text-secondary)]">
+          Prices per organization, unlimited users, excluding applicable taxes. Annual billing: two months free. Need something specific?{" "}
+          <Link href="/contact" className="font-semibold text-[var(--color-text-primary)] underline underline-offset-4">
+            Talk to us
+          </Link>
+          .
+        </p>
       </section>
 
       <section className="border-y border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/50" aria-labelledby="finder-heading">

@@ -142,7 +142,7 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
             <div className="hidden sm:flex items-center">
               {/* /dashboard opens the active company. Accounts without a company are sent to onboarding by the dashboard layout. */}
               <Link
-                href="/dashboard"
+                href="/anops"
                 className={cn(btnPrimary, "px-4 inline-flex items-center gap-1.5 shadow-sm")}
               >
                 Open workspace
@@ -156,8 +156,8 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               >
                 Sign in
               </Link>
-              <Link href="/register" className={cn(btnPrimary, "hidden px-4 sm:inline-flex")}>
-                Start free
+              <Link href="/trial" className={cn(btnPrimary, "hidden px-4 sm:inline-flex")}>
+                Try it free
               </Link>
             </>
           )}
@@ -220,7 +220,7 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               <div className="px-3 text-xs text-[var(--color-text-secondary)]">
                 Signed in as <span className="font-semibold text-[var(--color-text-primary)]">{user.name || user.email}</span>
               </div>
-              <Link href="/dashboard" onClick={closeAll} className={cn(btnPrimary, "flex w-full justify-center")}>
+              <Link href="/anops" onClick={closeAll} className={cn(btnPrimary, "flex w-full justify-center")}>
                 Open workspace
               </Link>
             </div>
@@ -229,8 +229,8 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               <Link href="/login" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
                 Sign in
               </Link>
-              <Link href="/register" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
-                Start free
+              <Link href="/trial" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
+                Try it free
               </Link>
             </div>
           )}

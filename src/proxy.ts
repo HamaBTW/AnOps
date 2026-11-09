@@ -5,6 +5,9 @@ import { authConfig } from "@/server/auth/config";
 const { auth } = NextAuth(authConfig);
 
 const protectedRoutes = [
+  "/anops",
+  "/organization",
+  "/profile",
   "/dashboard",
   "/crm",
   "/sales",
@@ -80,7 +83,7 @@ export default auth((req) => {
 
   // 5. /reset-password: let forceReset users in; send everyone else to dashboard
   if (isResetPasswordRoute && isLoggedIn && !forceReset) {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
+    return NextResponse.redirect(new URL("/anops", nextUrl.origin));
   }
 
   // 6. Auth-only pages: active logged-in users go to dashboard; logged-in
@@ -95,7 +98,7 @@ export default auth((req) => {
       }
       return NextResponse.next();
     }
-    return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
+    return NextResponse.redirect(new URL("/anops", nextUrl.origin));
   }
 
   return NextResponse.next();

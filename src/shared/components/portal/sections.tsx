@@ -137,7 +137,7 @@ export function AppTile({ app, index = 0, compact = false }: { app: App; index?:
 
 export function CtaBand({
   title = "Start with one app. Grow into the whole platform.",
-  body = "Create a free account with one company and one application, or talk to us about the right plan.",
+  body = "Try it free with one company and one application, or talk to us about the right plan.",
 }: {
   title?: string;
   body?: string;
@@ -151,8 +151,8 @@ export function CtaBand({
           <h2 className="font-[family-name:var(--font-heading)] text-[32px] leading-[1.08] tracking-[-0.035em] text-[#F7F7F2] sm:text-[48px]">{title}</h2>
           <p className="mt-5 text-base leading-relaxed text-[#B4BFB7] sm:text-lg">{body}</p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <Link href="/register" className={btnPrimary}>
-              Create a free account
+            <Link href="/trial" className={btnPrimary}>
+              Try it free
               <IconArrowRight size={14} />
             </Link>
             <Link

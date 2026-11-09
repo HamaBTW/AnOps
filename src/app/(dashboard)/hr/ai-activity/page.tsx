@@ -1,3 +1,4 @@
+import { requireAiFeatures } from "@/server/platform/access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -33,6 +34,7 @@ export default async function HrAiActivityPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireAiFeatures("/hr");
   const user = await getCurrentAuthUser();
   if (!user?.isAdmin) redirect("/hr");
 

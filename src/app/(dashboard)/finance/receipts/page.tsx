@@ -1,3 +1,4 @@
+import { getPageOrgAccess } from "@/server/platform/access";
 import type { Metadata } from "next";
 import { getFinanceService } from "@/server/services/finance.service";
 import { ReceiptScanner, type ReceiptItem } from "@/features/finance/components/receipt-scanner";
@@ -21,7 +22,8 @@ export default async function FinanceReceiptsPage() {
   try {
     const service = await getFinanceService();
     [receipts, categories] = await Promise.all([service.listReceiptExtractions(), service.listExpenseCategories()]);
-    canScan = service.hasPermission("finance.receipt.ocr");
+    // Receipt scanning is an AI feature (vision model): only offered when the plan includes AI features.
+    canScan = service.hasPermission("finance.receipt.ocr") && (await getPageOrgAccess()).entitlements.aiFeatures;
     canCreateExpense = service.hasPermission("finance.expense.manage");
     telegram = await getStaffTelegramStatus(await resolveWorkspace());
   } catch (e) {

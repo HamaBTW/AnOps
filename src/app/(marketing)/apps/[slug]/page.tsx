@@ -85,7 +85,7 @@ export default async function AppDetailPage({ params }: { params: Params }) {
               <p className="mt-5 max-w-xl text-base leading-relaxed text-[var(--color-text-secondary)] sm:text-lg">{app.summary}</p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 {available ? (
-                  <Link href="/register" className={`${btnPrimary} h-12 px-6`}>
+                  <Link href="/trial" className={`${btnPrimary} h-12 px-6`}>
                     Start free with {app.name}
                     <IconArrowRight size={14} />
                   </Link>

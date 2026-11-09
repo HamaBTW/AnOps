@@ -7,7 +7,7 @@ export const primaryNav = [
   { label: "Apps", href: "/apps" },
   { label: "Industries", href: "/industries" },
   { label: "Pricing", href: "/pricing" },
-  { label: "Community", href: "/community" },
+  { label: "Community", href: "/community-hub" },
   { label: "Help", href: "/help" },
 ] as const;
 
@@ -16,6 +16,7 @@ export const footerGroups = [
     title: "Product",
     links: [
       { label: "Apps", href: "/apps" },
+      { label: "AnOps AI", href: "/apps/ai" },
       { label: "Industries", href: "/industries" },
       { label: "Pricing", href: "/pricing" },
     ],
@@ -23,9 +24,10 @@ export const footerGroups = [
   {
     title: "Resources",
     links: [
-      { label: "Community", href: "/community" },
+      { label: "Documentation", href: "/docs" },
+      { label: "Guides", href: "/docs#guides" },
+      { label: "Community", href: "/community-hub" },
       { label: "Help center", href: "/help" },
-      { label: "Getting started", href: "/help#getting-started" },
     ],
   },
   {
@@ -33,6 +35,7 @@ export const footerGroups = [
     links: [
       { label: "About", href: "/about" },
       { label: "Contact", href: "/contact" },
+      { label: "Sign in", href: "/login" },
     ],
   },
   {
@@ -44,89 +47,117 @@ export const footerGroups = [
   },
 ] as const;
 
-export const industries = [
-  {
-    slug: "manufacturing",
-    name: "Manufacturing",
-    summary: "Keep production, stock and purchasing aligned so orders are not delayed by missing parts.",
-    challenges: [
-      "Stock shortages delay production orders",
-      "Purchase and production plans drift apart",
-      "Production costs are hard to trace back to orders",
-    ],
-    apps: ["manufacturing", "inventory", "purchase", "stock-forecast-reorder"],
-  },
-  {
-    slug: "distribution-retail",
-    name: "Distribution & Retail",
-    summary: "Give every location one view of stock, orders and invoices.",
-    challenges: [
-      "Stock levels differ between locations",
-      "Orders and invoices are entered twice",
-      "Reorders happen after shelves are already empty",
-    ],
-    apps: ["sales", "inventory", "invoicing", "stock-forecast-reorder"],
-  },
-  {
-    slug: "professional-services",
-    name: "Professional Services",
-    summary: "Connect project time, client work and billing so nothing is lost between teams.",
-    challenges: [
-      "Project time and billing are disconnected",
-      "Client requests get lost between teams",
-      "Expense reimbursement takes weeks",
-    ],
-    apps: ["projects", "tasks", "invoicing", "expenses"],
-  },
-  {
-    slug: "marketing-agencies",
-    name: "Marketing & Agencies",
-    summary: "Run campaigns, approvals and lead follow-up from one connected workspace.",
-    challenges: [
-      "Campaigns run across separate tools",
-      "Copy and approvals slow down launches",
-      "Lead follow-up is inconsistent",
-    ],
-    apps: ["campaign-management", "email-marketing", "marketing-copywriter", "crm"],
-  },
-] as const;
+export type Plan = {
+  id: "free" | "standard" | "pro" | "ultra" | "custom";
+  name: string;
+  price: string;
+  priceNote: string;
+  audience: string;
+  description: string;
+  companies: string;
+  applications: string;
+  features: string[];
+  cta: { label: string; href: string };
+  highlight?: string;
+};
 
-export const plans = [
+/** Prices are not published yet: never put a number here until billing is defined. */
+export const plans: Plan[] = [
   {
-    name: "One App",
+    id: "free",
+    name: "Free",
     price: "Free",
-    priceNote: "No cost to start",
-    description: "Start with one eligible application and see how AnOps fits your work.",
-    features: ["Access to one eligible application", "Upgrade to Standard at any time"],
-    cta: { label: "Contact us", href: "/contact" },
-    highlight: false,
+    priceNote: "No card required",
+    audience: "Try AnOps on one area of your business",
+    description: "One company and one application of your choice.",
+    companies: "1 company",
+    applications: "1 application",
+    features: ["One company workspace", "Choose one available application", "Members and roles", "Upgrade at any time"],
+    cta: { label: "Create a free account", href: "/register" },
   },
   {
+    id: "standard",
     name: "Standard",
-    price: "Pricing to be announced",
-    priceNote: "All applications",
-    description: "The integrated application ecosystem, with every app in one workspace.",
-    features: ["Access to all applications", "Integrated application ecosystem", "Shared records across apps"],
-    cta: { label: "Contact us", href: "/contact" },
-    highlight: true,
+    price: "To be announced",
+    priceNote: "Pricing published before launch",
+    audience: "A single business running on connected apps",
+    description: "One company with every application, sharing one set of records.",
+    companies: "1 company",
+    applications: "All applications",
+    features: ["Everything in Free", "All available applications", "AnOps AI Command Center", "Records shared across apps"],
+    cta: { label: "Talk to us", href: "/contact" },
+    highlight: "Most teams start here",
   },
   {
-    name: "Custom",
-    price: "Contact us",
-    priceNote: "Quoted after a conversation",
-    description: "For organizations that need multi-company setups and advanced AI features.",
-    features: ["All applications", "Multi-company capabilities", "Advanced AI features (planned)"],
-    cta: { label: "Contact us", href: "/contact" },
-    highlight: false,
+    id: "pro",
+    name: "Pro",
+    price: "To be announced",
+    priceNote: "Pricing published before launch",
+    audience: "Groups and businesses with several entities",
+    description: "Several companies with every application and one login.",
+    companies: "Multiple companies",
+    applications: "All applications",
+    features: ["Everything in Standard", "Multiple companies", "Company switcher with isolated data", "Per-company roles"],
+    cta: { label: "Talk to us", href: "/contact" },
   },
-] as const;
+  {
+    id: "ultra",
+    name: "Ultra",
+    price: "To be announced",
+    priceNote: "Pricing published before launch",
+    audience: "Teams that want the most from AI",
+    description: "Everything in Pro, plus advanced AI capabilities and early access to new AI features.",
+    companies: "Multiple companies",
+    applications: "All applications",
+    features: ["Everything in Pro", "Advanced AI capabilities", "Early access to new AI features"],
+    cta: { label: "Talk to us", href: "/contact" },
+  },
+  {
+    id: "custom",
+    name: "Custom",
+    price: "Custom quote",
+    priceNote: "After a conversation",
+    audience: "Larger organizations with specific needs",
+    description: "A tailored setup for enterprise requirements.",
+    companies: "Tailored",
+    applications: "Tailored",
+    features: ["Tailored companies and applications", "Requirements discussed with our team", "Quoted for your organization"],
+    cta: { label: "Contact us", href: "/contact" },
+  },
+];
 
-export const comparisonRows = [
-  { label: "Applications", values: ["One eligible app", "All apps", "All apps"] },
-  { label: "Integrated ecosystem", values: ["—", "Included", "Included"] },
-  { label: "Multi-company", values: ["—", "—", "Included"] },
-  { label: "AI features", values: ["—", "Details to be announced", "Advanced AI (planned)"] },
-  { label: "Pricing", values: ["Free", "To be announced", "Quoted on request"] },
+export const comparisonRows: { label: string; values: [string, string, string, string, string] }[] = [
+  { label: "Companies", values: ["1", "1", "Multiple", "Multiple", "Tailored"] },
+  { label: "Applications", values: ["1 of your choice", "All", "All", "All", "Tailored"] },
+  { label: "Members and roles", values: ["Included", "Included", "Included", "Included", "Included"] },
+  { label: "Records shared across apps", values: ["—", "Included", "Included", "Included", "Included"] },
+  { label: "AnOps AI Command Center", values: ["If chosen as your app", "Included", "Included", "Included", "Tailored"] },
+  { label: "Advanced AI capabilities", values: ["—", "—", "—", "Included", "Tailored"] },
+  { label: "Early access to AI features", values: ["—", "—", "—", "Included", "Tailored"] },
+  { label: "Price", values: ["Free", "To be announced", "To be announced", "To be announced", "Quoted"] },
+];
+
+export const pricingFaq = [
+  {
+    question: "Which applications can I choose on the Free plan?",
+    answer: "Any application marked Available. CRM and Sales are coming soon and can be chosen once they are released.",
+  },
+  {
+    question: "Why are prices not shown yet?",
+    answer: "Paid plan prices and billing terms are still being defined. They will be published on this page before paid plans open. We will not charge you without clear terms.",
+  },
+  {
+    question: "Can I move between plans?",
+    answer: "Yes. You can start on Free and move to Standard, Pro or Ultra when you need more applications or companies.",
+  },
+  {
+    question: "What is the difference between Pro and Ultra?",
+    answer: "Both include multiple companies and all applications. Ultra adds advanced AI capabilities and early access to new AI features.",
+  },
+  {
+    question: "Is my data separated between companies?",
+    answer: "Yes. Each company is an isolated workspace. People only see the companies they are members of, with the role they have there.",
+  },
 ] as const;
 
 export const faqItems = [
@@ -138,7 +169,7 @@ export const faqItems = [
   {
     question: "Do we need every app?",
     answer:
-      "No. Choose the apps you need. The Free plan includes one eligible application, and Standard gives access to all apps.",
+      "No. Choose the apps you need. The Free plan includes one company and one application; Standard and above include every application.",
   },
   {
     question: "Can AI change records or send orders on its own?",
@@ -153,12 +184,12 @@ export const faqItems = [
   {
     question: "How do we discuss pricing?",
     answer:
-      "Contact us. Standard pricing is to be announced, and Custom plans are quoted after a conversation about your needs.",
+      "Prices for Standard, Pro and Ultra will be published before paid plans open. Custom plans are quoted after a conversation about your needs.",
   },
 ] as const;
 
 export const gettingStarted = [
   { step: "Explore the apps", detail: "Browse the directory and check the status of each application.", href: "/apps" },
-  { step: "Compare plans", detail: "See what the One App, Standard and Custom plans include.", href: "/pricing" },
+  { step: "Compare plans", detail: "See what Free, Standard, Pro, Ultra and Custom include.", href: "/pricing" },
   { step: "Talk to us", detail: "Tell us about your operations and we will discuss the right setup.", href: "/contact" },
 ] as const;

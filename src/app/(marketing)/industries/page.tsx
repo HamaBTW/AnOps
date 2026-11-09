@@ -1,89 +1,121 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { container } from "@/shared/components/marketing/styles";
+import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
+import { IndustryExplorer } from "@/shared/components/portal/industry-explorer";
+import { CtaBand, PageHero, SectionHeading, delay } from "@/shared/components/portal/sections";
 import { IconArrowRight } from "@/shared/components/ui/brand-icons";
-import { StatusBadge } from "@/shared/components/marketing/status-badge";
-import { card, container, eyebrow, headingLg, headingXl, lead, sectionY } from "@/shared/components/marketing/styles";
 import { getApp } from "@/shared/config/catalog";
-import { industries } from "@/shared/config/site";
+import { industries } from "@/shared/config/industries";
 
 export const metadata: Metadata = {
   title: "Industries",
-  description: "How AnOps supports manufacturing, distribution and retail, professional services, and marketing teams.",
+  description:
+    "How AnOps supports manufacturing, distribution, retail, professional services, agencies and multi-company groups with connected applications.",
 };
+
+const contrast = [
+  { topic: "Records", before: "Copied between tools and spreadsheets", after: "Entered once, used by every app that needs them" },
+  { topic: "Access", before: "Separate accounts and permissions per tool", after: "One role per company, checked on every request" },
+  { topic: "Stock and money", before: "Reconciled by hand at month-end", after: "Updated together in one transaction" },
+  { topic: "AI", before: "Generic chat with no view of your data", after: "Works through your permissions and asks before it acts" },
+  { topic: "Several entities", before: "One subscription and login per company", after: "Switch companies from one account" },
+];
 
 export default function IndustriesPage() {
   return (
     <>
-      <section className={`${container} pb-8 pt-16 sm:pt-20`}>
-        <p className={eyebrow}>Industries</p>
-        <h1 className={`${headingXl} mt-3 max-w-3xl`}>Operations shaped by the way your business runs.</h1>
-        <p className={`${lead} mt-5 max-w-2xl`}>
-          Every industry has its own friction. Here is where operations usually lose time, and the apps designed to help.
-        </p>
+      <PageHero
+        eyebrow="Industry solutions"
+        title="Different businesses. The same need for one clear picture."
+        lead="Pick your industry to see the problems AnOps addresses, the applications involved and how work flows between them."
+      />
+
+      <section className={`${container} py-16 sm:py-24`} aria-labelledby="explorer-heading">
+        <SectionHeading id="explorer-heading" eyebrow="Explore" title="From challenge to application." />
+        <div className="mt-10" data-reveal style={delay(1)}>
+          <IndustryExplorer />
+        </div>
       </section>
 
-      {industries.map((industry, index) => (
-        <section
-          key={industry.slug}
-          id={industry.slug}
-          aria-labelledby={`${industry.slug}-heading`}
-          className={`${container} ${sectionY} scroll-reveal scroll-mt-24 border-t border-[var(--color-border-subtle)]`}
-        >
-          <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-            <div className="reveal">
-              <p className={eyebrow}>{String(index + 1).padStart(2, "0")} · Industry</p>
-              <h2 id={`${industry.slug}-heading`} className={`${headingLg} mt-3`}>
-                {industry.name}
-              </h2>
-              <p className={`${lead} mt-4`}>{industry.summary}</p>
-              <h3 className="mt-8 text-sm font-semibold text-[var(--color-text-primary)]">Common operational challenges</h3>
-              <ul className="mt-3 space-y-2">
-                {industry.challenges.map((challenge) => (
-                  <li key={challenge} className="flex gap-3 text-sm text-[var(--color-text-secondary)]">
-                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-text-secondary)]" />
-                    {challenge}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className={`${card} self-start p-6`}>
-              <p className="text-sm font-semibold text-[var(--color-text-primary)]">Recommended apps</p>
-              <ul className="mt-4 divide-y divide-[var(--color-border-subtle)]">
-                {industry.apps.map((slug) => {
-                  const app = getApp(slug);
-                  if (!app) return null;
-                  return (
-                    <li key={slug}>
-                      <Link href={`/apps/${app.slug}`} className="group flex items-center justify-between gap-4 py-3.5">
-                        <span>
-                          <span className="block text-sm font-semibold text-[var(--color-text-primary)] group-hover:underline">{app.name}</span>
-                          <span className="block text-xs text-[var(--color-text-secondary)]">{app.summary}</span>
-                        </span>
-                        <span className="flex shrink-0 items-center gap-3">
-                          <StatusBadge status={app.status} />
-                          <IconArrowRight size={14} />
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-        </section>
-      ))}
-
-      <section className={`${container} ${sectionY} scroll-reveal border-t border-[var(--color-border-subtle)]`}>
-        <h2 className={headingLg}>Working in another sector?</h2>
-        <p className={`${lead} mt-4 max-w-2xl`}>
-          AnOps is modular, so you can start with the apps that match your work. Tell us what you do and we will discuss the setup.
-        </p>
-        <Link href="/contact" className="mt-8 inline-flex min-h-[44px] items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] hover:underline">
-          Contact us
-          <IconArrowRight size={14} />
-        </Link>
+      <section className="border-y border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/50" aria-labelledby="all-heading">
+        <div className={`${container} py-16 sm:py-24`}>
+          <SectionHeading id="all-heading" eyebrow="All industries" title="Find your starting point." />
+          <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {industries.map((industry, index) => (
+              <li key={industry.slug} data-reveal style={delay(index, 60)}>
+                <Link
+                  href={`/industries/${industry.slug}`}
+                  style={{ ["--accent" as string]: industry.accent }}
+                  className="group relative flex h-full flex-col overflow-hidden rounded-[18px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 transition-[border-color,box-shadow] duration-300 hover:border-[color-mix(in_oklab,var(--accent)_55%,var(--color-border-subtle))] hover:shadow-[0_18px_40px_-26px_var(--accent)]"
+                >
+                  <div aria-hidden="true" className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-[var(--accent)] opacity-10 blur-2xl transition-opacity group-hover:opacity-25" />
+                  <AnimatedIcon icon={industry.icon} size={56} />
+                  <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{industry.name}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">{industry.summary}</p>
+                  <p className="mt-5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">
+                    {industry.apps.length} apps · {industry.challenges.length} challenges
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {industry.apps.map((slug) => (
+                      <span key={slug} className="rounded-full bg-[var(--color-bg-subtle)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
+                        {getApp(slug)?.name}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="mt-auto inline-flex items-center gap-1.5 pt-6 text-sm font-semibold text-[var(--color-text-primary)]">
+                    Read the solution
+                    <IconArrowRight size={13} className="transition-transform group-hover:translate-x-1" />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
+
+      <section className={`${container} py-16 sm:py-24`} aria-labelledby="contrast-heading">
+        <SectionHeading
+          id="contrast-heading"
+          eyebrow="Centralized operations"
+          title="What changes when your tools stop working alone."
+          lead="Disconnected tools can each be good at one job. The cost appears between them. This is what one platform changes."
+        />
+        <div className="mt-10 overflow-hidden rounded-[18px] border border-[var(--color-border-subtle)]" data-reveal>
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">Disconnected tools compared with one connected platform</caption>
+            <thead className="bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]">
+              <tr>
+                <th scope="col" className="hidden px-5 py-3 font-semibold sm:table-cell">
+                  Topic
+                </th>
+                <th scope="col" className="px-5 py-3 font-semibold">
+                  Disconnected tools
+                </th>
+                <th scope="col" className="px-5 py-3 font-semibold text-[var(--color-text-primary)]">
+                  With AnOps
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
+              {contrast.map((row) => (
+                <tr key={row.topic}>
+                  <th scope="row" className="hidden px-5 py-4 font-semibold text-[var(--color-text-primary)] sm:table-cell">
+                    {row.topic}
+                  </th>
+                  <td className="px-5 py-4 text-[var(--color-text-secondary)]">
+                    <span className="block text-xs font-semibold text-[var(--color-text-primary)] sm:hidden">{row.topic}</span>
+                    {row.before}
+                  </td>
+                  <td className="px-5 py-4 font-medium text-[var(--color-text-primary)]">{row.after}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <CtaBand title="Tell us how your business runs." body="Start free with one application, or talk to us about the setup that fits your industry." />
     </>
   );
 }

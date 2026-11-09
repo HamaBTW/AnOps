@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
-import { container, eyebrow, headingXl, lead, sectionY } from "@/shared/components/marketing/styles";
+import { LegalDocument } from "@/shared/components/portal/legal-document";
+import { privacyPolicy } from "@/shared/config/legal";
 
 export const metadata: Metadata = {
-  title: "Privacy",
-  description: "How AnOps handles personal information on its public website and in its platform.",
+  title: "Privacy Policy",
+  description: "How AnOps collects, uses, shares and protects personal information on its website and platform, and the rights you have.",
 };
 
 export default function PrivacyPage() {
-  return (
-    <div className={`${container} ${sectionY} scroll-reveal`}>
-      <p className={eyebrow}>Legal</p>
-      <h1 className={`${headingXl} mt-3`}>Privacy policy</h1>
-      <p className={`${lead} mt-5 max-w-2xl`}>
-        The privacy policy is being finalized. The complete text, including what we collect, why, and how to exercise your
-        rights, will be published here before launch.
-      </p>
-    </div>
-  );
+  return <LegalDocument doc={privacyPolicy} related={{ label: "Read the Terms of Use", href: "/terms" }} />;
 }

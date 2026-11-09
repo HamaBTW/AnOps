@@ -331,3 +331,89 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .anops-toast-in, .anops-toast-out { animation-duration: 1ms; }
 }
+
+/* ───────────── Public portal motion & surfaces ───────────── */
+.reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 700ms var(--ease-out),
+    transform 700ms var(--ease-out);
+  transition-delay: var(--d, 0ms);
+}
+
+.reveal-ready [data-reveal="fade"] {
+  transform: none;
+}
+
+.reveal-ready [data-reveal="scale"] {
+  transform: scale(0.97);
+}
+
+.reveal-ready [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-ready [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Dot grid used behind product visuals. */
+.portal-grid {
+  background-image: radial-gradient(color-mix(in oklab, var(--color-text-primary) 14%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Ink band: always-dark section, independent of theme. */
+.portal-ink {
+  --color-text-primary: #f7f7f2;
+  --color-text-secondary: #b4bfb7;
+  --color-border-subtle: #2b443d;
+  --color-border-control: #5d7a6f;
+  --color-bg-surface: #192b27;
+  --color-bg-subtle: #223832;
+  background-color: #0e1a18;
+  color: var(--color-text-primary);
+}
+
+@keyframes portal-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.portal-caret {
+  animation: portal-caret 1s steps(1) infinite;
+}
+
+@keyframes portal-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.portal-flow {
+  stroke-dasharray: 4 8;
+  animation: portal-flow 1.2s linear infinite;
+}
+
+@keyframes portal-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-caret,
+  .portal-flow {
+    animation: none;
+  }
+}

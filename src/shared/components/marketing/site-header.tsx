@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { categories, appsInCategory } from "@/shared/config/catalog";
 import { primaryNav } from "@/shared/config/site";
 import { btnPrimary } from "@/shared/components/marketing/styles";
-import { CategoryIcon } from "@/shared/components/marketing/category-icon";
+import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { StatusBadge } from "@/shared/components/marketing/status-badge";
 import { cn } from "@/shared/lib/utils";
 
@@ -50,7 +50,7 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)]/95 backdrop-blur">
-      <div className="mx-auto flex h-[72px] w-full max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex h-[72px] w-full max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex shrink-0 items-center" onClick={closeAll} aria-label="AnOps home">
           <img
             src="/brand-kit/01-brand-identity/logos/anops-logo-horizontal-dark.svg"
@@ -65,7 +65,7 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-1 lg:flex">
-          <div ref={menuRef} className="relative">
+          <div ref={menuRef}>
             <button
               type="button"
               aria-expanded={appsOpen}
@@ -82,42 +82,39 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
             <div
               id={appsPanelId}
               hidden={!appsOpen}
-              className="absolute left-0 top-full mt-2 w-[760px] max-w-[calc(100vw-2rem)] rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 shadow-[0_10px_40px_-10px_rgba(17,31,29,0.25)] menu-in"
+              className="menu-in absolute inset-x-4 top-[calc(100%-4px)] max-h-[calc(100dvh-88px)] overflow-y-auto overscroll-contain rounded-[16px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-3 shadow-[0_24px_60px_-24px_rgba(17,31,29,0.35)] sm:inset-x-6 lg:inset-x-8"
             >
-              <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-3 gap-x-2 gap-y-1">
                 {categories.map((category) => (
-                  <div key={category.id}>
-                    <Link
-                      href={`/apps?category=${category.id}`}
-                      onClick={closeAll}
-                      className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] hover:underline"
-                    >
-                      <CategoryIcon id={category.id} size={16} className="text-[var(--color-text-secondary)]" />
-                      {category.label}
-                    </Link>
-                    <ul className="mt-2 space-y-1">
-                      {appsInCategory(category.id)
-                        .slice(0, 4)
-                        .map((app) => (
-                          <li key={app.slug}>
-                            <Link
-                              href={`/apps/${app.slug}`}
-                              onClick={closeAll}
-                              className="flex items-center justify-between gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
-                            >
-                              {app.name}
-                              <StatusBadge status={app.status} />
-                            </Link>
-                          </li>
-                        ))}
+                  <div key={category.id} className="min-w-0 p-2">
+                    <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">{category.label}</p>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {appsInCategory(category.id).map((app) => (
+                        <li key={app.slug}>
+                          <Link
+                            href={`/apps/${app.slug}`}
+                            onClick={closeAll}
+                            className="group flex min-w-0 items-start gap-3 rounded-[10px] px-2 py-2 transition-colors duration-150 hover:bg-[var(--color-bg-subtle)] focus-visible:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+                          >
+                            <AnimatedIcon icon={app.icon} size={36} />
+                            <span className="min-w-0 flex-1 pt-0.5">
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-[var(--color-text-primary)]">
+                                {app.name}
+                                {app.status !== "available" && <StatusBadge status={app.status} />}
+                              </span>
+                              <span className="mt-0.5 block text-xs leading-snug text-[var(--color-text-secondary)] [overflow-wrap:anywhere]">{app.tagline}</span>
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-4 text-sm">
-                <span className="text-[var(--color-text-secondary)]">InP = In Progress · CS = Coming Soon</span>
+              <div className="mt-2 flex items-center justify-between rounded-[12px] bg-[var(--color-bg-subtle)] px-4 py-3 text-sm">
+                <span className="text-[var(--color-text-secondary)]">11 managements, one shared set of records.</span>
                 <Link href="/apps" onClick={closeAll} className="font-semibold text-[var(--color-text-primary)] hover:underline">
-                  Browse all apps
+                  Browse the app directory
                 </Link>
               </div>
             </div>
@@ -159,8 +156,8 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               >
                 Sign in
               </Link>
-              <Link href="/contact" className={cn(btnPrimary, "hidden px-4 sm:inline-flex")}>
-                Contact us
+              <Link href="/register" className={cn(btnPrimary, "hidden px-4 sm:inline-flex")}>
+                Start free
               </Link>
             </>
           )}
@@ -191,18 +188,20 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
             All apps
           </Link>
           <div className="pl-3 pt-2">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Categories</p>
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/apps?category=${category.id}`}
-                onClick={closeAll}
-                className="flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] px-3 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]"
-              >
-                <CategoryIcon id={category.id} size={16} />
-                {category.label}
-              </Link>
-            ))}
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Applications</p>
+            <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
+              {categories.flatMap((category) => appsInCategory(category.id)).map((app) => (
+                <Link
+                  key={app.slug}
+                  href={`/apps/${app.slug}`}
+                  onClick={closeAll}
+                  className="flex min-h-[44px] items-center gap-3 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
+                >
+                  <AnimatedIcon icon={app.icon} size={30} play="never" />
+                  {app.name}
+                </Link>
+              ))}
+            </div>
           </div>
           {primaryNav
             .filter((item) => item.href !== "/apps")
@@ -230,8 +229,8 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               <Link href="/login" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
                 Sign in
               </Link>
-              <Link href="/contact" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
-                Contact us
+              <Link href="/register" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
+                Start free
               </Link>
             </div>
           )}

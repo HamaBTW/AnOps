@@ -12,6 +12,7 @@ const { activateOrganization, resendActivation } = await import("@/server/platfo
 const { runLifecycleMaintenance } = await import("@/server/platform/cleanup.service");
 const { inviteMembers, acceptInvitation, previewInvitation, revokeInvitation } = await import("@/server/platform/invitation.service");
 const { chooseFreeFallback, getEntitlements, getSubscriptionDoc } = await import("@/server/platform/subscription.service");
+const { listMyOrganizations, leaveOrganization } = await import("@/server/platform/organization.service");
 const { resolveAiAccess } = await import("@/server/ai/access/access.service");
 const { effectiveApps } = await import("@/shared/domain/plans");
 const { permissionsForRole } = await import("@/server/security/permissions");
@@ -71,16 +72,16 @@ describe("registration", () => {
   });
 
   it("re-validates the selection and refuses duplicates and existing emails", async () => {
-    await expect(registerOrganization(h.db, form(["finance", "marketing", "company", "inventory"]), meta())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(registerOrganization(h.db, form(["finance", "marketing", "hr-payroll", "inventory"]), meta())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(registerOrganization(h.db, form(["ai"]), meta())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    const first = form(["company"]);
+    const first = form(["hr-payroll"]);
     await registerOrganization(h.db, first, meta());
     await expect(registerOrganization(h.db, { ...first }, meta())).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await h.db.collection("users").countDocuments({ email: first.email })).toBe(1);
   });
 
   it("concurrent registrations for one email create a single account", async () => {
-    const input = form(["company"]);
+    const input = form(["hr-payroll"]);
     const results = await Promise.allSettled([registerOrganization(h.db, input, meta()), registerOrganization(h.db, input, meta())]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(await h.db.collection("users").countDocuments({ email: input.email })).toBe(1);
@@ -208,7 +209,7 @@ describe("invitations", () => {
   });
 
   it("cannot invite before activation", async () => {
-    const reg = await registerOrganization(h.db, form(["company"]), meta());
+    const reg = await registerOrganization(h.db, form(["hr-payroll"]), meta());
     await expect(inviteMembers({ db: h.db, companyId: reg.companyId, userId: reg.userId, role: "owner", requestId: "r" }, { invitations: [{ email: "a@example.test", role: "employee" }] })).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
   });
 });
@@ -241,5 +242,35 @@ describe("AI entitlement", () => {
     const ent = { kind: "paid", plan: "allops", appIds: ["finance", "inventory", "crm"], aiFeatures: false, needsPlanSelection: false, trialEndsAt: null, trialDaysLeft: null, accessEndsAt: null } as const;
     expect(effectiveApps({ ...ent, appIds: [...ent.appIds] }, { companyRole: "employee", appAccess: ["crm", "marketing"] })).toEqual(["crm"]);
     expect(effectiveApps({ ...ent, appIds: [...ent.appIds] }, { companyRole: "admin", appAccess: ["crm"] })).toEqual(["finance", "inventory", "crm"]);
+  });
+});
+
+describe("multi-organization", () => {
+  it("lists every organization of a person with their role and plan, and keeps data per organization", async () => {
+    const a = await registerOrganization(h.db, form(["finance"]), meta());
+    await activateOrganization(h.db, tokenFrom(shared.sent.at(-1)!.text, "/activate"), "req");
+    const otherOwner = await registerOrganization(h.db, form(["inventory"]), meta());
+    await activateOrganization(h.db, tokenFrom(shared.sent.at(-1)!.text, "/activate"), "req");
+    // The first person is also an employee of the second organization.
+    await h.db.collection("company_members").insertOne({ companyId: otherOwner.companyId, userId: a.userId, role: "employee", status: "active", createdAt: new Date(), updatedAt: new Date() });
+
+    const list = await listMyOrganizations(h.db, a.userId, a.companyId.toHexString());
+    expect(list).toHaveLength(2);
+    expect(list.find((o) => o.id === a.companyId.toHexString())).toMatchObject({ role: "owner", active: true, appCount: 1 });
+    expect(list.find((o) => o.id === otherOwner.companyId.toHexString())).toMatchObject({ role: "employee", active: false });
+    // The other owner only sees their own organization.
+    expect(await listMyOrganizations(h.db, otherOwner.userId, otherOwner.companyId.toHexString())).toHaveLength(1);
+  });
+
+  it("members can leave; owners cannot", async () => {
+    const owner = await registerOrganization(h.db, form(["finance"]), meta());
+    await activateOrganization(h.db, tokenFrom(shared.sent.at(-1)!.text, "/activate"), "req");
+    const member = new ObjectId();
+    await h.db.collection("company_members").insertOne({ companyId: owner.companyId, userId: member, role: "employee", status: "active", createdAt: new Date(), updatedAt: new Date() });
+    const access = (userId: ObjectId, companyRole: string) => ({ ctx: { db: h.db, companyId: owner.companyId, userId, requestId: "r" }, companyRole }) as never;
+    await expect(leaveOrganization(access(owner.userId, "owner"))).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await leaveOrganization(access(member, "employee"));
+    expect(await h.db.collection("company_members").countDocuments({ companyId: owner.companyId, userId: member })).toBe(0);
+    expect(await h.db.collection("company_members").countDocuments({ companyId: owner.companyId, role: "owner" })).toBe(1);
   });
 });

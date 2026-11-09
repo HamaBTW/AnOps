@@ -7,7 +7,6 @@ import { apps as catalogApps, type App } from "@/shared/config/catalog";
  */
 export const APPLICATION_IDS = [
   "ai",
-  "company",
   "hr-payroll",
   "crm",
   "sales",
@@ -65,7 +64,6 @@ const NAV: Record<ApplicationId, { routes: string[]; nav: NavGroup[] }> = {
       },
     ],
   },
-  company: { routes: ["/company"], nav: [{ label: "Company", items: [{ label: "Overview", href: "/company", exact: true }] }] },
   "hr-payroll": {
     routes: ["/hr"],
     nav: [

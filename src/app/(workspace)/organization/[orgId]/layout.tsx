@@ -2,6 +2,11 @@ import Link from "next/link";
 import { OrgNav } from "@/features/platform/components/org-nav";
 import { ToastProvider } from "@/shared/components/ui/toast";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
+import { cookies } from "next/headers";
+import { OrgSwitcher } from "@/features/platform/components/org-switcher";
+import { ActivateOrgBanner } from "@/features/platform/components/activate-org-banner";
+import { listMyOrganizations } from "@/server/platform/organization.service";
+import { ACTIVE_COMPANY_COOKIE } from "@/server/tenant/context";
 import { getPageOrganization, isOrgManager } from "@/server/platform/access";
 import { PLANS } from "@/shared/domain/plans";
 
@@ -15,6 +20,10 @@ const initials = (text: string) =>
 export default async function OrganizationLayout({ children, params }: { children: React.ReactNode; params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const access = await getPageOrganization(orgId);
+  const cookieId = (await cookies()).get(ACTIVE_COMPANY_COOKIE)?.value;
+  const organizations = await listMyOrganizations(access.ctx.db, access.ctx.userId, cookieId ?? "");
+  // The applications follow the active-organization cookie (or the first organization when it is unset).
+  const activeId = organizations.find((org) => org.id === cookieId)?.id ?? organizations[0]?.id;
   const ent = access.entitlements;
   const plan = ent.kind === "trial" ? `Trial · ${ent.trialDaysLeft}d left` : ent.kind === "legacy" ? "Full access" : ent.plan ? PLANS[ent.plan].name : ent.kind === "trial_expired" ? "Trial ended" : "No active plan";
 
@@ -24,12 +33,18 @@ export default async function OrganizationLayout({ children, params }: { childre
         <header className="sticky top-0 z-30 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)]/90 backdrop-blur">
           <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between gap-3 px-4 sm:px-6">
             <Link href="/anops" className="inline-flex min-h-[44px] items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)] hover:underline">
-              ← AnOps home
+              <span aria-hidden="true">←</span>
+              <span className="hidden sm:inline">AnOps home</span>
+              <span className="sr-only sm:hidden">AnOps home</span>
             </Link>
-            <ThemeToggle />
+            <div className="flex min-w-0 items-center gap-2">
+              <OrgSwitcher organizations={organizations} currentId={orgId} />
+              <ThemeToggle />
+            </div>
           </div>
         </header>
         <div className="mx-auto w-full max-w-[1200px] px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+          {activeId && activeId !== orgId && <div className="mb-5"><ActivateOrgBanner orgId={orgId} orgName={access.organization.name} /></div>}
           {/* Identity */}
           <section className="relative overflow-hidden rounded-[24px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 sm:p-7" aria-label="Organization">
             <div aria-hidden="true" className="portal-grid pointer-events-none absolute inset-0 opacity-70 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]" />

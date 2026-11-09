@@ -85,7 +85,7 @@ export default function HomePage() {
                 <IconArrowRight size={14} />
               </Link>
               <Link href="/apps" className={`${btnSecondary} h-12 px-6`}>
-                Explore the 11 apps
+                Explore the {apps.length} apps
               </Link>
             </div>
             <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--color-text-secondary)]">
@@ -109,7 +109,7 @@ export default function HomePage() {
           <SectionHeading
             id="eco-heading"
             eyebrow="The ecosystem"
-            title="Eleven managements. One set of records."
+            title={`${apps.length} managements. One set of records.`}
             lead="Instead of stitching tools together, every AnOps application works on the same companies, people, products, suppliers and customers."
             action={<TextLink href="/apps">Open the app directory</TextLink>}
           />

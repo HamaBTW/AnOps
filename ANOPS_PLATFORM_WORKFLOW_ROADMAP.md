@@ -139,6 +139,16 @@ Statuses: Not Started / In Progress / Completed / Blocked.
 ## Follow-up: movable search window on /anops (Completed)
 - `app-switcher.tsx`: on desktop with a mouse (`min-width: 768px`, `hover: hover`, `pointer: fine`) the ⌘K search panel behaves like a macOS window: drag it by the search bar (a click still just focuses the input; dragging starts after 4 px), grabbing cursor, lifted shadow while moving, GPU-translated with requestAnimationFrame, clamped so the bar always stays partly on screen, position remembered while the page stays open, double-click the bar (outside the input) to re-center with a springy ease. Phones and touch devices keep the bottom sheet, with no drag and no hint.
 
+## Follow-up: /anops sign out + Dock website button (Completed)
+- Header: `LogoutButton` (`features/platform/components/logout-button.tsx`) beside the theme toggle: server-action sign-out, spinner while signing out, icon-only on phones and "Sign out" label from `md`, red hover. Signed-out `/anops` redirects to `/login?callbackUrl=/anops`.
+- Dock: first item is the AnOps app icon linking to `/` (public portal), with tooltip "Public website" and a divider; Dock fits at 360 px.
+
+## Follow-up: Company merged into Organization (Completed)
+- The Company application is removed (registry, public catalog, plans, docs, industries, `/apps/company` → `/apps`). The platform now has 10 applications: AllOps = 9 (no AnOps AI), MaxOps = 10, Custom = 2–8. Counts are derived from the registry (`TOTAL_APP_COUNT`, `ALLOPS_APP_COUNT`, `CUSTOM_MAX_APPS`) so copy cannot drift; stored `company` values in old subscriptions/members are ignored safely.
+- `/company` (legacy bookmarks) redirects to `/organization/<active id>`. Old Company UI deleted, and the unused server actions (temp-password member creation, role change, remove, stats) removed; only create/switch remain (`features/company/actions/company.action.ts`: rate limit 5/h, max 20 organizations, audit `organization.created`, membership-checked switch).
+- `/organization` lists all organizations of the person (role, plan, apps, active badge, Manage / Use in apps, New organization). Organization pages gained an `OrgSwitcher` (switches the active-workspace cookie and opens the organization), an "Use this organization in apps" banner when managing a non-active organization, slug, HR counters (staff, departments, job titles when HR is in the plan), industry suggestions, "Your organizations" settings card, and "Leave organization" for non-owners. Colleague management is invitations only (no more temporary passwords).
+- Verified: unit + integration 1225 tests; production build; browser: two organizations, switching changes apps/plan gate, create flow, banner, legacy redirects, no overflow at 360/390.
+
 ## Decisions & assumptions
 - Prices: see `PRICING_RESEARCH.md` (proposal pending owner sign-off before live mode).
 - Application access and AI feature access are separate entitlements. The AnOps AI application is included in AllOps (settings visible) but its AI features require MaxOps, the Custom AI add-on, or an active trial.

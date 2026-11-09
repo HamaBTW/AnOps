@@ -29,8 +29,8 @@ const state = (patch: Partial<SubscriptionState>): SubscriptionState => ({
 });
 
 describe("application registry", () => {
-  it("has exactly the 11 applications, each with navigation", () => {
-    expect(APPLICATIONS).toHaveLength(11);
+  it("has exactly the 10 applications, each with navigation", () => {
+    expect(APPLICATIONS).toHaveLength(10);
     for (const app of APPLICATIONS) expect(app.nav.flatMap((g) => g.items).length).toBeGreaterThan(0);
   });
 
@@ -94,11 +94,11 @@ describe("entitlements", () => {
 
   it("AllOps has no AnOps AI app and no AI; MaxOps has both", () => {
     const allops = resolveEntitlements(state({ plan: "allops", status: "active" }), now);
-    expect(allops.appIds).toHaveLength(10);
+    expect(allops.appIds).toHaveLength(9);
     expect(allops.appIds).not.toContain("ai");
     expect(allops.aiFeatures).toBe(false);
     const maxops = resolveEntitlements(state({ plan: "maxops", status: "active" }), now);
-    expect(maxops.appIds).toHaveLength(11);
+    expect(maxops.appIds).toHaveLength(10);
     expect(maxops.appIds).toContain("ai");
     // Custom without the add-on never exposes AnOps AI, even if it was stored.
     expect(resolveEntitlements(state({ plan: "custom", status: "active", customAppIds: ["ai", "finance"] }), now).appIds).toEqual(["finance"]);

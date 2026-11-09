@@ -67,7 +67,12 @@ export function OrgProfileForm({ orgId, profile, canEdit }: { orgId: string; pro
       <div className="grid gap-4 sm:grid-cols-2">
         {input("name", "Organization name", { required: true, maxLength: 80 })}
         {input("website", "Website", { placeholder: "https://", inputMode: "url" })}
-        {input("industry", "Industry sector", { placeholder: "e.g. Food distribution", maxLength: 80 })}
+        {input("industry", "Industry sector", { placeholder: "e.g. Food distribution", maxLength: 80, list: "industry-suggestions" })}
+        <datalist id="industry-suggestions">
+          {["Information Technology", "Software & SaaS", "Manufacturing & Production", "Retail & E-commerce", "Finance & Accounting", "Healthcare & Pharma", "Consulting & Professional Services", "Education & Training", "Construction & Real Estate", "Food & Beverage", "Logistics & Distribution"].map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
         <div>
           <label htmlFor="org-size" className={label}>
             Company size

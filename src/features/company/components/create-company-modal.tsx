@@ -6,11 +6,12 @@ import { Portal } from "@/shared/components/ui/portal";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
 import { createCompanyAction } from "@/features/company/actions/company.action";
 import { useRouter } from "next/navigation";
+import type { Company } from "@/features/company/types";
 
 type CreateCompanyModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (company: Company) => void;
 };
 
 const INDUSTRIES = [
@@ -48,7 +49,7 @@ export function CreateCompanyModal({ isOpen, onClose, onSuccess }: CreateCompany
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Company name is required.");
+      setError("Organization name is required.");
       return;
     }
 
@@ -59,7 +60,7 @@ export function CreateCompanyModal({ isOpen, onClose, onSuccess }: CreateCompany
         setError(result.error);
         return;
       }
-      onSuccess?.();
+      if (result.data) onSuccess?.(result.data);
       onClose();
       router.refresh();
     });

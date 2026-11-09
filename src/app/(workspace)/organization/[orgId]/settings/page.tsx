@@ -24,6 +24,7 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
   }[ai.state];
 
   const sections: Section[] = [
+    { id: "organizations", title: "Your organizations", body: "Switch between organizations or create a new one. Each has its own members, plan and data.", icon: "wired-lineal-3308-building-office-in-reveal.webp", href: "/organization", cta: "All organizations" },
     { id: "profile", title: "Organization profile", body: "Name, website, industry, size, address and contact details.", icon: "wired-lineal-3308-building-office-in-reveal.webp", href: `${base}#profile`, cta: manager ? "Edit profile" : "View profile" },
     { id: "regional", title: "Regional settings & currency", body: `Preferred currency: ${access.organization.currency}. Used by Finance, reports and default billing currency.`, icon: "wired-lineal-1863-renewables-hover-pinch.webp", href: `${base}#profile`, cta: "Change currency", managerOnly: true },
     { id: "security", title: "Security", body: "Your password and sign-in settings. Permissions are enforced on the server for every request.", icon: "wired-lineal-1004-avatars-settings-hover-smooth.webp", href: "/profile#security", cta: "Security settings" },

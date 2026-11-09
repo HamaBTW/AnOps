@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import {
   changeMemberRoleAction,
+  leaveOrganizationAction,
   removeMemberAction,
   resendInvitationAction,
   revokeInvitationAction,
@@ -215,6 +216,34 @@ export function MembersManager({
           . Effective AI access is the intersection of your plan, the organization switch, each person&apos;s grant and their role.
         </p>
       </section>
+      {viewerRole !== "owner" && (
+        <section className={cn(card, "flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6")} aria-labelledby="leave-title">
+          <div>
+            <h2 id="leave-title" className="text-base font-semibold text-[var(--color-text-primary)]">
+              Leave this organization
+            </h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">You lose access immediately. An owner or administrator can invite you again.</p>
+          </div>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              window.confirm("Leave this organization? You will lose access to its applications and data.") &&
+              start(async () => {
+                const result = await leaveOrganizationAction(orgId);
+                if (result.ok) {
+                  toast.success("You left the organization");
+                  router.push("/anops");
+                  router.refresh();
+                } else toast.fromError(result.error);
+              })
+            }
+            className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-status-error-fg)]/50 px-5 text-sm font-semibold text-[var(--color-status-error-fg)] transition-colors hover:bg-[var(--color-status-error-bg)] disabled:opacity-60"
+          >
+            Leave organization
+          </button>
+        </section>
+      )}
     </div>
   );
 }

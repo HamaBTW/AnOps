@@ -10,6 +10,9 @@ export const MAX_TRIAL_APPS = 3;
 export const ACTIVATION_HOURS = 12;
 export const PAST_DUE_GRACE_DAYS = 7;
 export const CUSTOM_MIN_APPS = 2;
+/** Total applications, and the applications of a plan without AI (everything except AI-native apps). */
+export const TOTAL_APP_COUNT = APPLICATION_IDS.length;
+export const ALLOPS_APP_COUNT = APPLICATION_IDS.filter((id) => !getApplication(id).aiNative).length;
 /** AllOps includes every application except the AI-native ones (see aiNative), so Custom stays strictly below it. */
 export const CUSTOM_MAX_APPS = APPLICATION_IDS.filter((id) => !getApplication(id).aiNative).length - 1;
 
@@ -52,7 +55,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     tagline: "Every application, one workspace.",
     apps: "all",
     ai: "none",
-    features: ["All 10 applications (everything except AnOps AI)", "Unlimited users", "Centralized organization workspace", "No AI features anywhere"],
+    features: [`${ALLOPS_APP_COUNT} applications (everything except AnOps AI)`, "Unlimited users", "Centralized organization workspace", "No AI features anywhere"],
   },
   maxops: {
     id: "maxops",
@@ -60,7 +63,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     tagline: "Every application with the complete AI ecosystem.",
     apps: "all",
     ai: "included",
-    features: ["All 11 applications, including AnOps AI", "Unlimited users", "AnOps AI Command Center", "AI features in every application"],
+    features: [`All ${TOTAL_APP_COUNT} applications, including AnOps AI`, "Unlimited users", "AnOps AI Command Center", "AI features in every application"],
   },
 };
 
@@ -138,7 +141,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function paidApps(state: SubscriptionState): ApplicationId[] {
   if (state.plan === "allops" || state.plan === "maxops") return [...APPLICATION_IDS]; // AI-native apps are removed below when the plan has no AI
   if (state.plan === "custom") return state.customAppIds.filter(isApplicationId);
-  if (state.plan === "oneops" && state.freeAppId) return [state.freeAppId];
+  if (state.plan === "oneops" && state.freeAppId && isApplicationId(state.freeAppId)) return [state.freeAppId];
   return [];
 }
 
@@ -168,6 +171,8 @@ export function resolveEntitlements(state: SubscriptionState | null, now: Date =
 
 /** AI-native applications (AnOps AI) are never part of an entitlement that has no AI features. */
 function withoutAiApps(entitlements: Entitlements): Entitlements {
+  // Stored values for applications that no longer exist (e.g. the retired Company app) are dropped.
+  entitlements = { ...entitlements, appIds: entitlements.appIds.filter(isApplicationId) };
   if (entitlements.aiFeatures) return entitlements;
   return { ...entitlements, appIds: entitlements.appIds.filter((id) => !getApplication(id).aiNative) };
 }
@@ -180,7 +185,7 @@ function resolveRaw(state: SubscriptionState | null, now: Date): Entitlements {
 
   switch (state.status) {
     case "free":
-      return state.freeAppId
+      return state.freeAppId && isApplicationId(state.freeAppId)
         ? { ...base, kind: "free", plan: "oneops", appIds: [state.freeAppId], aiFeatures: false, needsPlanSelection: false }
         : NONE("lapsed", "oneops");
     case "trialing": {

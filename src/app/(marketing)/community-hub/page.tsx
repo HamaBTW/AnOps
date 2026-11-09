@@ -74,7 +74,7 @@ export default function CommunityHubPage() {
           <div>
             <SectionHeading id="docs-heading" eyebrow="Documentation" title="Understand the platform, one app at a time." />
             <p className="mt-4 text-base leading-relaxed text-[var(--color-text-secondary)]">
-              Start with the basics, then read the reference for each of the 11 applications: what it does, where to find it and its current limits.
+              Start with the basics, then read the reference for each application: what it does, where to find it and its current limits.
             </p>
             <Link href="/docs" className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-action-primary)] px-5 text-sm font-semibold text-[#111F1D] hover:bg-[var(--color-action-hover)]">
               Open the documentation

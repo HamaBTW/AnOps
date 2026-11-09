@@ -3,6 +3,10 @@ import { ObjectId } from "mongodb";
 import { recordAudit } from "@/server/audit/audit.service";
 import { listAccessMembers } from "@/server/ai/access/access.service";
 import type { OrgAccess } from "@/server/platform/access";
+import { getEntitlements } from "@/server/platform/subscription.service";
+import { getUserCompanies, getCompanyStats } from "@/server/services/company.service";
+import { PLANS } from "@/shared/domain/plans";
+import type { Db } from "mongodb";
 import { organizationProfileSchema } from "@/features/platform/schemas";
 import { isApplicationId, type ApplicationId } from "@/shared/domain/applications";
 import { organizationCompletion, type Completion } from "@/shared/domain/profile";
@@ -13,6 +17,7 @@ import { toFieldErrors } from "@/shared/lib/validation";
 export type OrganizationProfileView = {
   id: string;
   name: string;
+  slug: string;
   website: string | null;
   industry: string | null;
   size: string | null;
@@ -47,6 +52,7 @@ export async function getOrganizationProfile(access: OrgAccess): Promise<Organiz
   return {
     id: companyId.toHexString(),
     name: String(company.name ?? ""),
+    slug: String(company.slug ?? ""),
     website: str(company.website),
     // Legacy companies default "General", which is not a real answer.
     industry: str(company.industry) === "General" ? null : str(company.industry),
@@ -217,4 +223,60 @@ export async function listAuditEvents(access: OrgAccess, before?: string): Promi
     })),
     next: docs.length > 50 ? (page.at(-1)?._id as ObjectId).toHexString() : null,
   };
+}
+
+// ───────────────────────── Organizations of a person (multi-tenancy) ─────────────────────────
+
+export type MyOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  role: CompanyRole;
+  plan: string;
+  appCount: number;
+  currency: string;
+  active: boolean;
+  pendingActivation: boolean;
+};
+
+/** Every organization the person actively belongs to, with their role and the organization's current plan. */
+export async function listMyOrganizations(db: Db, userId: ObjectId, activeId: string): Promise<MyOrganization[]> {
+  const companies = await getUserCompanies(userId.toHexString());
+  const members = await db.collection("company_members").find({ userId, status: "active", companyId: { $in: companies.map((c) => new ObjectId(c.id)) } }, { projection: { companyId: 1, role: 1 } }).toArray();
+  const roles = new Map(members.map((m) => [(m.companyId as ObjectId).toHexString(), m.role as CompanyRole]));
+  return Promise.all(
+    companies.map(async (company) => {
+      const ent = await getEntitlements(db, new ObjectId(company.id));
+      const plan =
+        ent.kind === "trial" ? `Trial · ${ent.trialDaysLeft}d left` : ent.kind === "legacy" ? "Full access" : ent.plan ? PLANS[ent.plan].name : ent.kind === "trial_expired" ? "Trial ended" : "Choose a plan";
+      return {
+        id: company.id,
+        name: company.name,
+        slug: company.slug,
+        role: roles.get(company.id) ?? "employee",
+        plan,
+        appCount: ent.appIds.length,
+        currency: company.currency,
+        active: company.id === activeId,
+        pendingActivation: company.activationStatus === "pending",
+      };
+    })
+  );
+}
+
+export type OrganizationStats = { staff: number; departments: number; jobTitles: number };
+
+/** HR-side counters shown on the overview (they come from the HR & Payroll data of this organization only). */
+export async function getOrganizationStats(access: OrgAccess): Promise<OrganizationStats> {
+  const stats = await getCompanyStats(access.ctx.companyId.toHexString());
+  return { staff: stats.employeesCount, departments: stats.departmentsCount, jobTitles: stats.jobTitlesCount };
+}
+
+/** A non-owner leaves the organization. The owner must hand over or delete the organization instead (not offered here). */
+export async function leaveOrganization(access: OrgAccess): Promise<void> {
+  if (access.companyRole === "owner") throw new AppError("FORBIDDEN", "The owner cannot leave the organization.");
+  const { db, companyId, userId, requestId } = access.ctx;
+  const result = await db.collection("company_members").deleteOne({ companyId, userId, role: { $ne: "owner" } });
+  if (result.deletedCount !== 1) throw new AppError("NOT_FOUND", "Membership not found.");
+  await recordAudit(db, { companyId, actorUserId: userId, action: "member.left", entityType: "member", entityId: userId.toHexString(), requestId });
 }

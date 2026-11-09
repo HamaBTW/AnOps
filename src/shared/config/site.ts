@@ -1,4 +1,4 @@
-import { formatMoney, quotePrice } from "@/shared/domain/plans";
+import { ALLOPS_APP_COUNT, CUSTOM_MAX_APPS, CUSTOM_MIN_APPS, TOTAL_APP_COUNT, formatMoney, quotePrice } from "@/shared/domain/plans";
 
 export const siteName = "AnOps";
 export const siteTagline = "One platform. Every operation.";
@@ -87,10 +87,10 @@ export const plans: Plan[] = [
     price: `from ${usd("custom", 2)}`,
     priceNote: `per month for 2 applications · from ${eur("custom", 2)} in EUR`,
     audience: "Pay only for the applications you use",
-    description: "2 to 9 applications, always priced below AllOps.",
+    description: `${CUSTOM_MIN_APPS} to ${CUSTOM_MAX_APPS} applications, always priced below AllOps.`,
     companies: "Per organization",
-    applications: "2–9 applications",
-    features: ["US$9 / €8 per application", `Never more than ${usd("custom", 9)}/month`, "Unlimited users", "Optional AI add-on"],
+    applications: `${CUSTOM_MIN_APPS}–${CUSTOM_MAX_APPS} applications`,
+    features: ["US$9 / €8 per application", `Never more than ${usd("custom", CUSTOM_MAX_APPS)}/month`, "Unlimited users", "Optional AI add-on"],
     cta: { label: "Start a 15-day trial", href: "/trial" },
   },
   {
@@ -101,8 +101,8 @@ export const plans: Plan[] = [
     audience: "A business running on connected apps",
     description: "Every application in one workspace.",
     companies: "Per organization",
-    applications: "10 applications · no AI",
-    features: ["10 applications (all except AnOps AI)", "Unlimited users", "Records shared across apps", "No AI features anywhere"],
+    applications: `${ALLOPS_APP_COUNT} applications · no AI`,
+    features: [`${ALLOPS_APP_COUNT} applications (all except AnOps AI)`, "Unlimited users", "Records shared across apps", "No AI features anywhere"],
     cta: { label: "Start a 15-day trial", href: "/trial" },
     highlight: "Best value",
   },
@@ -114,20 +114,20 @@ export const plans: Plan[] = [
     audience: "Teams that want the most from AI",
     description: "Every application with the complete AI ecosystem.",
     companies: "Per organization",
-    applications: "All 11 applications",
+    applications: `All ${TOTAL_APP_COUNT} applications`,
     features: ["Everything in AllOps", "AnOps AI Command Center", "AI features in every application", "Advanced AI capabilities"],
     cta: { label: "Start a 15-day trial", href: "/trial" },
   },
 ];
 
 export const comparisonRows: { label: string; values: [string, string, string, string] }[] = [
-  { label: "Applications", values: ["1, chosen once", "2–9 of your choice", "10 (no AnOps AI)", "All 11"] },
+  { label: "Applications", values: ["1, chosen once", `${CUSTOM_MIN_APPS}–${CUSTOM_MAX_APPS} of your choice`, `${ALLOPS_APP_COUNT} (no AnOps AI)`, `All ${TOTAL_APP_COUNT}`] },
   { label: "Users", values: ["Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
   { label: "Records shared across apps", values: ["—", "Included", "Included", "Included"] },
   { label: "AnOps AI application", values: ["—", "With AI add-on", "—", "Included"] },
   { label: "AI features inside applications", values: ["—", "With AI add-on", "—", "Included"] },
-  { label: "Monthly price (USD)", values: ["Free", `${usd("custom", 2)}–${usd("custom", 9)}`, usd("allops"), usd("maxops")] },
-  { label: "Monthly price (EUR)", values: ["Free", `${eur("custom", 2)}–${eur("custom", 9)}`, eur("allops"), eur("maxops")] },
+  { label: "Monthly price (USD)", values: ["Free", `${usd("custom", 2)}–${usd("custom", CUSTOM_MAX_APPS)}`, usd("allops"), usd("maxops")] },
+  { label: "Monthly price (EUR)", values: ["Free", `${eur("custom", 2)}–${eur("custom", CUSTOM_MAX_APPS)}`, eur("allops"), eur("maxops")] },
   { label: "Annual billing", values: ["—", "2 months free", "2 months free", "2 months free"] },
 ];
 
@@ -146,7 +146,7 @@ export const pricingFaq = [
   },
   {
     question: "What is the difference between AllOps and MaxOps?",
-    answer: "AllOps includes 10 applications and no AI at all: AnOps AI is not available and no application has AI features. MaxOps adds AnOps AI (the 11th application) and the AI features inside every application.",
+    answer: `AllOps includes ${ALLOPS_APP_COUNT} applications and no AI at all: AnOps AI is not available and no application has AI features. MaxOps adds AnOps AI (application number ${TOTAL_APP_COUNT}) and the AI features inside every application.`,
   },
   {
     question: "How is payment handled?",
@@ -163,7 +163,7 @@ export const faqItems = [
   {
     question: "Do we need every app?",
     answer:
-      "No. Choose the apps you need. OneOps keeps one application free forever, Custom covers 2 to 9, AllOps includes 10 (no AI) and MaxOps all 11 with AI.",
+      `No. Choose the apps you need. OneOps keeps one application free forever, Custom covers ${CUSTOM_MIN_APPS} to ${CUSTOM_MAX_APPS}, AllOps includes ${ALLOPS_APP_COUNT} (no AI) and MaxOps all ${TOTAL_APP_COUNT} with AI.`,
   },
   {
     question: "Can AI change records or send orders on its own?",

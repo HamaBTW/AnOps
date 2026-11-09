@@ -10,7 +10,7 @@ import { docs } from "@/shared/config/docs";
 
 export const metadata: Metadata = {
   title: "Documentation",
-  description: "AnOps documentation: getting started, roles and permissions, references for the 11 applications and step-by-step guides.",
+  description: "AnOps documentation: getting started, roles and permissions, references for every application and step-by-step guides.",
 };
 
 export default function DocsPage() {

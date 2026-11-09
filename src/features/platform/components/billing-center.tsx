@@ -8,7 +8,7 @@ import type { InvoiceView } from "@/server/platform/billing.service";
 import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { useToast } from "@/shared/components/ui/toast";
 import { APPLICATIONS, getApplication, type ApplicationId } from "@/shared/domain/applications";
-import { CUSTOM_MAX_APPS, CUSTOM_MIN_APPS, PLANS, formatMoney, quotePrice, type AccessKind, type BillingCurrency, type BillingInterval, type PaidPlanId, type PlanId } from "@/shared/domain/plans";
+import { ALLOPS_APP_COUNT, CUSTOM_MAX_APPS, CUSTOM_MIN_APPS, PLANS, formatMoney, quotePrice, type AccessKind, type BillingCurrency, type BillingInterval, type PaidPlanId, type PlanId } from "@/shared/domain/plans";
 import { cn } from "@/shared/lib/utils";
 
 export type BillingData = {
@@ -257,7 +257,7 @@ export function BillingCenter({ data }: { data: BillingData }) {
               </label>
               {customHitsCap && (
                 <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
-                  Custom is capped below AllOps. AllOps gives you 10 applications (no AI) for {formatMoney(allopsMonthly, currency)}
+                  Custom is capped below AllOps. AllOps gives you {ALLOPS_APP_COUNT} applications (no AI) for {formatMoney(allopsMonthly, currency)}
                   {suffix}.
                 </p>
               )}

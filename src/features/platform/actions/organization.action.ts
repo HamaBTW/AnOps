@@ -8,7 +8,7 @@ import clientPromise from "@/server/db/client";
 import { toActionError } from "@/server/actions/run-action";
 import { resolveOrganizationById, type OrgAccess } from "@/server/platform/access";
 import { resendInvitation, revokeInvitation } from "@/server/platform/invitation.service";
-import { changeMemberRole, removeMember, setMemberAppAccess, setMemberSuspended, updateOrganizationProfile } from "@/server/platform/organization.service";
+import { changeMemberRole, leaveOrganization, removeMember, setMemberAppAccess, setMemberSuspended, updateOrganizationProfile } from "@/server/platform/organization.service";
 import { changePassword, updateUserProfile } from "@/server/platform/profile.service";
 import { setBillingPreferences } from "@/server/platform/subscription.service";
 import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
@@ -65,3 +65,8 @@ async function getDb() {
 
 export const updateProfileAction = async (input: unknown) => runSelf("profile.update", (db, userId) => updateUserProfile(db, userId, input));
 export const changePasswordAction = async (input: unknown) => runSelf("profile.password", (db, userId, requestId) => changePassword(db, userId, input, requestId));
+
+/** The caller leaves the organization in the URL. Returns where to go next (their other organizations / home). */
+export const leaveOrganizationAction = async (orgId: string) => runOrg(orgId, "org.leave", async (a) => {
+  await leaveOrganization(a);
+});

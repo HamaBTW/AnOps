@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { IconArrowRight, IconCheck, IconSettings } from "@/shared/components/ui/brand-icons";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
+import { LogoutButton } from "@/features/platform/components/logout-button";
 import { AppSwitcher } from "@/features/platform/components/app-switcher";
 import { chooseFreeFallbackAction, resendActivationAction } from "@/features/platform/actions/workspace.action";
 import { switchCompanyAction } from "@/features/company/actions/company.action";
@@ -349,8 +350,17 @@ function Dock({ data }: { data: HomeData }) {
             <Link href={`/organization/${data.organization.id}`} className="mt-1 block rounded-[10px] px-2 py-2 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]">
               Manage {data.organization.name}
             </Link>
+            <Link href="/organization" className="block rounded-[10px] px-2 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]">
+              All organizations · New
+            </Link>
           </div>
         )}
+        <Link href="/" aria-label="AnOps public website" className={item}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand-kit/02-app-icons/anops-app-icon-ios-192x192.svg" alt="" width={44} height={44} className="h-11 w-11 rounded-[12px] shadow-[0_6px_14px_-8px_rgba(0,0,0,0.6)]" />
+          <span className={tip}>Public website</span>
+        </Link>
+        <span aria-hidden="true" className="mx-1 h-8 w-px bg-[var(--color-border-subtle)]" />
         {data.organizations.length > 1 ? (
           <button type="button" onClick={() => setMenu((v) => !v)} aria-expanded={menu} aria-label={`Organization: ${data.organization.name}`} className={item}>
             <span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#111F1D] text-sm font-bold text-[#C8F03E]">{data.organization.initials}</span>
@@ -420,6 +430,7 @@ export function AnopsHome({ data }: { data: HomeData }) {
             <AppSwitcher allowed={data.allowedApps} permissions={data.permissions} aiFeatures={data.access.aiFeatures} />
           </div>
           <ThemeToggle />
+          <LogoutButton />
         </div>
       </header>
 

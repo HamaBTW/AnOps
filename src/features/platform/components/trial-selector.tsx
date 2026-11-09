@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { IconArrowRight, IconCheck } from "@/shared/components/ui/brand-icons";
 import { APPLICATIONS, getApplication, type ApplicationId } from "@/shared/domain/applications";
-import { MAX_TRIAL_APPS, TRIAL_DAYS, validateTrialSelection } from "@/shared/domain/plans";
+import { ALLOPS_APP_COUNT, MAX_TRIAL_APPS, TOTAL_APP_COUNT, TRIAL_DAYS, validateTrialSelection } from "@/shared/domain/plans";
 import { cn } from "@/shared/lib/utils";
 
 export const TRIAL_STORAGE_KEY = "anops:trial-apps";
@@ -64,7 +64,7 @@ export function TrialSelector({ initial }: { initial: ApplicationId[] }) {
 
       {full && (
         <p role="status" className="mb-6 rounded-[14px] border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-4 py-3 text-sm text-[var(--color-warning-text)]">
-          You have selected the maximum of {MAX_TRIAL_APPS} applications. Start your {TRIAL_DAYS}-day trial now, then upgrade to AllOps (10 applications, no AI), MaxOps (all 11 with AI) or a Custom plan.
+          You have selected the maximum of {MAX_TRIAL_APPS} applications. Start your {TRIAL_DAYS}-day trial now, then upgrade to AllOps ({ALLOPS_APP_COUNT} applications, no AI), MaxOps (all {TOTAL_APP_COUNT} with AI) or a Custom plan.
           Remove one to pick another.
         </p>
       )}

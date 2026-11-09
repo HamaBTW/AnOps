@@ -68,7 +68,7 @@ describe("stripe synchronization", () => {
     expect(await handleStripeEvent(h.db, event("evt_1", "customer.subscription.created", s), "r")).toBe("duplicate");
     const ent = await getEntitlements(h.db, reg.companyId);
     expect(ent).toMatchObject({ kind: "paid", plan: "allops", aiFeatures: false });
-    expect(ent.appIds).toHaveLength(10);
+    expect(ent.appIds).toHaveLength(9);
     expect(ent.appIds).not.toContain("ai");
   });
 

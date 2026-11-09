@@ -7,7 +7,7 @@ import type { OrgAccess } from "@/server/platform/access";
 import { PLATFORM_COLLECTIONS, type BillingInvoiceDoc, type SubscriptionDoc } from "@/server/platform/collections";
 import { getSubscriptionDoc } from "@/server/platform/subscription.service";
 import { getApplication, isApplicationId, type ApplicationId } from "@/shared/domain/applications";
-import { BILLING_CURRENCIES, CUSTOM_MAX_APPS, CUSTOM_MIN_APPS, PLANS, quotePrice, type BillingCurrency, type BillingInterval, type PaidPlanId, type SubscriptionStatus } from "@/shared/domain/plans";
+import { ALLOPS_APP_COUNT, BILLING_CURRENCIES, CUSTOM_MAX_APPS, CUSTOM_MIN_APPS, PLANS, quotePrice, type BillingCurrency, type BillingInterval, type PaidPlanId, type SubscriptionStatus } from "@/shared/domain/plans";
 import { AppError } from "@/shared/lib/errors";
 
 let client: Stripe | null = null;
@@ -112,7 +112,7 @@ function parseCheckout(input: CheckoutInput) {
   if (plan === "custom") {
     if (!Array.isArray(input.appIds) || !input.appIds.every(isApplicationId)) throw new AppError("VALIDATION_ERROR", "Choose valid applications.");
     appIds = [...new Set(input.appIds)];
-    if (appIds.length < CUSTOM_MIN_APPS || appIds.length > CUSTOM_MAX_APPS) throw new AppError("VALIDATION_ERROR", `Custom includes ${CUSTOM_MIN_APPS} to ${CUSTOM_MAX_APPS} applications. For more, choose AllOps (10 applications, no AI) or MaxOps.`);
+    if (appIds.length < CUSTOM_MIN_APPS || appIds.length > CUSTOM_MAX_APPS) throw new AppError("VALIDATION_ERROR", `Custom includes ${CUSTOM_MIN_APPS} to ${CUSTOM_MAX_APPS} applications. For more, choose AllOps (${ALLOPS_APP_COUNT} applications, no AI) or MaxOps.`);
   }
   const aiAddon = plan === "custom" && input.aiAddon === true;
   if (appIds.some((id) => getApplication(id).aiNative) && !aiAddon) throw new AppError("VALIDATION_ERROR", "AnOps AI is only available with the AI add-on, MaxOps or a trial.");

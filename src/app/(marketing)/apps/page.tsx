@@ -8,7 +8,7 @@ import { apps, categories, type CategoryId } from "@/shared/config/catalog";
 export const metadata: Metadata = {
   title: "Apps",
   description:
-    "The 11 AnOps managements: AnOps AI, Company, HR & Payroll, CRM, Sales, Finance, Inventory, Purchasing, Manufacturing, Marketing, and Blogs & Community.",
+    "The AnOps managements: AnOps AI, HR & Payroll, CRM, Sales, Finance, Inventory, Purchasing, Manufacturing, Marketing, and Blogs & Community.",
 };
 
 export default async function AppsPage({ searchParams }: { searchParams: Promise<{ category?: string }> }) {
@@ -21,7 +21,7 @@ export default async function AppsPage({ searchParams }: { searchParams: Promise
       <PageHero
         eyebrow="Application directory"
         title="Every operation has its app. Every app shares the same records."
-        lead="Eleven managements cover the company, its people, money, stock, suppliers, production, customers and community. Use one, or all of them together."
+        lead={`${apps.length} managements cover your people, money, stock, suppliers, production, customers and community. Use one, or all of them together.`}
         aside={
           <div className="grid grid-cols-4 gap-3 sm:gap-4">
             {apps.map((app, index) => (
@@ -30,7 +30,7 @@ export default async function AppsPage({ searchParams }: { searchParams: Promise
               </span>
             ))}
             <span className="flex flex-col items-center justify-center rounded-[14px] border border-dashed border-[var(--color-border-control)] text-center">
-              <span className="font-[family-name:var(--font-heading)] text-xl font-semibold text-[var(--color-text-primary)]">{available}/11</span>
+              <span className="font-[family-name:var(--font-heading)] text-xl font-semibold text-[var(--color-text-primary)]">{available}/{apps.length}</span>
               <span className="text-[10px] text-[var(--color-text-secondary)]">available</span>
             </span>
           </div>

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { OrgProfileForm } from "@/features/platform/components/org-profile-form";
 import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { getPageOrganization, isOrgManager } from "@/server/platform/access";
-import { getOrganizationProfile } from "@/server/platform/organization.service";
+import { getOrganizationProfile, getOrganizationStats } from "@/server/platform/organization.service";
 import { getApplication } from "@/shared/domain/applications";
 
 export const metadata: Metadata = { title: "Organization" };
@@ -15,6 +15,7 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
   const { orgId } = await params;
   const access = await getPageOrganization(orgId);
   const profile = await getOrganizationProfile(access);
+  const hr = access.entitlements.appIds.includes("hr-payroll") ? await getOrganizationStats(access) : null;
   const manager = isOrgManager(access);
 
   const stats = [
@@ -22,6 +23,13 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
     { label: "Pending invitations", value: String(profile.pendingInvitations), href: `/organization/${orgId}/members` },
     { label: "Applications", value: String(access.entitlements.appIds.length), href: `/organization/${orgId}/billing` },
     { label: "Created", value: date(profile.createdAt), href: null },
+    ...(hr
+      ? [
+          { label: "Staff directory", value: String(hr.staff), href: "/hr" },
+          { label: "Departments", value: String(hr.departments), href: "/hr" },
+          { label: "Job titles", value: String(hr.jobTitles), href: "/hr" },
+        ]
+      : []),
   ];
 
   return (
@@ -45,14 +53,24 @@ export default async function OrganizationOverviewPage({ params }: { params: Pro
         <h2 id="status-title" className="text-base font-semibold text-[var(--color-text-primary)]">
           Status
         </h2>
-        <dl className="mt-4 grid gap-5 text-sm sm:grid-cols-3">
+        <dl className="mt-4 grid gap-5 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <dt className="text-[var(--color-text-secondary)]">Organization slug</dt>
+            <dd className="mt-1 break-all font-mono text-[13px] font-semibold text-[var(--color-text-primary)]">{profile.slug}</dd>
+          </div>
           <div>
             <dt className="text-[var(--color-text-secondary)]">Activation</dt>
             <dd className="mt-1 font-semibold text-[var(--color-text-primary)]">{profile.activationStatus === "pending" ? "Awaiting email confirmation" : `Active${profile.activatedAt ? ` since ${date(profile.activatedAt)}` : ""}`}</dd>
           </div>
           <div>
             <dt className="text-[var(--color-text-secondary)]">Account status</dt>
-            <dd className="mt-1 font-semibold text-[var(--color-text-primary)]">{access.entitlements.needsPlanSelection ? "Plan required" : "In good standing"}</dd>
+            <dd className="mt-1 font-semibold text-[var(--color-text-primary)]">{access.entitlements.needsPlanSelection ? (
+                <Link href={`/organization/${orgId}/billing`} className="underline underline-offset-4">
+                  Plan required · choose one
+                </Link>
+              ) : (
+                "In good standing"
+              )}</dd>
           </div>
           <div>
             <dt className="text-[var(--color-text-secondary)]">Applications</dt>

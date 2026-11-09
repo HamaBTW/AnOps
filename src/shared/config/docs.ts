@@ -23,7 +23,7 @@ const startDocs: Doc[] = [
     title: "Getting started with AnOps",
     kind: "start",
     icon: "wired-lineal-12-layers-hover-slide.webp",
-    summary: "Create your account and company, invite your team and open your first application.",
+    summary: "Create your account and organization, invite your team and open your first application.",
     minutes: 4,
     sections: [
       {
@@ -31,21 +31,21 @@ const startDocs: Doc[] = [
         steps: [
           "Open Create account from the AnOps website and enter your name, email and a password.",
           "Confirm your email address with the link you receive.",
-          "Sign in. If you do not belong to a company yet, you are taken to onboarding.",
+          "Open your workspace. You can create more organizations later from the Organization page.",
         ],
       },
       {
-        heading: "Create your company",
+        heading: "Your organization",
         steps: [
-          "Enter the company name and industry, and choose the default currency (TND, EUR, USD or GBP).",
-          "Confirm. You become the owner of this company and enter the workspace.",
+          "Your organization is created with the registration: name, currency (TND, EUR, USD or GBP) and the applications you chose.",
+          "You become its owner and enter the workspace right away; confirm the activation email within 12 hours.",
         ],
       },
       {
         heading: "Invite your team",
         steps: [
-          "Open Company in the sidebar.",
-          "Add members and give each one a role: admin, manager or employee.",
+          "Open your organization from the Dock (or Settings) and go to Members.",
+          "Invite people by email and give each one a role: admin, manager or employee.",
           "Members only see the companies they belong to, with the role they have there.",
         ],
       },

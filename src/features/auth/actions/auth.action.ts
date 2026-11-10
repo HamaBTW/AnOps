@@ -23,7 +23,9 @@ function emailFailureWarning(reason: "not_configured" | "error" | undefined, kin
 export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
-  const callbackUrl = (formData.get("callbackUrl") as string) || "/dashboard";
+  const rawCallback = (formData.get("callbackUrl") as string) || "/anops";
+  // Only same-site paths: never redirect to another origin after sign-in.
+  const callbackUrl = rawCallback.startsWith("/") && !rawCallback.startsWith("//") ? rawCallback : "/anops";
 
   try {
     await signIn("credentials", { email, password, redirectTo: callbackUrl });
@@ -32,6 +34,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     if (error instanceof AuthError) {
       const code = (error as AuthError & { code?: string }).code;
       if (code === "banned") redirect("/banned");
+      if (code === "rate_limited") return { error: "Too many sign-in attempts. Please wait 15 minutes and try again." };
       if (code === "unverified") {
         redirect(`/unverified?email=${encodeURIComponent(email)}`);
       }
@@ -114,7 +117,8 @@ export async function requireActive() {
 
   if (!user) redirect("/login");
   if (user.status === "banned") redirect("/banned");
-  if (user.status === "unverified" || !user.emailVerified) redirect("/unverified");
+  const provisional = !user.emailVerified && user.provisionalUntil instanceof Date && user.provisionalUntil > new Date();
+  if (user.status === "unverified" || (!user.emailVerified && !provisional)) redirect("/unverified");
 
   return session;
 }

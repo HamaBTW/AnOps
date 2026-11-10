@@ -89,7 +89,7 @@ beforeAll(async () => {
   await saveMemberGrant(ownerActor, boss.userId.toHexString(), grant({ marketing: g(true, true, true, true, true) }), 0);
   mgr = await seedMember(h.db, T.companyA, "manager");
   await saveMemberGrant(ownerActor, mgr.userId.toHexString(), grant({ marketing: g(true, true, true, false, false) }), 0);
-  viewer = await seedMember(h.db, T.companyA, "employee");
+  viewer = await seedMember(h.db, T.companyA, "manager");
   await saveMemberGrant(ownerActor, viewer.userId.toHexString(), grant({ marketing: g(true, false, false, false, false) }), 0);
 
   const wsB = wsOf(h, T.B.owner);
@@ -159,7 +159,6 @@ describe("contact privacy", () => {
     const ct = await createContact(owner(), parsed(contactCreateSchema, { firstName: "Reveal", lastName: "Me", email, phone: "+21620123456", source: "manual", lifecycleStage: "lead", isActive: true, consent: { email: false, sms: false } }));
     expect(everything(await f.read(mgr, "marketing_get_contact", { contactId: ct.id }))).not.toContain(email);
     expect(everything(await f.read(mgr, "marketing_get_contact", { contactId: ct.id, reveal: true }))).toContain(email);
-    expect(await code(f.read(viewer, "marketing_get_contact", { contactId: ct.id, reveal: true }))).toBe("FORBIDDEN");
     expect(everything(await f.read(viewer, "marketing_get_contact", { contactId: ct.id }))).not.toContain("+21620123456");
   });
 

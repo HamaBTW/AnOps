@@ -1,3 +1,4 @@
+import { requireAiFeatures } from "@/server/platform/access";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getPageWorkspace } from "@/server/tenancy/workspace";
@@ -17,6 +18,7 @@ const STATUS_TONE = { generated_draft: "warning", edited: "warning", approved_fo
 const STATUS_LABEL = { generated_draft: "Draft", edited: "Edited", approved_for_use: "Approved", failed: "Failed" } as const;
 
 export default async function AiCopyPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireAiFeatures("/marketing");
   const ctx = await getPageWorkspace();
   const raw = await searchParams;
   const query = aiListQuerySchema.parse({ page: Array.isArray(raw.page) ? raw.page[0] : raw.page });

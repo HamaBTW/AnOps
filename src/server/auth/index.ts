@@ -8,6 +8,8 @@ import { loginSchema } from "@/features/auth/schemas/auth.schema";
 import { authConfig } from "@/server/auth/config";
 import { issueVerificationEmail } from "@/server/auth/verification";
 import type { AccountStatus } from "@/server/auth/types";
+import { allowAuthAttempt, ipFromHeaders } from "@/server/security/auth-throttle";
+import { maskEmail, safeEqual } from "@/server/auth/reset-token";
 
 class BannedError extends CredentialsSignin {
   code = "banned";
@@ -15,6 +17,10 @@ class BannedError extends CredentialsSignin {
 
 class UnverifiedError extends CredentialsSignin {
   code = "unverified";
+}
+
+class RateLimitedError extends CredentialsSignin {
+  code = "rate_limited";
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -27,22 +33,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
         const normalizedEmail = email.toLowerCase().trim();
-        console.info(`[auth] sign-in attempt for ${normalizedEmail}`);
-
+        
         const client = await clientPromise;
         const db = client.db();
+        // Brute-force protection: checked before any password work, for known and unknown emails alike.
+        const ip = ipFromHeaders(request.headers);
+        if (!(await allowAuthAttempt(db, "login", ip, normalizedEmail, { pair: 10, account: 40, ip: 120 }))) {
+          console.warn("[auth] sign-in throttled");
+          throw new RateLimitedError();
+        }
         let user = await db.collection("users").findOne({ email: normalizedEmail });
 
         const envAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
         const envAdminPassword = process.env.ADMIN_PASSWORD;
 
-        if (!user && envAdminEmail && normalizedEmail === envAdminEmail && envAdminPassword && password === envAdminPassword) {
+        if (!user && envAdminEmail && normalizedEmail === envAdminEmail && envAdminPassword && safeEqual(password, envAdminPassword)) {
           const hashedPassword = await bcrypt.hash(envAdminPassword, 12);
           const adminDoc = {
             name: process.env.ADMIN_NAME || "System Administrator",
@@ -59,26 +70,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         if (!user || !user.password) {
-          console.warn(`[auth] sign-in failed for ${normalizedEmail}: user not found or no password`);
+          console.warn(`[auth] sign-in failed for ${maskEmail(normalizedEmail)}: user not found or no password`);
           return null;
         }
 
         const valid = await bcrypt.compare(password, user.password);
         if (!valid) {
-          console.warn(`[auth] sign-in failed for ${normalizedEmail}: invalid password`);
+          console.warn(`[auth] sign-in failed for ${maskEmail(normalizedEmail)}: invalid password`);
           return null;
         }
 
         if (user.status === "banned") {
-          console.warn(`[auth] sign-in blocked for ${normalizedEmail}: banned`);
+          console.warn(`[auth] sign-in blocked for ${maskEmail(normalizedEmail)}: banned`);
           throw new BannedError();
+        }
+
+        // A new owner whose activation window ended can no longer sign in: the organization is being removed.
+        if (!user.emailVerified && user.provisionalUntil instanceof Date && user.provisionalUntil <= new Date()) {
+          console.warn(`[auth] sign-in blocked for ${maskEmail(normalizedEmail)}: activation window expired`);
+          return null;
         }
 
         const status: AccountStatus =
           (user.status as AccountStatus | undefined) ??
           (user.emailVerified ? "active" : "unverified");
 
-        console.info(`[auth] sign-in authorized for ${normalizedEmail} (status=${status})`);
+        console.info(`[auth] sign-in authorized for ${maskEmail(normalizedEmail)} (status=${status})`);
 
         if (status === "unverified") {
           const outcome = await issueVerificationEmail(
@@ -94,14 +111,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           );
 
           if (outcome.status === "sent") {
-            console.info(`[auth] auto verification email sent to ${normalizedEmail}`);
+            console.info(`[auth] auto verification email sent to ${maskEmail(normalizedEmail)}`);
           } else if (outcome.status === "throttled") {
             console.info(
-              `[auth] auto verification email skipped for ${normalizedEmail} (one was sent less than 1 minute ago)`
+              `[auth] auto verification email skipped for ${maskEmail(normalizedEmail)} (one was sent less than 1 minute ago)`
             );
           }
 
-          console.warn(`[auth] sign-in blocked for ${normalizedEmail}: not verified`);
+          console.warn(`[auth] sign-in blocked for ${maskEmail(normalizedEmail)}: not verified`);
           // Throw so no session cookie is created for unverified users —
           // loginAction catches the "unverified" code and redirects to
           // /unverified?email=… instead.

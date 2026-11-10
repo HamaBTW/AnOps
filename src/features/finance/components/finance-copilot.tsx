@@ -146,7 +146,7 @@ export function FinanceCopilot() {
             <div className="flex flex-col items-center gap-3 p-6 text-center">
               <Lock aria-hidden className="size-6 text-[var(--color-text-secondary)]" />
               <p className="text-sm text-[var(--color-text-primary)]">
-                {state.state === "company_disabled" ? "AnOps AI is not turned on for your company." : state.state === "not_granted" ? "AI is not enabled for your account yet." : "AI is not available right now."}
+                {state.state === "plan_excluded" ? "AI features are not included in your organization's plan." : state.state === "company_disabled" ? "AnOps AI is not turned on for your company." : state.state === "not_granted" ? "AI is not enabled for your account yet." : "AI is not available right now."}
               </p>
               {state.canManageAccess && (
                 <Link href="/ai/access" className="text-sm font-semibold underline">

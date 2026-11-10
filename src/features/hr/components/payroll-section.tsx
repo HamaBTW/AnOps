@@ -315,7 +315,7 @@ export function PayrollSection({
                     <FileText className="mx-auto h-8 w-8 opacity-40 mb-2" />
                     <p className="font-semibold text-sm">No payslips generated for period {period}</p>
                     <p className="text-xs mt-1">
-                      Click the "Generate Payslips" button above to compute salaries and deductions.
+                      Click the &quot;Generate Payslips&quot; button above to compute salaries and deductions.
                     </p>
                   </td>
                 </tr>
@@ -399,7 +399,7 @@ export function PayrollSection({
               <FileText className="mx-auto h-8 w-8 opacity-40 mb-2" />
               <p className="font-semibold text-xs">No payslips generated for period {period}</p>
               <p className="text-[11px] mt-1 text-[var(--color-text-secondary)]">
-                Click "Generate Payslips" above to compute.
+                Click &quot;Generate Payslips&quot; above to compute.
               </p>
             </div>
           ) : (

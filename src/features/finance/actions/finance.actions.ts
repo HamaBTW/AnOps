@@ -17,7 +17,7 @@ function safeMessage(error: unknown, fallback: string): string {
 
 export async function createCustomerAction(input: FormData | Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
 
     const raw = input instanceof FormData ? {
@@ -49,7 +49,7 @@ export async function createCustomerAction(input: FormData | Record<string, unkn
 
 export async function updateCustomerAction(id: string, input: FormData | Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
 
     const raw = input instanceof FormData ? {
@@ -81,7 +81,7 @@ export async function updateCustomerAction(id: string, input: FormData | Record<
 
 export async function deleteCustomerAction(id: string): Promise<ActionResult<{ deactivated?: boolean; message?: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
 
     const service = await getFinanceService();
@@ -97,7 +97,7 @@ export async function deleteCustomerAction(id: string): Promise<ActionResult<{ d
 
 export async function createInvoiceDraftAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
 
     const linesRaw = formData.get("lines");
@@ -135,7 +135,7 @@ export async function createInvoiceDraftAction(formData: FormData): Promise<Acti
 
 export async function updateInvoiceDraftAction(invoiceId: string, formData: FormData): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
 
     const linesRaw = formData.get("lines");
@@ -168,7 +168,7 @@ export async function updateInvoiceDraftAction(invoiceId: string, formData: Form
 
 export async function deleteInvoiceDraftAction(invoiceId: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.deleteInvoiceDraft(invoiceId, auth.userId);
@@ -183,7 +183,7 @@ export async function deleteInvoiceDraftAction(invoiceId: string): Promise<Actio
 
 export async function duplicateInvoiceAction(invoiceId: string): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     const id = await service.duplicateInvoice(invoiceId, auth.userId);
@@ -196,7 +196,7 @@ export async function duplicateInvoiceAction(invoiceId: string): Promise<ActionR
 
 export async function createCreditNoteAction(invoiceId: string, input: { amount: number; reason: string }): Promise<ActionResult<{ number: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     const note = await service.createCreditNote(invoiceId, { amount: Number(input.amount), reason: String(input.reason ?? "").slice(0, 300) }, auth.userId);
@@ -211,7 +211,7 @@ export async function createCreditNoteAction(invoiceId: string, input: { amount:
 
 export async function reverseAllocationAction(allocationId: string, invoiceId: string, reason: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.reverseAllocation(allocationId, String(reason ?? ""), auth.userId);
@@ -226,7 +226,7 @@ export async function reverseAllocationAction(allocationId: string, invoiceId: s
 
 export async function postInvoiceAction(invoiceId: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.postInvoice(invoiceId, auth.userId);
@@ -242,7 +242,7 @@ export async function postInvoiceAction(invoiceId: string): Promise<ActionResult
 
 export async function voidInvoiceAction(input: FormData | { invoiceId: string; reason: string }): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const raw = input instanceof FormData
       ? { invoiceId: input.get("invoiceId"), reason: input.get("reason") }
@@ -263,7 +263,7 @@ export async function voidInvoiceAction(input: FormData | { invoiceId: string; r
 
 export async function exportInvoicesCsvAction(): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     const csv = await service.exportInvoicesCsv();
@@ -277,7 +277,7 @@ export async function exportInvoicesCsvAction(): Promise<ActionResult<{ csv: str
 
 export async function recordPaymentAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const raw = {
       paymentDate: formData.get("paymentDate"),
@@ -301,7 +301,7 @@ export async function recordPaymentAction(formData: FormData): Promise<ActionRes
 
 export async function allocatePaymentAction(input: FormData | { paymentId: string; allocations: Array<{ invoiceId: string; amount: number }> }): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     let paymentId: string;
     let allocations: unknown[] = [];
@@ -331,7 +331,7 @@ export async function allocatePaymentAction(input: FormData | { paymentId: strin
 
 export async function exportPaymentsCsvAction(): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     const csv = await service.exportPaymentsCsv();
@@ -345,7 +345,7 @@ export async function exportPaymentsCsvAction(): Promise<ActionResult<{ csv: str
 
 export async function createExpenseAction(input: FormData | Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const raw = input instanceof FormData ? {
       expenseDate: input.get("expenseDate"),
@@ -373,7 +373,7 @@ export async function createExpenseAction(input: FormData | Record<string, unkno
 
 export async function updateExpenseAction(expenseId: string, input: Record<string, unknown>): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const parsed = expenseCreateSchema.safeParse(input);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
@@ -390,7 +390,7 @@ export async function updateExpenseAction(expenseId: string, input: Record<strin
 
 export async function deleteExpenseAction(expenseId: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.deleteExpense(expenseId, auth.userId);
@@ -406,7 +406,7 @@ export async function deleteExpenseAction(expenseId: string): Promise<ActionResu
 
 export async function submitExpenseAction(expenseId: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.submitExpense(expenseId, auth.userId);
@@ -421,7 +421,7 @@ export async function submitExpenseAction(expenseId: string): Promise<ActionResu
 
 export async function approveExpenseAction(expenseId: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.approveExpense(expenseId, auth.userId);
@@ -436,7 +436,7 @@ export async function approveExpenseAction(expenseId: string): Promise<ActionRes
 
 export async function rejectExpenseAction(input: FormData | { expenseId: string; reason: string }): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const raw = input instanceof FormData
       ? { expenseId: input.get("expenseId"), reason: input.get("reason") }
@@ -456,7 +456,7 @@ export async function rejectExpenseAction(input: FormData | { expenseId: string;
 
 export async function markExpensePaidAction(expenseId: string): Promise<ActionResult> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     await service.markExpensePaid(expenseId, auth.userId);
@@ -471,7 +471,7 @@ export async function markExpensePaidAction(expenseId: string): Promise<ActionRe
 
 export async function createExpenseCategoryAction(name: string): Promise<ActionResult<{ id: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     const id = await service.createExpenseCategory(name);
@@ -485,7 +485,7 @@ export async function createExpenseCategoryAction(name: string): Promise<ActionR
 
 export async function exportExpensesCsvAction(): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
-    const auth = await getCurrentAuthUser();
+    const auth = await getCurrentAuthUser("finance");
     if (!auth) return { error: "Unauthorized" };
     const service = await getFinanceService();
     const csv = await service.exportExpensesCsv();

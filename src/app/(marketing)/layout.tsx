@@ -1,6 +1,7 @@
 import { auth } from "@/server/auth";
 import { SiteHeader } from "@/shared/components/marketing/site-header";
 import { SiteFooter } from "@/shared/components/marketing/site-footer";
+import { RevealObserver } from "@/shared/components/portal/reveal-observer";
 
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -18,6 +19,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
         {children}
       </main>
       <SiteFooter />
+      <RevealObserver />
     </div>
   );
 }

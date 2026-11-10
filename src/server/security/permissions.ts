@@ -1,6 +1,7 @@
 import "server-only";
 import type { CompanyRole } from "@/features/company/types";
 import { AppError } from "@/shared/lib/errors";
+import type { ApplicationId } from "@/shared/domain/applications";
 
 /**
  * Central permission catalogue for every company-scoped module (HR, inventory, purchasing,
@@ -84,16 +85,30 @@ export function workspaceRoleFor(companyRole: CompanyRole): WorkspaceRole {
 
 const ALL_PERMISSIONS = Object.values(PERMISSIONS) as Permission[];
 
-const READ_PERMISSIONS: Permission[] = [
-  PERMISSIONS.HR_READ,
-  PERMISSIONS.INVENTORY_READ,
-  PERMISSIONS.PURCHASING_READ,
-  PERMISSIONS.MANUFACTURING_READ,
-  PERMISSIONS.FINANCE_READ,
-  PERMISSIONS.FINANCE_REPORT_VIEW,
-  PERMISSIONS.MARKETING_READ,
-  PERMISSIONS.COMMUNITY_READ,
-];
+/**
+ * What every member may read. HR is further restricted by its own rules (people see their own leave and pay data).
+ * Stock and production figures are operational and shared with the whole team.
+ */
+const TEAM_READ_PERMISSIONS: Permission[] = [PERMISSIONS.HR_READ, PERMISSIONS.INVENTORY_READ, PERMISSIONS.MANUFACTURING_READ, PERMISSIONS.COMMUNITY_READ];
+
+/**
+ * Money, supplier terms and personal data of customers and contacts. Not granted to the "employee" role by default:
+ * a regular team member has no business reading company finances, payments, supplier prices or the marketing contact list.
+ * Managers (operators) and above keep them because they run those processes.
+ */
+const BUSINESS_READ_PERMISSIONS: Permission[] = [PERMISSIONS.PURCHASING_READ, PERMISSIONS.FINANCE_READ, PERMISSIONS.FINANCE_REPORT_VIEW, PERMISSIONS.MARKETING_READ];
+
+/** Applications that need a role-level read permission before they can be opened (plan access is checked separately). */
+const APP_READ_PERMISSION: Partial<Record<ApplicationId, Permission>> = {
+  finance: PERMISSIONS.FINANCE_READ,
+  purchasing: PERMISSIONS.PURCHASING_READ,
+  marketing: PERMISSIONS.MARKETING_READ,
+};
+
+export function roleMayOpenApp(permissions: ReadonlySet<Permission>, appId: ApplicationId): boolean {
+  const needed = APP_READ_PERMISSION[appId];
+  return !needed || permissions.has(needed);
+}
 
 /**
  * owner/admin: full control, including approvals, manual stock adjustments and HR administration.
@@ -101,13 +116,15 @@ const READ_PERMISSIONS: Permission[] = [
  *   receipts, production. Cannot approve purchase orders or adjust stock counts.
  *   Marketing: operators draft, manage contacts and social accounts, and generate AI copy.
  *   Approving and dispatching campaigns (which contact real people) is owner/admin only.
- * viewer (company employee): read-only access to company data.
+ * viewer (company employee): read-only access to team data (HR own records, stock, production, community); no finance,
+ *   supplier or marketing-contact data.
  */
 const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
   owner: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
   operator: [
-    ...READ_PERMISSIONS,
+    ...TEAM_READ_PERMISSIONS,
+    ...BUSINESS_READ_PERMISSIONS,
     PERMISSIONS.HR_MANAGE,
     PERMISSIONS.HR_ATTENDANCE_RECORD,
     PERMISSIONS.INVENTORY_PRODUCT_MANAGE,
@@ -135,7 +152,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Permission[]> = {
     PERMISSIONS.COMMUNITY_WRITE,
     PERMISSIONS.COMMUNITY_SUPPORT,
   ],
-  viewer: [...READ_PERMISSIONS],
+  viewer: [...TEAM_READ_PERMISSIONS],
 };
 
 export function permissionsForRole(role: WorkspaceRole): ReadonlySet<Permission> {

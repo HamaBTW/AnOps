@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { assertWorkspaceAppAccess } from "@/server/platform/access";
 import { resolveWorkspace } from "@/server/tenancy/workspace";
 import { getChatMessages } from "@/server/services/community.service";
 import { isAppError } from "@/shared/lib/errors";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "community");
     const { searchParams } = new URL(req.url);
     const conversationId = searchParams.get("conversationId");
     const after = searchParams.get("after") || undefined;

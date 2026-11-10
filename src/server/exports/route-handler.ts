@@ -2,6 +2,8 @@ import "server-only";
 import { randomUUID } from "crypto";
 import type { z } from "zod";
 import { resolveWorkspace, type WorkspaceContext } from "@/server/tenancy/workspace";
+import { assertWorkspaceAppAccess } from "@/server/platform/access";
+import type { ApplicationId } from "@/shared/domain/applications";
 import { recordAudit } from "@/server/audit/audit.service";
 import type { ExportFile } from "@/server/exports/reports";
 import { AppError, isAppError } from "@/shared/lib/errors";
@@ -17,6 +19,7 @@ export const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.
  */
 export async function handleExport<Q>(
   request: Request,
+  app: ApplicationId,
   report: string,
   schema: z.ZodType<Q>,
   build: (ctx: WorkspaceContext, query: Q, now: Date) => Promise<ExportFile>
@@ -24,6 +27,7 @@ export async function handleExport<Q>(
   const requestId = randomUUID();
   try {
     const ctx = await resolveWorkspace(requestId);
+    await assertWorkspaceAppAccess(ctx, app);
     const parsed = schema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!parsed.success) {
       throw new AppError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "The export filters are not valid.");

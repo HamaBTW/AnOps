@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { headers } from "next/headers";
 import "./globals.css";
 import { PwaRegister } from "@/shared/components/pwa-register";
 import { OfflineIndicator } from "@/shared/components/offline-indicator";
@@ -147,11 +148,13 @@ const devServiceWorkerCleanup = `(function () {
   });
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Set per request by proxy.ts. Inline scripts only run when they carry it (see server/security/csp.ts).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" data-theme="light" className="h-full" suppressHydrationWarning>
       <body
@@ -162,15 +165,15 @@ export default function RootLayout({
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        <Script id="anops-theme-init" strategy="beforeInteractive">
+        <Script id="anops-theme-init" strategy="beforeInteractive" nonce={nonce}>
           {themeInitScript}
         </Script>
         {process.env.NODE_ENV === "development" && (
           <>
-            <Script id="anops-dev-recovery" strategy="beforeInteractive">
+            <Script id="anops-dev-recovery" strategy="beforeInteractive" nonce={nonce}>
               {devRecoveryShim}
             </Script>
-            <Script id="anops-dev-sw-cleanup" strategy="beforeInteractive">
+            <Script id="anops-dev-sw-cleanup" strategy="beforeInteractive" nonce={nonce}>
               {devServiceWorkerCleanup}
             </Script>
           </>

@@ -107,7 +107,18 @@ export function mapMongoError(error: unknown): unknown {
     );
   }
   if (code === MONGO_DUPLICATE_KEY) {
-    return new AppError("CONFLICT", "A record with the same unique value already exists");
+    return new AppError("CONFLICT", DUPLICATE_MESSAGE);
   }
   return error;
+}
+
+const DUPLICATE_MESSAGE = "A record with the same unique value already exists";
+
+/**
+ * True for a duplicate-key failure, whether it is still the raw driver error or was already translated by
+ * withTransaction. Services use it to answer with their own field-specific message instead of the generic one.
+ */
+export function isDuplicateKeyError(error: unknown): boolean {
+  if (error instanceof AppError) return error.code === "CONFLICT" && error.message === DUPLICATE_MESSAGE;
+  return (error as { code?: number } | null)?.code === MONGO_DUPLICATE_KEY;
 }

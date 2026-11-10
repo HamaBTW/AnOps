@@ -8,12 +8,15 @@ import {
 } from "@/shared/lib/offline-store";
 import { createProductAction, updateProductAction } from "@/features/inventory/actions/inventory.action";
 
-type ActionDispatcher = (payload: any) => Promise<{ ok: boolean; error?: any }>;
+type ActionDispatcher = (payload: unknown) => Promise<{ ok: boolean; error?: unknown }>;
 
+/** Queued payloads were validated when they were queued; the server validates them again when they run. */
 const MUTATION_HANDLERS: Record<string, ActionDispatcher> = {
-  "inventory.product.create": async (payload) => createProductAction(payload),
-  "inventory.product.update": async (payload) =>
-    updateProductAction(payload.id, payload.data),
+  "inventory.product.create": async (payload) => createProductAction(payload as Parameters<typeof createProductAction>[0]),
+  "inventory.product.update": async (payload) => {
+    const { id, data } = payload as { id: string; data: Parameters<typeof updateProductAction>[1] };
+    return updateProductAction(id, data);
+  },
 };
 
 export function registerOfflineMutationHandler(type: string, handler: ActionDispatcher) {
@@ -24,13 +27,6 @@ export function OfflineSyncManager() {
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<string | null>(null);
-
-  const updateCount = async () => {
-    try {
-      const pending = await getPendingMutations();
-      setPendingCount(pending.length);
-    } catch {}
-  };
 
   const processQueue = async () => {
     if (!navigator.onLine || syncing) return;
@@ -56,19 +52,26 @@ export function OfflineSyncManager() {
     }
 
     setSyncing(false);
-    await updateCount();
+    setPendingCount((await getPendingMutations()).length);
     if (successCount > 0) {
       setLastSyncResult(`Synced ${successCount} offline change(s) successfully!`);
-      const timer = setTimeout(() => setLastSyncResult(null), 4000);
-      return () => clearTimeout(timer);
+      setTimeout(() => setLastSyncResult(null), 4000);
     }
   };
 
   useEffect(() => {
-    updateCount();
-    const handleUpdate = () => updateCount();
+    let active = true;
+    const refreshCount = () => {
+      getPendingMutations()
+        .then((pending) => {
+          if (active) setPendingCount(pending.length);
+        })
+        .catch(() => {});
+    };
+    refreshCount();
+    const handleUpdate = () => refreshCount();
     const handleOnline = () => {
-      updateCount();
+      refreshCount();
       processQueue();
     };
 
@@ -76,6 +79,7 @@ export function OfflineSyncManager() {
     window.addEventListener("online", handleOnline);
 
     return () => {
+      active = false;
       window.removeEventListener("anops:offline-mutations-updated", handleUpdate);
       window.removeEventListener("online", handleOnline);
     };

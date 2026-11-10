@@ -16,14 +16,14 @@ export default async function OnboardingPage() {
 
   const companies = await getUserCompanies(session.user.id);
   if (companies.length > 0) {
-    redirect("/hr");
+    redirect("/anops");
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-canvas)] px-4 py-12">
+    <main id="main" className="min-h-screen flex items-center justify-center bg-[var(--color-bg-canvas)] px-4 py-12">
       <div className="w-full max-w-lg">
         <OnboardingClient userName={session.user.name || "there"} />
       </div>
-    </div>
+    </main>
   );
 }

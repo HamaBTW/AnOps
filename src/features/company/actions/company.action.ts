@@ -3,273 +3,92 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { auth } from "@/server/auth";
+import clientPromise from "@/server/db/client";
 import { createCompanySchema } from "@/features/company/schemas/company.schema";
-import {
-  createCompany,
-  getUserCompanies,
-  getCompanyMember,
-} from "@/server/services/company.service";
+import { createCompany, getUserCompanies } from "@/server/services/company.service";
+import { recordAudit } from "@/server/audit/audit.service";
+import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { ACTIVE_COMPANY_COOKIE } from "@/server/tenant/context";
+import { ObjectId } from "mongodb";
+import { isAppError } from "@/shared/lib/errors";
 import type { Company } from "@/features/company/types";
 
+/**
+ * Organization (company) actions. Organization management itself lives in the organization pages
+ * (`/organization/[orgId]`); these two actions only create an organization and change the active one.
+ */
 export type CompanyActionResult<T = unknown> = {
   success?: boolean;
   data?: T;
   error?: string;
 };
 
+/** A person can own or belong to at most this many organizations created through this form (abuse guard). */
+const MAX_ORGANIZATIONS_PER_USER = 20;
+
+const cookieOptions = {
+  path: "/",
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  maxAge: 60 * 60 * 24 * 365,
+};
+
 export async function createCompanyAction(rawData: unknown): Promise<CompanyActionResult<Company>> {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
-      return { error: "You must be signed in to create a company." };
+    if (!session?.user?.id || !ObjectId.isValid(session.user.id)) {
+      return { error: "You must be signed in to create an organization." };
     }
 
     const parsed = createCompanySchema.safeParse(rawData);
     if (!parsed.success) {
-      const firstIssue = parsed.error.issues[0]?.message || "Invalid company details.";
-      return { error: firstIssue };
+      return { error: parsed.error.issues[0]?.message || "Invalid organization details." };
     }
 
-    const company = await createCompany(session.user.id, parsed.data);
+    const db = (await clientPromise).db();
+    await consumeSharedRateLimit(db, `org-create:${session.user.id}`, 5, 60 * 60 * 1000, "You created several organizations in a short time. Try again later.");
+    const existing = await getUserCompanies(session.user.id);
+    if (existing.length >= MAX_ORGANIZATIONS_PER_USER) {
+      return { error: `You can belong to at most ${MAX_ORGANIZATIONS_PER_USER} organizations.` };
+    }
 
-    // Set as active company in cookie
-    const cookieStore = await cookies();
-    cookieStore.set(ACTIVE_COMPANY_COOKIE, company.id, {
-      path: "/",
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365, // 1 year
+    // The new organization starts without a plan: its owner chooses one (or the free OneOps application) from /anops.
+    const company = await createCompany(session.user.id, parsed.data);
+    await recordAudit(db, {
+      companyId: new ObjectId(company.id),
+      actorUserId: new ObjectId(session.user.id),
+      action: "organization.created",
+      entityType: "organization",
+      entityId: company.id,
+      requestId: `create-${company.id}`,
     });
 
+    (await cookies()).set(ACTIVE_COMPANY_COOKIE, company.id, cookieOptions);
     revalidatePath("/", "layout");
     return { success: true, data: company };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to create company.";
-    return { error: message };
+    if (isAppError(err)) return { error: err.message };
+    console.error(`[organization] create failed: ${err instanceof Error ? err.name : "unknown"}`);
+    return { error: "Failed to create the organization." };
   }
 }
 
+/** Makes an organization the active workspace. Only organizations the person actively belongs to can be selected. */
 export async function switchCompanyAction(companyId: string): Promise<CompanyActionResult<boolean>> {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
-      return { error: "You must be signed in." };
-    }
-
-    const member = await getCompanyMember(companyId, session.user.id);
-    if (!member) {
-      return { error: "Forbidden: You are not a member of this company." };
-    }
-
-    const cookieStore = await cookies();
-    cookieStore.set(ACTIVE_COMPANY_COOKIE, companyId, {
-      path: "/",
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 365,
-    });
-
-    revalidatePath("/", "layout");
-    return { success: true, data: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to switch company.";
-    return { error: message };
-  }
-}
-
-export async function getUserCompaniesAction(): Promise<
-  CompanyActionResult<{ companies: Company[]; activeCompanyId?: string }>
-> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return { error: "Unauthorized." };
-    }
+    if (!session?.user?.id) return { error: "You must be signed in." };
 
     const companies = await getUserCompanies(session.user.id);
-    const cookieStore = await cookies();
-    const activeCompanyId = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value || companies[0]?.id;
-
-    return { success: true, data: { companies, activeCompanyId } };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to load user companies.";
-    return { error: message };
-  }
-}
-
-export async function updateCompanyAction(
-  companyId: string,
-  rawData: unknown
-): Promise<CompanyActionResult<Company>> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return { error: "Unauthorized." };
+    if (!companies.some((company) => company.id === companyId)) {
+      return { error: "You are not a member of this organization." };
     }
 
-    const member = await getCompanyMember(companyId, session.user.id);
-    if (!member || (member.role !== "owner" && member.role !== "admin")) {
-      return { error: "Forbidden: Only organization owners or admins can update company settings." };
-    }
-
-    const { updateCompanySchema } = await import("@/features/company/schemas/company.schema");
-    const parsed = updateCompanySchema.safeParse(rawData);
-    if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message || "Invalid update data." };
-    }
-
-    const { updateCompany } = await import("@/server/services/company.service");
-    const updated = await updateCompany(companyId, parsed.data);
-    revalidatePath("/company");
+    (await cookies()).set(ACTIVE_COMPANY_COOKIE, companyId, cookieOptions);
     revalidatePath("/", "layout");
-    return { success: true, data: updated };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to update company settings.";
-    return { error: message };
-  }
-}
-
-export async function getCompanyMembersAction(
-  companyId?: string
-): Promise<CompanyActionResult<import("@/features/company/types").CompanyMember[]>> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) return { error: "Unauthorized." };
-
-    const { getActiveTenant } = await import("@/server/tenant/context");
-    const tenant = await getActiveTenant();
-    const targetCompanyId = companyId || tenant?.companyId;
-    if (!targetCompanyId) return { error: "No active company selected." };
-
-    const member = await getCompanyMember(targetCompanyId, session.user.id);
-    if (!member) return { error: "Forbidden: You are not a member of this company." };
-
-    const { getCompanyMembers } = await import("@/server/services/company.service");
-    const members = await getCompanyMembers(targetCompanyId);
-    return { success: true, data: members };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to load company members.";
-    return { error: message };
-  }
-}
-
-export async function addCompanyMemberAction(
-  companyId: string,
-  rawData: unknown
-): Promise<
-  CompanyActionResult<{
-    member: import("@/features/company/types").CompanyMember;
-    tempPassword?: string;
-  }>
-> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) return { error: "Unauthorized." };
-
-    const currentMember = await getCompanyMember(companyId, session.user.id);
-    if (!currentMember || (currentMember.role !== "owner" && currentMember.role !== "admin")) {
-      return { error: "Forbidden: Only owners and admins can add team members." };
-    }
-
-    const { addCompanyMemberSchema } = await import("@/features/company/schemas/company.schema");
-    const parsed = addCompanyMemberSchema.safeParse(rawData);
-    if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message || "Invalid member data." };
-    }
-
-    const { addCompanyMember } = await import("@/server/services/company.service");
-    const result = await addCompanyMember(
-      companyId,
-      parsed.data.email,
-      parsed.data.role,
-      parsed.data.fullName
-    );
-
-    revalidatePath("/company");
-    return { success: true, data: result };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to add company member.";
-    return { error: message };
-  }
-}
-
-export async function updateCompanyMemberRoleAction(
-  companyId: string,
-  memberId: string,
-  rawData: unknown
-): Promise<CompanyActionResult<import("@/features/company/types").CompanyMember>> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) return { error: "Unauthorized." };
-
-    const currentMember = await getCompanyMember(companyId, session.user.id);
-    if (!currentMember || (currentMember.role !== "owner" && currentMember.role !== "admin")) {
-      return { error: "Forbidden: Only owners and admins can update member roles." };
-    }
-
-    const { updateCompanyMemberRoleSchema } = await import("@/features/company/schemas/company.schema");
-    const parsed = updateCompanyMemberRoleSchema.safeParse(rawData);
-    if (!parsed.success) {
-      return { error: parsed.error.issues[0]?.message || "Invalid role." };
-    }
-
-    const { updateCompanyMemberRole } = await import("@/server/services/company.service");
-    const updated = await updateCompanyMemberRole(
-      companyId,
-      memberId,
-      parsed.data.role,
-      session.user.id
-    );
-
-    revalidatePath("/company");
-    return { success: true, data: updated };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to update member role.";
-    return { error: message };
-  }
-}
-
-export async function removeCompanyMemberAction(
-  companyId: string,
-  memberId: string
-): Promise<CompanyActionResult<boolean>> {
-  try {
-    const session = await auth();
-    if (!session?.user?.id) return { error: "Unauthorized." };
-
-    const currentMember = await getCompanyMember(companyId, session.user.id);
-    if (!currentMember || (currentMember.role !== "owner" && currentMember.role !== "admin")) {
-      return { error: "Forbidden: Only owners and admins can remove team members." };
-    }
-
-    const { removeCompanyMember } = await import("@/server/services/company.service");
-    await removeCompanyMember(companyId, memberId, session.user.id);
-
-    revalidatePath("/company");
     return { success: true, data: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to remove member.";
-    return { error: message };
-  }
-}
-
-export async function getCompanyStatsAction(
-  companyId?: string
-): Promise<CompanyActionResult<{ membersCount: number; employeesCount: number; departmentsCount: number; jobTitlesCount: number }>> {
-  try {
-    const { getActiveTenant } = await import("@/server/tenant/context");
-    const tenant = await getActiveTenant();
-    const targetId = companyId || tenant?.companyId;
-    if (!targetId) return { error: "No active company." };
-
-    const { getCompanyStats } = await import("@/server/services/company.service");
-    const stats = await getCompanyStats(targetId);
-    return { success: true, data: stats };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to load company stats.";
-    return { error: message };
+  } catch {
+    return { error: "Failed to switch organization." };
   }
 }

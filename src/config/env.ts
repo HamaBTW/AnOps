@@ -40,6 +40,10 @@ const envSchema = z.object({
   MARKETING_WORKER_SECRET: z.string().min(1).optional(),
   MARKETING_SEND_ALLOWLIST: z.string().max(2000).optional(),
 
+  // Platform lifecycle and billing. All optional: a missing value disables only that feature.
+  PLATFORM_CRON_SECRET: z.string().min(1).optional(),
+  STRIPE_API_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
 });
 export type Env = z.infer<typeof envSchema>;
 
@@ -63,6 +67,9 @@ function loadEnv(): Env {
     MARKETING_WEBHOOK_SECRET: process.env.MARKETING_WEBHOOK_SECRET,
     MARKETING_WORKER_SECRET: process.env.MARKETING_WORKER_SECRET,
     MARKETING_SEND_ALLOWLIST: process.env.MARKETING_SEND_ALLOWLIST,
+    PLATFORM_CRON_SECRET: process.env.PLATFORM_CRON_SECRET,
+    STRIPE_API_KEY: process.env.STRIPE_API_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
   });
 
   if (!parsed.success) {
@@ -146,6 +153,9 @@ export function getBrevoEnv(): { value: BrevoEnv; issues: string[] } {
     BREVO_WEBHOOK_TOKEN: process.env.BREVO_WEBHOOK_TOKEN,
     BREVO_EMAIL_MARKETING_APPROVED: process.env.BREVO_EMAIL_MARKETING_APPROVED,
     MARKETING_SEND_ALLOWLIST: process.env.MARKETING_SEND_ALLOWLIST,
+    PLATFORM_CRON_SECRET: process.env.PLATFORM_CRON_SECRET,
+    STRIPE_API_KEY: process.env.STRIPE_API_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
   });
   brevoEnvCache = parsed.success
     ? { value: parsed.data, issues: [] }

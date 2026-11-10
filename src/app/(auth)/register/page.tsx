@@ -1,10 +1,6 @@
-import { AuthCard } from "@/features/auth/components/auth-form";
-import { RegisterForm } from "@/features/auth/components/register-form";
+import { redirect } from "next/navigation";
 
+/** Account creation now starts with choosing applications (organization + subscription are created together). */
 export default function RegisterPage() {
-  return (
-    <AuthCard title="Create account" description="Get started with AnOps">
-      <RegisterForm />
-    </AuthCard>
-  );
+  redirect("/trial");
 }

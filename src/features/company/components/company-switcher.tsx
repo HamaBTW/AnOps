@@ -99,7 +99,7 @@ export function CompanySwitcher({ companies, activeCompanyId }: CompanySwitcherP
             <div className="my-1 border-t border-[var(--color-border-subtle)]" />
 
             <Link
-              href="/company"
+              href={`/organization/${activeCompany?.id ?? ""}`}
               onClick={() => setOpen(false)}
               className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2.5 py-2 text-left text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] transition-colors"
             >

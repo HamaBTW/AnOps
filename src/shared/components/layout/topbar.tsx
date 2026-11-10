@@ -1,6 +1,9 @@
 "use client";
 
-import { IconSearch, IconNotification, IconMenu } from "@/shared/components/ui/brand-icons";
+import { IconNotification, IconMenu } from "@/shared/components/ui/brand-icons";
+import { AppSwitcher } from "@/features/platform/components/app-switcher";
+import { applicationForPath, type ApplicationId } from "@/shared/domain/applications";
+import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { CompanySwitcher } from "@/features/company/components/company-switcher";
 import type { Company } from "@/features/company/types";
@@ -9,11 +12,18 @@ export function Topbar({
   onMenuClick,
   companies = [],
   activeCompanyId = "",
+  allowedApps = [],
+  permissions = [],
+  aiFeatures = true,
 }: {
   onMenuClick?: () => void;
   companies?: Company[];
   activeCompanyId?: string;
+  allowedApps?: ApplicationId[];
+  permissions?: string[];
+  aiFeatures?: boolean;
 }) {
+  const pathname = usePathname();
   return (
     <header className="sticky top-0 z-20 flex h-[72px] items-center gap-2 sm:gap-4 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]/95 backdrop-blur px-3 sm:px-4 md:px-6">
       {onMenuClick && (
@@ -34,17 +44,7 @@ export function Topbar({
       )}
 
       <div className="flex-1">
-        <div className="relative max-w-md">
-          <IconSearch
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"
-          />
-          <input
-            type="search"
-            placeholder="Search..."
-            className="w-full h-10 pl-9 pr-3 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-focus-ring)] focus:ring-offset-[2px] focus:ring-offset-[var(--color-bg-surface)]"
-          />
-        </div>
+        <AppSwitcher allowed={allowedApps} permissions={permissions} aiFeatures={aiFeatures} currentAppId={applicationForPath(pathname)?.id ?? null} />
       </div>
       <ThemeToggle />
       <button

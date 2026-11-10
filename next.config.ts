@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { legacyAppSlugs } from "./src/shared/config/catalog";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -27,6 +28,18 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
+  },
+  async redirects() {
+    // Retired public app slugs now live under one of the 11 managements.
+    return [
+      // The Company application is now part of the organization pages.
+      { source: "/apps/company", destination: "/apps", permanent: true },
+      ...Object.entries(legacyAppSlugs).map(([from, to]) => ({
+        source: `/apps/${from}`,
+        destination: `/apps/${to}`,
+        permanent: true,
+      })),
+    ];
   },
 };
 

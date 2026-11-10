@@ -6,5 +6,5 @@ import { purchaseOrderExportQuerySchema } from "@/features/exports/schemas/expor
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
-  return handleExport(request, "purchase-orders", purchaseOrderExportQuerySchema, exportPurchaseOrders);
+  return handleExport(request, "purchasing", "purchase-orders", purchaseOrderExportQuerySchema, exportPurchaseOrders);
 }

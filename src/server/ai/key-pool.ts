@@ -10,6 +10,7 @@ import "server-only";
  */
 
 const COOLDOWN_MS = 60_000; // 1 minute cooldown per key after 429
+const INVALID_COOLDOWN_MS = 30 * 60_000; // a rejected key is skipped for 30 minutes
 
 type KeyState = {
   key: string;
@@ -64,14 +65,34 @@ export class KeyPool {
    * Mark the given key as rate-limited for COOLDOWN_MS.
    * Call this when you receive a 429 response.
    */
-  markRateLimited(key: string): void {
+  markRateLimited(key: string, cooldownMs: number = COOLDOWN_MS): void {
     const state = this.keys.find((k) => k.key === key);
     if (state) {
-      state.rateLimitedUntil = Date.now() + COOLDOWN_MS;
+      state.rateLimitedUntil = Date.now() + cooldownMs;
       console.warn(
-        `[KeyPool] Key ...${key.slice(-6)} rate-limited for ${COOLDOWN_MS / 1000}s`
+        `[KeyPool] Key ...${key.slice(-6)} rate-limited for ${Math.round(cooldownMs / 1000)}s`
       );
     }
+  }
+
+  /** A key the provider rejected as invalid or not permitted: skipped for a long time instead of being retried on every request. */
+  markInvalid(key: string, cooldownMs: number = INVALID_COOLDOWN_MS): void {
+    const state = this.keys.find((k) => k.key === key);
+    if (state) {
+      state.rateLimitedUntil = Date.now() + cooldownMs;
+      console.warn(`[KeyPool] Key ...${key.slice(-4)} rejected by the provider; skipped for ${Math.round(cooldownMs / 60_000)} min`);
+    }
+  }
+
+  /** Seconds until the soonest key is usable again (0 when one is usable now). */
+  get secondsUntilAvailable(): number {
+    if (this.keys.length === 0 || this.availableCount > 0) return 0;
+    return Math.max(1, Math.ceil((Math.min(...this.keys.map((k) => k.rateLimitedUntil)) - Date.now()) / 1000));
+  }
+
+  /** True when every key is currently unavailable. */
+  get exhausted(): boolean {
+    return this.keys.length > 0 && this.availableCount === 0;
   }
 
   /** How many keys are currently available (not rate-limited). */

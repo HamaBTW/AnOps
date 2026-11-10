@@ -47,9 +47,9 @@ vi.mock("@/server/db/client", () => {
               toArray: async () => [],
             }),
           }),
-          findOne: async (q: any) => {
+          findOne: async (q: { _id?: { toString(): string } | string }) => {
             if (name === "employees") {
-              return mockEmployees.find((e) => e._id === q._id?.toString() || e._id === q._id);
+              return mockEmployees.find((e) => e._id === (typeof q._id === "string" ? q._id : q._id?.toString()));
             }
             if (name === "leave_types") return { _id: "lt-1", code: "CP", name: "Annual Paid Leave" };
             if (name === "leave_policies") return { _id: "pol-1", name: "Standard Adult Policy", accrualRate: 1.0, annualCap: 15, legalReference: "Code du Travail Art. 113-114" };

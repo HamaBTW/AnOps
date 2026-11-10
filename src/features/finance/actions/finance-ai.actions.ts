@@ -1,5 +1,6 @@
 "use server";
 
+import { assertWorkspaceAppAccess } from "@/server/platform/access";
 import { resolveWorkspace } from "@/server/tenancy/workspace";
 import { fin } from "@/server/ai/tools/finance.tools";
 import { draftPaymentReminder, getDashboardInsights, suggestExpenseCategory, type CategorySuggestion, type InsightBullet, type ReminderDraft } from "@/server/finance/finance-ai.service";
@@ -13,6 +14,7 @@ const message = (e: unknown, fallback: string) => (isAppError(e) ? e.message : f
 export async function suggestCategoryAction(input: { vendor?: string; description?: string }): Promise<ActionResult<CategorySuggestion | null>> {
   try {
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "finance");
     return { success: true, data: await suggestExpenseCategory(ctx, { vendor: String(input.vendor ?? "").slice(0, 120), description: String(input.description ?? "").slice(0, 300) }) };
   } catch (e) {
     return { error: message(e, "No suggestion right now.") };
@@ -22,6 +24,7 @@ export async function suggestCategoryAction(input: { vendor?: string; descriptio
 export async function draftReminderAction(invoiceId: string, tone: "friendly" | "firm"): Promise<ActionResult<ReminderDraft>> {
   try {
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "finance");
     return { success: true, data: await draftPaymentReminder(ctx, invoiceId, tone === "firm" ? "firm" : "friendly") };
   } catch (e) {
     return { error: message(e, "The reminder could not be drafted.") };
@@ -32,6 +35,7 @@ export async function draftReminderAction(invoiceId: string, tone: "friendly" | 
 export async function dashboardInsightsAction(currency: string, refresh = false): Promise<ActionResult<{ bullets: InsightBullet[]; generatedAt: string; cached: boolean }>> {
   try {
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "finance");
     const service = fin(ctx);
     const d = await service.getDashboard(/^[A-Z]{3}$/.test(currency) ? currency : undefined);
     const open = (await service.listUnpaidInvoices()).filter((i) => i.currency === d.currency);
@@ -58,6 +62,7 @@ export async function dashboardInsightsAction(currency: string, refresh = false)
 export async function sendInvoiceEmailAction(invoiceId: string, input: { to?: string; message?: string }): Promise<ActionResult<{ to: string; sentAt: string }>> {
   try {
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "finance");
     const { sendInvoiceEmail } = await import("@/server/finance/invoice-email");
     return { success: true, data: await sendInvoiceEmail(ctx, invoiceId, { to: String(input.to ?? "").slice(0, 200), message: String(input.message ?? "").slice(0, 2000) }) };
   } catch (e) {

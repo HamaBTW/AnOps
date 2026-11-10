@@ -43,6 +43,17 @@ function Unavailable({ state, canManage }: { state: AiWorkspaceState["state"]; c
   if (state === "platform_disabled") {
     return <EmptyState icon={Lock} title="AnOps AI is switched off for now" description="AI has been turned off for the whole platform by an operator. Everything else in AnOps keeps working. Try again later." />;
   }
+  if (state === "plan_excluded") {
+    return (
+      <EmptyState
+        icon={Lock}
+        title="AI features are not in your plan"
+        description={canManage ? "AnOps AI and the AI features inside every application are included in MaxOps, and in Custom with the AI add-on." : "Your organization's plan does not include AI features. An owner or administrator can upgrade the plan."}
+        actionHref={canManage ? "/anops?plans=1" : undefined}
+        actionLabel={canManage ? "Compare plans" : undefined}
+      />
+    );
+  }
   if (state === "company_disabled") {
     return (
       <EmptyState

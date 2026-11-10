@@ -75,7 +75,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       </Button>
       <p className="text-center text-sm text-[var(--color-text-secondary)]">
         Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-[var(--color-text-primary)] font-medium hover:underline">
+        <Link href="/trial" className="text-[var(--color-text-primary)] font-medium hover:underline">
           Create account
         </Link>
       </p>

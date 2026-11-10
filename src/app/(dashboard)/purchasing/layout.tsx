@@ -1,16 +1,14 @@
 import { ModuleTabs } from "@/shared/components/layout/module-tabs";
+import { requireAppAccess } from "@/server/platform/access";
+import { getApplication } from "@/shared/domain/applications";
 
-const TABS = [
-  { label: "Orders", href: "/purchasing/orders" },
-  { label: "Receipts", href: "/purchasing/receipts" },
-  { label: "Suppliers", href: "/purchasing/suppliers" },
-  { label: "Replenishment", href: "/purchasing/replenishment" },
-];
-
-export default function PurchasingLayout({ children }: { children: React.ReactNode }) {
+/** Entitlement guard + mobile section tabs (desktop navigation lives in the application sidebar). */
+export default async function Layout({ children }: { children: React.ReactNode }) {
+  await requireAppAccess("purchasing");
+  const tabs = getApplication("purchasing").nav.flatMap((group) => group.items);
   return (
     <div className="space-y-6">
-      <ModuleTabs tabs={TABS} />
+      <ModuleTabs tabs={tabs} />
       {children}
     </div>
   );

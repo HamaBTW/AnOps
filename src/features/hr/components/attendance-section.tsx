@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useTransition, useMemo } from "react";
+import { useNow } from "@/shared/hooks/use-now";
+import { useState, useTransition, useMemo } from "react";
 import {
   Clock,
   LogIn,
@@ -38,13 +39,7 @@ export function AttendanceSection({
   const isAdmin = userRole === "hr_admin";
 
   // Live real-time clock
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
-
-  useEffect(() => {
-    setCurrentTime(new Date());
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const currentTime = useNow();
 
   // Selected employee for punch clock (defaults to current logged-in employee)
   const [punchEmployeeId, setPunchEmployeeId] = useState<string>(
@@ -179,7 +174,7 @@ export function AttendanceSection({
             {/* Status indicator */}
             <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-bg-subtle)] p-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[var(--color-text-secondary)]">Today's Status:</span>
+                <span className="text-[var(--color-text-secondary)]">Today&apos;s Status:</span>
                 <span
                   className={`font-bold capitalize ${
                     !myTodayRecord
@@ -299,7 +294,7 @@ export function AttendanceSection({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="text-sm font-bold text-[var(--color-text-primary)]">
-                  Today's Attendance Roster
+                  Today&apos;s Attendance Roster
                 </h4>
                 <p className="text-[11px] text-[var(--color-text-secondary)]">
                   Real-time presence overview of on-duty team members

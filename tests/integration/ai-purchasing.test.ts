@@ -50,7 +50,7 @@ beforeAll(async () => {
   T = await seedTenants(h);
   for (const o of [T.A.owner, T.B.owner]) await updateAiSettings(actorOf(h, o), { enabled: true, retentionDays: 90, dailyTokenBudget: 0, defaultUserDailyTokenCap: 0 }, 0);
   const owner = actorOf(h, T.A.owner);
-  viewer = await seedMember(h.db, T.companyA, "employee");
+  viewer = await seedMember(h.db, T.companyA, "manager");
   await saveMemberGrant(owner, viewer.userId.toHexString(), grant({ purchasing: g(true, false, false, false, false) }), 0);
   buyer = await seedMember(h.db, T.companyA, "manager");
   await saveMemberGrant(owner, buyer.userId.toHexString(), grant({ purchasing: g(true, true, true, true, false), inventory: g(true, false, false, false, false) }), 0);

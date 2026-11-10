@@ -11,6 +11,7 @@ import { DEFAULT_EMAIL_DESIGN, normalizeEmailDesign, type EmailDesign } from "@/
 import { literalRegex, MARKETING_PAGE_SIZE, pageMeta, requireMarketing, scopeOf, skipOf, toObjectId } from "@/server/marketing/common";
 import { PERMISSIONS } from "@/server/security/permissions";
 import type { Paged } from "@/features/inventory/types";
+import { isDuplicateKeyError } from "@/server/db/transactions";
 
 export type TemplateDto = {
   id: string;
@@ -41,10 +42,6 @@ function toTemplateDto(doc: TemplateDoc): TemplateDto {
 }
 
 const DUPLICATE = () => new AppError("CONFLICT", "A template with this name already exists", { name: "A template with this name already exists" });
-
-function isDuplicateKey(error: unknown): boolean {
-  return (error as { code?: number }).code === 11000;
-}
 
 /** SMS templates never carry a subject or a design, whatever the client sent. */
 function contentFor(input: TemplateInput) {
@@ -118,7 +115,7 @@ export async function createTemplate(ctx: WorkspaceContext, input: TemplateInput
   try {
     await ctx.db.collection<TemplateDoc>(MARKETING_COLLECTIONS.templates).insertOne(doc);
   } catch (error) {
-    if (isDuplicateKey(error)) throw DUPLICATE();
+    if (isDuplicateKeyError(error)) throw DUPLICATE();
     throw error;
   }
   return toTemplateDto(doc);
@@ -154,7 +151,7 @@ export async function updateTemplate(ctx: WorkspaceContext, idRaw: string, input
     if (!result) throw new AppError("CONFLICT", "This template was changed by someone else. Reload and try again.");
     return toTemplateDto(result);
   } catch (error) {
-    if (isDuplicateKey(error)) throw DUPLICATE();
+    if (isDuplicateKeyError(error)) throw DUPLICATE();
     throw error;
   }
 }

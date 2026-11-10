@@ -9,7 +9,7 @@ import { requireAuthUser } from "@/server/auth/rbac";
 
 export async function askHRAssistantAction(rawData: unknown): Promise<ActionResult<AIChatMessage>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const parsed = aiPromptSchema.safeParse(rawData);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message || "Invalid query prompt.";

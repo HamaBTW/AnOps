@@ -6,6 +6,8 @@ import type { Employee } from "@/features/hr/types";
 
 import { ObjectId } from "mongodb";
 import { getActiveTenant } from "@/server/tenant/context";
+import { assertAppAccessFor } from "@/server/platform/access";
+import type { ApplicationId } from "@/shared/domain/applications";
 import type { Company } from "@/features/company/types";
 
 export type CurrentAuthContext = {
@@ -22,7 +24,7 @@ export type CurrentAuthContext = {
  * Resolves the currently authenticated user along with their active company tenant,
  * linked Employee record in that company, and HR role permissions.
  */
-export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
+export async function getCurrentAuthUser(app?: ApplicationId): Promise<CurrentAuthContext | null> {
   const session = await auth();
   if (!session?.user?.email || !session?.user?.id) {
     return null;
@@ -36,6 +38,8 @@ export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
   const email = session.user.email.toLowerCase().trim();
   const client = await clientPromise;
   const db = client.db();
+  // The page layouts only guard navigation. Server actions must verify plan and per-member access themselves.
+  if (app) await assertAppAccessFor(db, new ObjectId(tenant.companyId), new ObjectId(session.user.id), app);
 
   // Find linked employee in this active company
   const empDoc = await db.collection("employees").findOne({
@@ -86,8 +90,8 @@ export async function getCurrentAuthUser(): Promise<CurrentAuthContext | null> {
 /**
  * Throws or returns an error if the request is unauthenticated.
  */
-export async function requireAuthUser(): Promise<CurrentAuthContext> {
-  const user = await getCurrentAuthUser();
+export async function requireAuthUser(app?: ApplicationId): Promise<CurrentAuthContext> {
+  const user = await getCurrentAuthUser(app);
   if (!user) {
     throw new Error("Unauthorized. Please log in to continue.");
   }
@@ -97,8 +101,8 @@ export async function requireAuthUser(): Promise<CurrentAuthContext> {
 /**
  * Throws or returns an error if the request is not from an HR Administrator.
  */
-export async function requireAdminUser(): Promise<CurrentAuthContext> {
-  const user = await requireAuthUser();
+export async function requireAdminUser(app?: ApplicationId): Promise<CurrentAuthContext> {
+  const user = await requireAuthUser(app);
   if (!user.isAdmin) {
     throw new Error("Forbidden: This action requires HR Administrator permissions.");
   }

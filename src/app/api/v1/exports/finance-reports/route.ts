@@ -5,5 +5,5 @@ import { exportFinanceReports, reportQuerySchema } from "@/server/finance/report
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
-  return handleExport(request, "finance-reports", reportQuerySchema, exportFinanceReports);
+  return handleExport(request, "finance", "finance-reports", reportQuerySchema, exportFinanceReports);
 }

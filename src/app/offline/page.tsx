@@ -10,7 +10,7 @@ export default function OfflinePage() {
 
   useEffect(() => {
     if (isOnline) {
-      window.location.href = "/dashboard";
+      window.location.href = "/anops";
     }
   }, [isOnline]);
 
@@ -38,7 +38,7 @@ export default function OfflinePage() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]">
+    <main id="main" className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg-canvas)] text-[var(--color-text-primary)]">
       <div className="w-full max-w-md text-center space-y-6">
         <div className="mx-auto w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
           <svg
@@ -101,6 +101,6 @@ export default function OfflinePage() {
           </button>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

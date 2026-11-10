@@ -6,6 +6,7 @@ import { requireAuthUser, type CurrentAuthContext } from "@/server/auth/rbac";
 import { resolveAiAccess, assertAiReady } from "@/server/ai/access/access.service";
 import { gatedChat } from "@/server/ai/gate";
 import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { assertWorkspaceAppAccess } from "@/server/platform/access";
 import { isAppError } from "@/shared/lib/errors";
 import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { cancelPendingAction, confirmPendingAction } from "@/server/services/hr-ai.service";
@@ -56,8 +57,9 @@ function toolContext(authUser: CurrentAuthContext, conversationId?: string): Too
 
 export async function chatWithHRAssistantAction(rawData: unknown): Promise<CopilotChatResult> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const ws = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ws, "hr-payroll");
     await consumeSharedRateLimit(ws.db, `user:${ws.userId.toHexString()}:hr-copilot`, CHAT_LIMIT_PER_MINUTE, 60_000);
 
     const parsed = chatSchema.safeParse(rawData);
@@ -102,7 +104,7 @@ const actionIdSchema = z.string().min(1).max(64);
 /** Executes a confirmed action. Takes only its id: the stored, validated payload is what runs. */
 export async function confirmAiActionAction(actionId: unknown): Promise<AiActionResult> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     // A change proposed by the copilot is an AI execution: it stops with the kill switch and the company switch.
     assertAiReady(await resolveAiAccess(await resolveWorkspace()));
     const id = actionIdSchema.safeParse(actionId);
@@ -119,7 +121,7 @@ export async function confirmAiActionAction(actionId: unknown): Promise<AiAction
 
 export async function cancelAiActionAction(actionId: unknown): Promise<AiActionResult> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const id = actionIdSchema.safeParse(actionId);
     if (!id.success) return { ok: false, error: "Action not found." };
     return await cancelPendingAction(id.data, toolContext(authUser));

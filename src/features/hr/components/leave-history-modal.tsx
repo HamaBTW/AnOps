@@ -6,6 +6,7 @@ import type { LeaveTransactionRecord, Employee } from "@/features/hr/types";
 import { fetchLeaveTransactionsAction, reverseLeaveTransactionAction } from "@/features/hr/actions/leave.action";
 import { Portal } from "@/shared/components/ui/portal";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
+import { useDialog } from "@/shared/hooks/use-dialog";
 
 type LeaveHistoryModalProps = {
   isOpen: boolean;
@@ -23,7 +24,9 @@ export function LeaveHistoryModal({
   onRefresh,
 }: LeaveHistoryModalProps) {
   const [transactions, setTransactions] = useState<LeaveTransactionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  // "version" bumps to force a reload (after a reversal); loading is "open and the current version is not loaded yet".
+  const [version, setVersion] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -32,24 +35,26 @@ export function LeaveHistoryModal({
   const [reversalReason, setReversalReason] = useState("");
 
   useScrollLock(isOpen);
+  const dialogRef = useDialog<HTMLDivElement>(isOpen, onClose);
 
-  const loadTransactions = async () => {
-    setLoading(true);
-    setError(null);
-    const res = await fetchLeaveTransactionsAction({ employeeId: employee.id });
-    if (res.error) {
-      setError(res.error);
-    } else if (res.data) {
-      setTransactions(res.data);
-    }
-    setLoading(false);
-  };
+  const requestKey = `${employee.id}:${version}`;
+  if (!isOpen && loadedKey !== null) setLoadedKey(null); // reopening always reloads
+  const loading = isOpen && loadedKey !== requestKey;
+  const loadTransactions = () => setVersion((current) => current + 1);
 
   useEffect(() => {
-    if (isOpen) {
-      loadTransactions();
-    }
-  }, [isOpen, employee.id]);
+    if (!isOpen) return;
+    let cancelled = false;
+    fetchLeaveTransactionsAction({ employeeId: employee.id }).then((res) => {
+      if (cancelled) return;
+      setError(res.error ?? null);
+      if (res.data) setTransactions(res.data);
+      setLoadedKey(requestKey);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, employee.id, requestKey]);
 
   const handleConfirmReversal = (txId: string) => {
     if (!reversalReason.trim() || reversalReason.trim().length < 3) {
@@ -64,7 +69,7 @@ export function LeaveHistoryModal({
       } else {
         setReversingTxId(null);
         setReversalReason("");
-        await loadTransactions();
+        loadTransactions();
         onRefresh?.();
       }
     });
@@ -74,7 +79,7 @@ export function LeaveHistoryModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div role="dialog" ref={dialogRef} tabIndex={-1} aria-modal="true" aria-label="Leave history" className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
         <div
           className="relative w-full max-w-2xl max-h-[92dvh] sm:max-h-[85vh] overflow-hidden flex flex-col rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl"
           onClick={(e) => e.stopPropagation()}

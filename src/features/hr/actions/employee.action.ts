@@ -21,7 +21,7 @@ export type ActionResult<T = unknown> = {
 
 export async function createEmployeeAction(rawData: unknown): Promise<ActionResult<Employee>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = employeeSchema.safeParse(rawData);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message || "Invalid employee data.";
@@ -40,7 +40,7 @@ export async function createEmployeeAction(rawData: unknown): Promise<ActionResu
 
 export async function updateEmployeeAction(id: string, rawData: unknown): Promise<ActionResult<Employee>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = employeeSchema.safeParse(rawData);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message || "Invalid employee data.";
@@ -58,7 +58,7 @@ export async function updateEmployeeAction(id: string, rawData: unknown): Promis
 
 export async function toggleEmployeeStatusAction(id: string): Promise<ActionResult<{ id: string; newStatus: "active" | "inactive" }>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const result = await toggleEmployeeStatus(id, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: result };
@@ -70,7 +70,7 @@ export async function toggleEmployeeStatusAction(id: string): Promise<ActionResu
 
 export async function filterEmployeesAction(filters: EmployeeFilterParams): Promise<ActionResult<Employee[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     // Non-admins can only see active employee directory cards (or their own)
     const employees = await getEmployees(filters, authUser.companyId);
     if (!authUser.isAdmin) {

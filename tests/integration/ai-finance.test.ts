@@ -64,7 +64,7 @@ beforeAll(async () => {
   await saveMemberGrant(owner, boss.userId.toHexString(), grant({ finance: g(true, true, true, true, true), inventory: g(true, false, false, false, false) }), 0);
   clerk = await seedMember(h.db, T.companyA, "manager");
   await saveMemberGrant(owner, clerk.userId.toHexString(), grant({ finance: g(true, true, true, true, false) }), 0);
-  viewer = await seedMember(h.db, T.companyA, "employee");
+  viewer = await seedMember(h.db, T.companyA, "manager");
   await saveMemberGrant(owner, viewer.userId.toHexString(), grant({ finance: g(true, false, false, false, false) }), 0);
 
   const s = svc();

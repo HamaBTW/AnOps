@@ -5,6 +5,8 @@ import { ToastProvider } from "@/shared/components/ui/toast";
 import { requireActive } from "@/features/auth/actions/auth.action";
 import { getUserCompanies } from "@/server/services/company.service";
 import { ACTIVE_COMPANY_COOKIE } from "@/server/tenant/context";
+import { getPageOrgAccess } from "@/server/platform/access";
+import { AiFeaturesProvider } from "@/features/platform/components/ai-features";
 
 export default async function DashboardLayout({
   children,
@@ -19,7 +21,8 @@ export default async function DashboardLayout({
   }
 
   const cookieStore = await cookies();
-  const activeCompanyId = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value || companies[0].id;
+  const access = await getPageOrgAccess();
+  const activeCompanyId = access.organization.id ?? cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value ?? companies[0].id;
 
   return (
     <ToastProvider>
@@ -30,8 +33,11 @@ export default async function DashboardLayout({
         }}
         companies={companies}
         activeCompanyId={activeCompanyId}
+        allowedApps={access.apps}
+        permissions={[...access.ctx.permissions]}
+        aiFeatures={access.entitlements.aiFeatures}
       >
-        {children}
+        <AiFeaturesProvider enabled={access.entitlements.aiFeatures}>{children}</AiFeaturesProvider>
       </DashboardShell>
     </ToastProvider>
   );

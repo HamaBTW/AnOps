@@ -15,6 +15,7 @@ import {
 } from "@/features/hr/actions/job-title.action";
 import { cn } from "@/shared/lib/utils";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
+import { useDialog } from "@/shared/hooks/use-dialog";
 import { Portal } from "@/shared/components/ui/portal";
 
 type JobTitlesModalProps = {
@@ -36,6 +37,7 @@ export function JobTitlesModal({
   onRefresh,
 }: JobTitlesModalProps) {
   useScrollLock(isOpen);
+  const dialogRef = useDialog<HTMLDivElement>(isOpen, onClose);
 
   const [isPending, startTransition] = useTransition();
   const [view, setView] = useState<View>("list");
@@ -182,7 +184,7 @@ export function JobTitlesModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div role="dialog" ref={dialogRef} tabIndex={-1} aria-modal="true" aria-label="Job titles" className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
         <div
           className="relative w-full max-w-xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] shadow-2xl overflow-hidden pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           onClick={(e) => e.stopPropagation()}

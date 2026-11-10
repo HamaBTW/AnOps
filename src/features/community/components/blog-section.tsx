@@ -1,5 +1,6 @@
 "use client";
 
+import { useAiFeatures } from "@/features/platform/components/ai-features";
 import { useState, useTransition } from "react";
 import type { BlogPost, ContentCategory } from "@/features/community/types";
 import { BlogModal } from "./blog-modal";
@@ -35,6 +36,7 @@ export function BlogSection({
   canWrite = false,
   canAdmin = false,
 }: BlogSectionProps) {
+  const aiFeatures = useAiFeatures();
   const [posts, setPosts] = useState<BlogPost[]>(initialPosts);
   const [selectedCat, setSelectedCat] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -306,7 +308,7 @@ export function BlogSection({
 
                     <div className="flex items-center gap-1.5">
                       {/* AI Summarizer Button */}
-                      {canWrite && (
+                      {canWrite && aiFeatures && (
                       <button
                         type="button"
                         disabled={isPending || isSummarizingId === post.id}

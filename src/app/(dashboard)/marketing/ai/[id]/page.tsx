@@ -1,3 +1,4 @@
+import { requireAiFeatures } from "@/server/platform/access";
 import type { Metadata } from "next";
 import { getPageWorkspace } from "@/server/tenancy/workspace";
 import { getGeneration } from "@/server/marketing/ai/copy.service";
@@ -11,6 +12,7 @@ import { orNotFound } from "@/server/marketing/page-guard";
 export const metadata: Metadata = { title: "Draft | AnOps ERP" };
 
 export default async function AiCopyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAiFeatures("/marketing");
   const ctx = await getPageWorkspace();
   const { id } = await params;
   const canCampaign = ctx.permissions.has(PERMISSIONS.MARKETING_CAMPAIGN_MANAGE);

@@ -6,5 +6,5 @@ import { goodsReceiptExportQuerySchema } from "@/features/exports/schemas/export
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
-  return handleExport(request, "goods-receipts", goodsReceiptExportQuerySchema, exportGoodsReceipts);
+  return handleExport(request, "purchasing", "goods-receipts", goodsReceiptExportQuerySchema, exportGoodsReceipts);
 }

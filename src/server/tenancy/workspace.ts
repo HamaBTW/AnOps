@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "crypto";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { ObjectId, type Db } from "mongodb";
 import { auth } from "@/server/auth";
@@ -44,8 +45,8 @@ export async function resolveWorkspace(requestId: string = randomUUID()): Promis
   // Re-check the live account state: a ban or lock must take effect before the JWT expires.
   const user = await db
     .collection("users")
-    .findOne({ _id: userId }, { projection: { status: 1, emailVerified: 1 } });
-  if (!user || user.status === "banned" || user.status === "unverified" || !user.emailVerified) {
+    .findOne({ _id: userId }, { projection: { status: 1, emailVerified: 1, provisionalUntil: 1 } });
+  if (!user || user.status === "banned" || user.status === "unverified" || !isEmailTrusted(user)) {
     throw new AppError("UNAUTHENTICATED", "Please sign in to continue.");
   }
 
@@ -66,8 +67,21 @@ export async function resolveWorkspace(requestId: string = randomUUID()): Promis
   };
 }
 
-/** Page-level variant: visitors go to login; users without a company go to onboarding. */
-export async function getPageWorkspace(): Promise<WorkspaceContext> {
+/**
+ * A verified email, or a new organization owner inside the activation window: the spec lets the owner
+ * use the workspace right away and confirm the email afterwards (see server/platform/activation.service.ts).
+ */
+export function isEmailTrusted(user: Record<string, unknown>, now = new Date()): boolean {
+  if (user.emailVerified) return true;
+  return user.provisionalUntil instanceof Date && user.provisionalUntil > now;
+}
+
+/**
+ * Page-level variant: visitors go to login; users without a company go to onboarding.
+ * Memoized for one render: the layout, nested layouts and the page all ask for it, and it is read-only, so they
+ * share one set of identity and membership lookups instead of repeating them (actions use resolveWorkspace directly).
+ */
+export const getPageWorkspace = cache(async function getPageWorkspace(): Promise<WorkspaceContext> {
   try {
     return await resolveWorkspace();
   } catch (error) {
@@ -75,4 +89,4 @@ export async function getPageWorkspace(): Promise<WorkspaceContext> {
     if (isAppError(error) && error.code === "NO_COMPANY") redirect("/onboarding");
     throw error;
   }
-}
+});

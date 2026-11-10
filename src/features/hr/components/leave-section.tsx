@@ -33,6 +33,7 @@ import {
   getSoldeDeCongeAction,
 } from "@/features/hr/actions/leave.action";
 import { Portal } from "@/shared/components/ui/portal";
+import { DialogOverlay } from "@/shared/components/ui/dialog-overlay";
 
 type LeaveSectionProps = {
   leaveRequests: LeaveRequest[];
@@ -599,7 +600,7 @@ export function LeaveSection({
                         </p>
                         {req.adminComment && (
                           <p className="mt-1 text-[11px] text-[var(--color-text-secondary)] italic">
-                            HR: "{req.adminComment}"
+                            HR: &quot;{req.adminComment}&quot;
                           </p>
                         )}
                       </td>
@@ -748,7 +749,7 @@ export function LeaveSection({
                       <p className="line-clamp-2">{req.reason}</p>
                       {req.adminComment && (
                         <p className="mt-1 text-[11px] text-[var(--color-text-secondary)] italic border-t border-[var(--color-border-subtle)] pt-1">
-                          HR: "{req.adminComment}"
+                          HR: &quot;{req.adminComment}&quot;
                         </p>
                       )}
                     </div>
@@ -800,7 +801,7 @@ export function LeaveSection({
       {/* Review Confirmation Modal */}
       {reviewModalOpen && requestToReview && (
         <Portal>
-          <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <DialogOverlay label="Review leave request" onClose={() => setReviewModalOpen(false)} className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
             <div
               className="relative w-full max-w-md max-h-[92dvh] sm:max-h-[85vh] overflow-y-auto rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl pb-[max(1rem,env(safe-area-inset-bottom))]"
               onClick={(e) => e.stopPropagation()}
@@ -838,7 +839,7 @@ export function LeaveSection({
                     {requestToReview.days} working day(s) ({requestToReview.startDate} → {requestToReview.endDate})
                   </div>
                   <div className="text-[var(--color-text-secondary)] italic">
-                    "{requestToReview.reason}"
+                    &quot;{requestToReview.reason}&quot;
                   </div>
                   {!requestToReview.isPaid && (
                     <div className="text-[11px] font-bold text-[var(--color-warning-text)]">
@@ -907,7 +908,7 @@ export function LeaveSection({
                 </div>
               </form>
             </div>
-          </div>
+          </DialogOverlay>
         </Portal>
       )}
 

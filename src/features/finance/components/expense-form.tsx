@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, useId } from "react";
 import { Sparkles } from "lucide-react";
 import { createExpenseAction, submitExpenseAction, updateExpenseAction } from "@/features/finance/actions/finance.actions";
 import { Button, selectClass, textareaClass } from "@/shared/components/ui/button";
@@ -35,6 +35,7 @@ export function ExpenseForm({
     receiptDocumentId?: string;
   };
 }) {
+  const uid = useId();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -126,8 +127,8 @@ export function ExpenseForm({
         <div className="grid gap-4 sm:grid-cols-2">
           {/* Expense Date */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Date *</label>
-            <input
+            <label htmlFor={`${uid}-0`} className="text-sm font-medium text-[var(--color-text-secondary)]">Date *</label>
+            <input id={`${uid}-0`}
               type="date"
               required
               value={expenseDate}
@@ -138,8 +139,8 @@ export function ExpenseForm({
 
           {/* Category */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Category</label>
-            <select
+            <label htmlFor={`${uid}-1`} className="text-sm font-medium text-[var(--color-text-secondary)]">Category</label>
+            <select id={`${uid}-1`}
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               className={selectClass}
@@ -197,10 +198,10 @@ export function ExpenseForm({
 
           {/* Amount */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+            <label htmlFor={`${uid}-2`} className="text-sm font-medium text-[var(--color-text-secondary)]">
               Amount (Net) *
             </label>
-            <input
+            <input id={`${uid}-2`}
               type="number"
               step="0.001"
               required
@@ -213,10 +214,10 @@ export function ExpenseForm({
 
           {/* Tax */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+            <label htmlFor={`${uid}-3`} className="text-sm font-medium text-[var(--color-text-secondary)]">
               Tax / VAT Amount
             </label>
-            <input
+            <input id={`${uid}-3`}
               type="number"
               step="0.001"
               value={tax}
@@ -227,8 +228,8 @@ export function ExpenseForm({
 
           {/* Currency */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Currency</label>
-            <select
+            <label htmlFor={`${uid}-4`} className="text-sm font-medium text-[var(--color-text-secondary)]">Currency</label>
+            <select id={`${uid}-4`}
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               className={selectClass}
@@ -242,16 +243,16 @@ export function ExpenseForm({
 
           {/* Computed Total */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Total Expenditure</label>
-            <div className="min-h-[44px] flex items-center px-3 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)]/60 font-semibold text-[var(--color-text-primary)]">
+            <span id={`${uid}-total`} className="block text-sm font-medium text-[var(--color-text-secondary)]">Total Expenditure</span>
+            <output aria-labelledby={`${uid}-total`} className="min-h-[44px] flex items-center px-3 rounded-[var(--radius-control)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)]/60 font-semibold text-[var(--color-text-primary)]">
               {total.toFixed(3)} {currency}
-            </div>
+            </output>
           </div>
 
           {/* Notes */}
           <div className="sm:col-span-2 space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Additional Notes</label>
-            <textarea
+            <label htmlFor={`${uid}-5`} className="text-sm font-medium text-[var(--color-text-secondary)]">Additional Notes</label>
+            <textarea id={`${uid}-5`}
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

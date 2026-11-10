@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 
 const CORE_MODULE_ROUTES = [
-  "/dashboard",
-  "/company",
+  "/anops",
   "/hr",
   "/crm",
   "/sales",

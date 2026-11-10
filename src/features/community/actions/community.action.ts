@@ -59,7 +59,7 @@ async function act<T = unknown>(name: string, operation: (ctx: WorkspaceContext,
   const requestId = randomUUID();
   try {
     const ctx = await resolveWorkspace(requestId);
-    const authUser = await getCurrentAuthUser();
+    const authUser = await getCurrentAuthUser("community");
     const person = authUser?.employee?.fullName || authUser?.email || "Member";
     return await operation(ctx, person);
   } catch (error) {

@@ -29,7 +29,7 @@ export async function createCompany(
   const db = await getDb();
   const trimmedName = data.name.trim();
 
-  let baseSlug = slugify(trimmedName) || "company";
+  const baseSlug = slugify(trimmedName) || "company";
   let uniqueSlug = baseSlug;
   let counter = 1;
 
@@ -61,6 +61,38 @@ export async function createCompany(
     createdAt: now,
     updatedAt: now,
   });
+
+  // Every new organization gets a subscription record. Without a plan chosen at /trial it starts with
+  // "choose a plan" (the free OneOps choice stays available), so no organization gets free paid access.
+  await db.collection("organization_subscriptions").updateOne(
+    { companyId },
+    {
+      $setOnInsert: {
+        companyId,
+        plan: null,
+        status: "lapsed",
+        freeAppId: null,
+        trialAppIds: [],
+        trialStartedAt: null,
+        trialEndsAt: null,
+        customAppIds: [],
+        aiAddon: false,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        pastDueSince: null,
+        billingCurrency: (data.currency || "TND") === "USD" ? "usd" : "eur",
+        billingInterval: null,
+        billingEmail: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        stripeStatus: null,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    { upsert: true }
+  );
 
   // Seed default HR data (departments, job titles, demo staff) for this new company
   await seedHrDefaultsForCompany(companyId.toString());
@@ -94,9 +126,14 @@ export async function getUserCompanies(userId: string): Promise<Company[]> {
   }
 
   const companyIds = memberships.map((m) => m.companyId as ObjectId);
+  // Organizations that were not activated in time are invisible immediately, even before cleanup runs.
   const companyDocs = await db
     .collection("companies")
-    .find({ _id: { $in: companyIds } })
+    .find({
+      _id: { $in: companyIds },
+      activationStatus: { $ne: "expiring" },
+      $or: [{ activationStatus: { $ne: "pending" } }, { activationDeadline: { $gt: new Date() } }],
+    })
     .toArray();
 
   return companyDocs.map((doc) => ({
@@ -107,6 +144,8 @@ export async function getUserCompanies(userId: string): Promise<Company[]> {
     currency: (doc.currency as string) || "TND",
     industry: doc.industry as string | undefined,
     logoUrl: doc.logoUrl as string | undefined,
+    activationStatus: doc.activationStatus === "pending" ? "pending" : "active",
+    activationDeadline: doc.activationDeadline instanceof Date ? doc.activationDeadline.toISOString() : undefined,
     createdAt: doc.createdAt ? (doc.createdAt as Date).toISOString() : undefined,
     updatedAt: doc.updatedAt ? (doc.updatedAt as Date).toISOString() : undefined,
   }));

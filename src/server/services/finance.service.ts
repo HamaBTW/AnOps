@@ -1535,6 +1535,16 @@ export async function getFinanceService() {
   const { getActiveTenant } = await import("@/server/tenant/context");
   const tenant = await getActiveTenant();
   if (!tenant) throw new AppError("UNAUTHENTICATED", "No active company");
+  // Plan and per-member application access, checked on every call (layouts only guard navigation).
+  const [{ auth }, { assertAppAccessFor }, { default: clientPromise }, { ObjectId }] = await Promise.all([
+    import("@/server/auth"),
+    import("@/server/platform/access"),
+    import("@/server/db/client"),
+    import("mongodb"),
+  ]);
+  const session = await auth();
+  if (!session?.user?.id) throw new AppError("UNAUTHENTICATED", "Please sign in to continue.");
+  await assertAppAccessFor((await clientPromise).db(), new ObjectId(tenant.companyId), new ObjectId(session.user.id), "finance");
   return new FinanceService({
     companyId: tenant.companyId,
     companyRole: tenant.role,

@@ -3,14 +3,14 @@
 export type OfflineRecord = {
   id: string;
   collection: string; // e.g. "inventory", "finance", "customers", "crm", "tasks"
-  data: any;
+  data: unknown;
   updatedAt: number;
 };
 
 export type OfflineMutation = {
   id: string;
   type: string; // e.g. "inventory.product.create", "finance.invoice.create"
-  payload: any;
+  payload: unknown;
   createdAt: number;
   status: "pending" | "syncing" | "failed";
   retryCount: number;
@@ -46,7 +46,7 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 /** Cache a record locally for offline lookup */
-export async function saveOfflineRecord(collection: string, id: string, data: any): Promise<void> {
+export async function saveOfflineRecord(collection: string, id: string, data: unknown): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction("records", "readwrite");
@@ -58,7 +58,7 @@ export async function saveOfflineRecord(collection: string, id: string, data: an
 }
 
 /** Get all records belonging to a collection */
-export async function getOfflineRecords<T = any>(collection: string): Promise<T[]> {
+export async function getOfflineRecords<T = unknown>(collection: string): Promise<T[]> {
   try {
     const db = await openDB();
     const tx = db.transaction("records", "readonly");
@@ -66,7 +66,7 @@ export async function getOfflineRecords<T = any>(collection: string): Promise<T[
     const index = store.index("collection");
     return new Promise((resolve) => {
       const request = index.getAll(collection);
-      request.onsuccess = () => resolve(request.result.map((r: OfflineRecord) => r.data));
+      request.onsuccess = () => resolve(request.result.map((r: OfflineRecord) => r.data as T));
       request.onerror = () => resolve([]);
     });
   } catch {
@@ -75,7 +75,7 @@ export async function getOfflineRecords<T = any>(collection: string): Promise<T[
 }
 
 /** Queue a mutation to be performed when online */
-export async function queueOfflineMutation(type: string, payload: any): Promise<OfflineMutation> {
+export async function queueOfflineMutation(type: string, payload: unknown): Promise<OfflineMutation> {
   const db = await openDB();
   const tx = db.transaction("mutations", "readwrite");
   const store = tx.objectStore("mutations");

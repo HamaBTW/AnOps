@@ -16,7 +16,7 @@ import { requireAdminUser, requireAuthUser } from "@/server/auth/rbac";
 
 export async function generatePayslipsAction(rawData: unknown): Promise<ActionResult<PayslipRecord[]>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = payrollGenerateSchema.safeParse(rawData);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message || "Invalid payroll generation parameters.";
@@ -35,7 +35,7 @@ export async function generatePayslipsAction(rawData: unknown): Promise<ActionRe
 
 export async function getPayslipsAction(period: string): Promise<ActionResult<PayslipRecord[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const records = await getPayslips(
       {
         period,
@@ -52,7 +52,7 @@ export async function getPayslipsAction(period: string): Promise<ActionResult<Pa
 
 export async function getPayslipByIdAction(id: string): Promise<ActionResult<PayslipRecord | null>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const record = await getPayslipById(id, authUser.companyId);
     if (record && !authUser.isAdmin && authUser.employee && record.employeeId !== authUser.employee.id) {
       return { error: "Forbidden: You may only access your own payslip." };
@@ -66,7 +66,7 @@ export async function getPayslipByIdAction(id: string): Promise<ActionResult<Pay
 
 export async function getPayrollSummaryAction(period: string): Promise<ActionResult<PayrollSummary>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const summary = await getPayrollSummary(period, admin.companyId);
     return { success: true, data: summary };
   } catch (err: unknown) {
@@ -80,7 +80,7 @@ export async function previewEmployeePayrollAction(
   period: string
 ): Promise<ActionResult<Awaited<ReturnType<typeof calculateEmployeePayrollPreview>>>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (!authUser.isAdmin && authUser.employee && employeeId !== authUser.employee.id) {
       return { error: "Forbidden: You may only preview your own payroll." };
     }

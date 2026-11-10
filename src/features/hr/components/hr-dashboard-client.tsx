@@ -34,6 +34,7 @@ import { LeaveSection } from "./leave-section";
 import { AttendanceSection } from "./attendance-section";
 import { PayrollSection } from "./payroll-section";
 import { AIHRAssistant } from "./ai-hr-assistant";
+import { useAiFeatures } from "@/features/platform/components/ai-features";
 import { useRouter } from "next/navigation";
 
 export type HRTab = "employees" | "leave" | "attendance" | "payroll" | "ai";
@@ -68,6 +69,7 @@ export function HRDashboardClient({
   userRole = "employee",
 }: HRDashboardClientProps) {
   const router = useRouter();
+  const aiFeatures = useAiFeatures();
   const isAdmin = userRole === "hr_admin";
 
   // Active module tab
@@ -233,6 +235,8 @@ export function HRDashboardClient({
           <span>Payroll Generator</span>
         </button>
 
+        {aiFeatures && (
+          <>
         {/* Tab 5: AI HR Assistant */}
         <button
           type="button"
@@ -249,6 +253,8 @@ export function HRDashboardClient({
             AI
           </span>
         </button>
+          </>
+        )}
       </div>
 
       {/* Tab Content Display */}
@@ -326,7 +332,7 @@ export function HRDashboardClient({
         />
       )}
 
-      {activeTab === "ai" && (
+      {aiFeatures && activeTab === "ai" && (
         <AIHRAssistant
           userRole={userRole}
           onDataChanged={handleRefresh}

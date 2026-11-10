@@ -153,7 +153,7 @@ self.addEventListener("fetch", (event) => {
           if (res) return res;
         }
         // No RSC payload cached — respond with empty flight so the router falls back to HTML
-        return new Response("", { status: 204 });
+        return new Response(null, { status: 204 });
       })()
     );
     return;

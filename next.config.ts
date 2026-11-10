@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import path from "path";
 import { legacyAppSlugs } from "./src/shared/config/catalog";
 
 const securityHeaders = [
@@ -17,7 +16,6 @@ const nextConfig: NextConfig = {
     // Receipt photos and PDFs (up to 10 MB, see src/server/finance/receipt-storage.ts) are uploaded through a server action.
     serverActions: { bodySizeLimit: "11mb" },
   },
-  outputFileTracingRoot: path.join(__dirname, "../../"),
   turbopack: {
     rules: {
       "*.css": {

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Faq } from "@/shared/components/marketing/faq";
-import { btnPrimary, btnSecondary, container } from "@/shared/components/marketing/styles";
-import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
+import { container } from "@/shared/components/marketing/styles";
+import { CurrentPlanBanner, PricingPlans } from "@/shared/components/marketing/pricing-plans";
+import { getCurrentPlan } from "@/server/platform/current-plan";
 import { PlanFinder } from "@/shared/components/portal/plan-finder";
 import { CtaBand, PageHero, SectionHeading, delay } from "@/shared/components/portal/sections";
 import { IconCheck } from "@/shared/components/ui/brand-icons";
@@ -15,15 +16,8 @@ export const metadata: Metadata = {
     "AnOps plans: Free (one company, one app), Standard (one company, all apps), Pro (multiple companies), Ultra (advanced AI) and Custom.",
 };
 
-const icons: Record<string, string> = {
-  oneops: "wired-lineal-501-coupon-free-morph-rotate.webp",
-  custom: "wired-lineal-12-layers-hover-slide.webp",
-  allops: "wired-lineal-3510-flow-chart-hover-pinch.webp",
-  maxops: "wired-lineal-256x256-ai-chip-hover-pinch.webp",
-};
-
-export default function PricingPage() {
-  const tiers = plans;
+export default async function PricingPage() {
+  const current = await getCurrentPlan();
 
   return (
     <>
@@ -34,55 +28,12 @@ export default function PricingPage() {
       />
 
       <section className={`${container} py-14 sm:py-20`} aria-label="Plans">
-        <ol className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {tiers.map((plan, index) => (
-            <li
-              key={plan.id}
-              data-reveal
-              style={delay(index, 70)}
-              className={cn(
-                "group relative flex flex-col rounded-[20px] border p-6",
-                plan.highlight
-                  ? "border-[var(--color-text-primary)] bg-[var(--color-bg-surface)] shadow-[0_30px_60px_-40px_rgba(17,31,29,0.6)]"
-                  : "border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]"
-              )}
-            >
-              {plan.highlight && (
-                <span className="absolute -top-3 left-6 rounded-full bg-[var(--color-action-primary)] px-3 py-1 text-xs font-semibold text-[#111F1D]">{plan.highlight}</span>
-              )}
-              <div className="flex items-center justify-between">
-                <h2 className="font-[family-name:var(--font-heading)] text-xl font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{plan.name}</h2>
-                <AnimatedIcon icon={icons[plan.id]} size={44} />
-              </div>
-              <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{plan.audience}</p>
-              <p className="mt-6 font-[family-name:var(--font-heading)] text-[26px] leading-tight font-semibold tracking-[-0.035em] text-[var(--color-text-primary)]">{plan.price}</p>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{plan.priceNote}</p>
-              <dl className="mt-6 grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-[10px] bg-[var(--color-bg-subtle)] p-3">
-                  <dt className="text-xs text-[var(--color-text-secondary)]">Users</dt>
-                  <dd className="mt-0.5 font-semibold text-[var(--color-text-primary)]">Unlimited</dd>
-                </div>
-                <div className="rounded-[10px] bg-[var(--color-bg-subtle)] p-3">
-                  <dt className="text-xs text-[var(--color-text-secondary)]">Applications</dt>
-                  <dd className="mt-0.5 font-semibold text-[var(--color-text-primary)]">{plan.applications}</dd>
-                </div>
-              </dl>
-              <ul className="mt-6 space-y-2.5">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex gap-2.5 text-sm text-[var(--color-text-primary)]">
-                    <IconCheck size={12} className="mt-1 shrink-0" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-auto pt-8">
-                <Link href={plan.cta.href} className={cn(plan.highlight || plan.id === "oneops" ? btnPrimary : btnSecondary, "w-full")}>
-                  {plan.cta.label}
-                </Link>
-              </div>
-            </li>
-          ))}
-        </ol>
+        {current && (
+          <div className="mb-8" data-reveal>
+            <CurrentPlanBanner current={current} />
+          </div>
+        )}
+        <PricingPlans current={current} />
 
         <p className="mt-6 text-sm text-[var(--color-text-secondary)]">
           Prices per organization, unlimited users, excluding applicable taxes. Annual billing: two months free. Need something specific?{" "}

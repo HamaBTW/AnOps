@@ -34,6 +34,8 @@ const protectedRoutes = [
 const authOnlyRoutes = [
   "/login",
   "/register",
+  "/trial",
+  "/get-started",
   "/forgot-password",
   "/verify",
   "/unverified",

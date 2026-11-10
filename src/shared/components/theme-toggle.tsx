@@ -1,6 +1,6 @@
 "use client";
 
-import { IconMoon, IconSun } from "@/shared/components/ui/brand-icons";
+import { MoonStar, SunMedium } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
@@ -50,18 +50,30 @@ export function ThemeToggle() {
   };
 
   if (!hydrated) {
-    return <div className="h-10 w-10 rounded-[var(--radius-control)]" aria-hidden="true" />;
+    return <div className="h-11 w-11 rounded-full" aria-hidden="true" />;
   }
 
   return (
     <button
       type="button"
       onClick={toggle}
-      className="relative h-10 w-10 rounded-[var(--radius-control)] flex items-center justify-center hover:bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+      className="group relative flex h-11 w-11 items-center justify-center rounded-full text-[var(--color-text-secondary)] transition-colors duration-200 hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] motion-safe:active:scale-90"
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
-      {theme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
+      {/* Both icons stay mounted so the swap can rotate and fade instead of popping. */}
+      <SunMedium
+        size={20}
+        strokeWidth={1.9}
+        aria-hidden="true"
+        className={`absolute transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none ${theme === "dark" ? "rotate-0 scale-100 opacity-100" : "rotate-90 scale-50 opacity-0"}`}
+      />
+      <MoonStar
+        size={20}
+        strokeWidth={1.9}
+        aria-hidden="true"
+        className={`absolute transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none ${theme === "dark" ? "-rotate-90 scale-50 opacity-0" : "rotate-0 scale-100 opacity-100"}`}
+      />
     </button>
   );
 }

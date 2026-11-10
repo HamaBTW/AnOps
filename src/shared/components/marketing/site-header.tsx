@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useEffect, useRef, useState } from "react";
 import { IconChevronDown, IconClose, IconMenu } from "@/shared/components/ui/brand-icons";
+import { Building2, ChevronRight, Compass, LifeBuoy, Tag, Users } from "lucide-react";
+import { UserMenu } from "@/shared/components/marketing/user-menu";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { categories, appsInCategory } from "@/shared/config/catalog";
 import { primaryNav } from "@/shared/config/site";
@@ -12,10 +14,18 @@ import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { StatusBadge } from "@/shared/components/marketing/status-badge";
 import { cn } from "@/shared/lib/utils";
 
+const MOBILE_ICONS: Record<string, typeof Compass> = {
+  "/industries": Building2,
+  "/pricing": Tag,
+  "/community-hub": Users,
+  "/help": LifeBuoy,
+};
+
 type SiteHeaderUser = {
   name?: string | null;
   email?: string | null;
   role?: string | null;
+  image?: string | null;
 };
 
 export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
@@ -72,12 +82,13 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               aria-controls={appsPanelId}
               onClick={() => setAppsOpen((open) => !open)}
               className={cn(
-                "inline-flex min-h-[44px] items-center gap-1.5 rounded-[var(--radius-control)] px-3 text-sm font-medium hover:bg-[var(--color-bg-subtle)]",
-                isActive("/apps") ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-secondary)]"
+                "relative inline-flex min-h-[44px] items-center gap-1.5 rounded-[var(--radius-control)] px-3.5 text-sm font-medium transition-colors duration-200 hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
+                isActive("/apps") || appsOpen ? "bg-[var(--color-bg-subtle)] font-semibold text-[var(--color-text-primary)]" : "text-[var(--color-text-secondary)]"
               )}
             >
               Apps
               <IconChevronDown size={12} className={cn("transition-transform", appsOpen && "rotate-180")} />
+              <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-3.5 -bottom-px h-[3px] origin-center rounded-full bg-[var(--color-action-primary)] transition-transform duration-300 ease-out", isActive("/apps") ? "scale-x-100" : "scale-x-0")} />
             </button>
             <div
               id={appsPanelId}
@@ -127,28 +138,19 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
                 href={item.href}
                 aria-current={isActive(item.href) ? "page" : undefined}
                 className={cn(
-                  "inline-flex min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-sm font-medium hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]",
-                  isActive(item.href) ? "text-[var(--color-text-primary)]" : "text-[var(--color-text-secondary)]"
+                  "relative inline-flex min-h-[44px] items-center rounded-[var(--radius-control)] px-3.5 text-sm font-medium transition-colors duration-200 hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
+                  isActive(item.href) ? "bg-[var(--color-bg-subtle)] font-semibold text-[var(--color-text-primary)]" : "text-[var(--color-text-secondary)]"
                 )}
               >
                 {item.label}
+                <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-3.5 -bottom-px h-[3px] origin-center rounded-full bg-[var(--color-action-primary)] transition-transform duration-300 ease-out", isActive(item.href) ? "scale-x-100" : "scale-x-0")} />
               </Link>
             ))}
         </nav>
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {user ? (
-            <div className="hidden sm:flex items-center">
-              {/* /dashboard opens the active company. Accounts without a company are sent to onboarding by the dashboard layout. */}
-              <Link
-                href="/anops"
-                className={cn(btnPrimary, "px-4 inline-flex items-center gap-1.5 shadow-sm")}
-              >
-                Open workspace
-              </Link>
-            </div>
-          ) : (
+          {user ? null : (
             <>
               <Link
                 href="/login"
@@ -161,6 +163,7 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
               </Link>
             </>
           )}
+          {user && <UserMenu user={user} />}
           <button
             type="button"
             aria-expanded={mobileOpen}
@@ -177,63 +180,82 @@ export function SiteHeader({ user }: { user?: SiteHeaderUser | null }) {
       <div
         id={mobilePanelId}
         hidden={!mobileOpen}
-        className="max-h-[calc(100dvh-72px)] overflow-y-auto border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] lg:hidden"
+        className="h-[calc(100dvh-72px)] overflow-y-auto overscroll-contain border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] lg:hidden"
       >
-        <nav aria-label="Mobile" className="menu-in mx-auto max-w-[1200px] space-y-1 px-4 py-4">
-          <Link
-            href="/apps"
-            onClick={closeAll}
-            className="flex min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-base font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
-          >
-            All apps
-          </Link>
-          <div className="pl-3 pt-2">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Applications</p>
-            <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
-              {categories.flatMap((category) => appsInCategory(category.id)).map((app) => (
-                <Link
-                  key={app.slug}
-                  href={`/apps/${app.slug}`}
-                  onClick={closeAll}
-                  className="flex min-h-[44px] items-center gap-3 rounded-[var(--radius-control)] px-2 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
-                >
-                  <AnimatedIcon icon={app.icon} size={30} play="never" />
-                  {app.name}
-                </Link>
-              ))}
-            </div>
+        <nav aria-label="Mobile" className="menu-in mx-auto flex min-h-full max-w-[640px] flex-col px-4 pt-5">
+          {/* Explore */}
+          <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-secondary)]">Explore</p>
+          <ul className="mt-2 overflow-hidden rounded-[18px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
+            {primaryNav
+              .filter((item) => item.href !== "/apps")
+              .map((item) => {
+                const Icon = MOBILE_ICONS[item.href] ?? Compass;
+                const active = isActive(item.href);
+                return (
+                  <li key={item.href} className="border-b border-[var(--color-border-subtle)] last:border-b-0">
+                    <Link
+                      href={item.href}
+                      onClick={closeAll}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "group relative flex min-h-[56px] items-center gap-3.5 px-4 text-[15px] font-semibold text-[var(--color-text-primary)] transition-colors active:bg-[var(--color-bg-subtle)]",
+                        active && "bg-[var(--color-bg-subtle)]"
+                      )}
+                    >
+                      <span aria-hidden="true" className={cn("absolute inset-y-3 left-0 w-1 rounded-r-full bg-[var(--color-action-primary)] transition-opacity", active ? "opacity-100" : "opacity-0")} />
+                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]", active ? "bg-[var(--color-action-primary)] text-[var(--color-action-on-primary)]" : "bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]")}>
+                        <Icon size={18} aria-hidden="true" />
+                      </span>
+                      <span className="flex-1">{item.label}</span>
+                      <ChevronRight size={16} aria-hidden="true" className="text-[var(--color-text-secondary)] transition-transform group-active:translate-x-0.5" />
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+
+          {/* Applications */}
+          <div className="mt-6 flex items-center justify-between px-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-secondary)]">Applications</p>
+            <Link href="/apps" onClick={closeAll} className="inline-flex min-h-[32px] items-center gap-1 text-xs font-semibold text-[var(--color-text-primary)] hover:underline">
+              Browse all
+              <ChevronRight size={14} aria-hidden="true" />
+            </Link>
           </div>
-          {primaryNav
-            .filter((item) => item.href !== "/apps")
-            .map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={closeAll}
-                className="flex min-h-[44px] items-center rounded-[var(--radius-control)] px-3 text-base font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)]"
-              >
-                {item.label}
-              </Link>
-            ))}
-          {user ? (
-            <div className="pt-3 border-t border-[var(--color-border-subtle)] space-y-2">
-              <div className="px-3 text-xs text-[var(--color-text-secondary)]">
-                Signed in as <span className="font-semibold text-[var(--color-text-primary)]">{user.name || user.email}</span>
-              </div>
-              <Link href="/anops" onClick={closeAll} className={cn(btnPrimary, "flex w-full justify-center")}>
-                Open workspace
-              </Link>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 pt-3">
-              <Link href="/login" onClick={closeAll} className="flex min-h-[44px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)]">
+          <ul className="mt-2 grid grid-cols-2 gap-2">
+            {categories.flatMap((category) => appsInCategory(category.id)).map((app) => {
+              const active = pathname.startsWith(`/apps/${app.slug}`);
+              return (
+                <li key={app.slug}>
+                  <Link
+                    href={`/apps/${app.slug}`}
+                    onClick={closeAll}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-[64px] items-center gap-2.5 rounded-[14px] border bg-[var(--color-bg-surface)] p-2.5 text-[13px] font-semibold leading-tight text-[var(--color-text-primary)] transition-[border-color,transform,background-color] active:scale-[0.98] active:bg-[var(--color-bg-subtle)]",
+                      active ? "border-[var(--color-action-primary)] ring-1 ring-[var(--color-action-primary)]" : "border-[var(--color-border-subtle)]"
+                    )}
+                  >
+                    <AnimatedIcon icon={app.icon} size={34} play="never" />
+                    <span className="min-w-0 break-words">{app.name}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Account / sign-in actions stay reachable at the bottom of the sheet */}
+          {!user && (
+            <div className="sticky bottom-0 -mx-4 mt-6 grid grid-cols-2 gap-2 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)]/95 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+              <Link href="/login" onClick={closeAll} className="flex min-h-[48px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] text-sm font-semibold text-[var(--color-text-primary)] active:bg-[var(--color-bg-subtle)]">
                 Sign in
               </Link>
-              <Link href="/trial" onClick={closeAll} className={cn(btnPrimary, "justify-center")}>
+              <Link href="/trial" onClick={closeAll} className={cn(btnPrimary, "min-h-[48px] justify-center")}>
                 Try it free
               </Link>
             </div>
           )}
+          {user && <div className="h-[max(24px,env(safe-area-inset-bottom))] shrink-0" />}
         </nav>
       </div>
     </header>

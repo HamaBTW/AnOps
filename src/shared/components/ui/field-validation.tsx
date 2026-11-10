@@ -13,8 +13,14 @@ const MESSAGE_ATTR = "data-field-error";
 type Field = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 function label(field: Field): string {
-  const id = field.id && document.querySelector(`label[for="${CSS.escape(field.id)}"]`);
-  const text = (id || field.closest("label"))?.textContent ?? field.getAttribute("aria-label") ?? "";
+  const byFor = field.id ? document.querySelector(`label[for="${CSS.escape(field.id)}"]`) : null;
+  let found: Element | null = byFor ?? field.closest("label");
+  // Labels that are not linked to the input: use the label that sits in the same field cell.
+  for (let node: HTMLElement | null = field.parentElement, depth = 0; !found && node && node !== field.form && depth < 3; node = node.parentElement, depth++) {
+    if (node.querySelectorAll(CONTROLS).length !== 1) break;
+    found = [...node.children].find((child) => child.tagName === "LABEL") ?? null;
+  }
+  const text = found?.textContent ?? field.getAttribute("aria-label") ?? "";
   return text.replace(/[*:]/g, "").replace(/\s+/g, " ").trim();
 }
 
@@ -56,9 +62,12 @@ function clear(field: Field) {
   }
 }
 
-/** The element the message goes after: the field, or its wrapper when the wrapper holds only this control (icon / chevron wrappers). */
+/**
+ * The element the message goes after. It must stay inside the field's own cell (the element that holds the label),
+ * otherwise in a grid the message becomes a separate grid item. So we only climb out of a control wrapper
+ * (icon / chevron wrapper) while the parent does not hold a label of its own.
+ */
 function anchorFor(field: Field): HTMLElement {
-  // A checkbox inside its label (box + text on one row): the message goes under the whole row, never inside it.
   if (field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")) {
     const row = field.closest("label");
     if (row) return row;
@@ -66,7 +75,9 @@ function anchorFor(field: Field): HTMLElement {
   let anchor: HTMLElement = field;
   for (let depth = 0; depth < 2; depth++) {
     const parent = anchor.parentElement;
-    if (!parent || parent === field.form || parent.tagName === "LABEL" || parent.querySelectorAll(CONTROLS).length !== 1) break;
+    if (!parent || parent === field.form || parent.tagName === "LABEL") break;
+    if (parent.querySelectorAll(CONTROLS).length !== 1) break;
+    if ([...parent.children].some((child) => child.tagName === "LABEL")) break; // parent is the cell itself
     anchor = parent;
   }
   return anchor;
@@ -81,10 +92,10 @@ function show(field: Field) {
   note.className = "anops-field-error";
   // Inline styles keep the message readable even before the stylesheet is applied, on every theme.
   note.style.cssText =
-    "display:flex;align-items:flex-start;gap:8px;margin:8px 0 0;padding:8px 12px;border-radius:10px;font-size:13px;line-height:18px;font-weight:600;letter-spacing:0;text-transform:none;" +
-    "color:var(--color-status-error-fg,#a43434);background:var(--color-status-error-bg,#fff1ee);border:1px solid var(--color-status-error,#a43434);width:100%;box-sizing:border-box;";
+    "display:flex;align-items:flex-start;gap:6px;margin:6px 2px 0;padding:0;font-size:12.5px;line-height:17px;font-weight:600;letter-spacing:0;text-transform:none;" +
+    "color:var(--color-status-error-fg,#a43434);box-sizing:border-box;";
   note.innerHTML =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;width:16px;height:16px;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;width:14px;height:14px;margin-top:1.5px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
   const span = document.createElement("span");
   span.style.cssText = "min-width:0;overflow-wrap:anywhere;";
   span.textContent = copy(field);

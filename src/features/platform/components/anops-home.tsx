@@ -339,7 +339,7 @@ function Dock({ data }: { data: HomeData }) {
 
   return (
     <nav aria-label="Dock" className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-[max(14px,env(safe-area-inset-bottom))]">
-      <div className="relative flex items-center gap-2 rounded-[22px] border border-white/10 bg-[color-mix(in_oklab,var(--color-bg-surface)_78%,transparent)] p-2 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+      <div className="relative flex items-center gap-2 rounded-[22px] border border-white/15 bg-[color-mix(in_oklab,var(--color-bg-surface)_85%,transparent)] p-2 shadow-[0_0_0_1px_rgba(17,31,29,0.08),0_2px_6px_rgba(17,31,29,0.18),0_12px_32px_-6px_rgba(17,31,29,0.38),0_0_28px_-4px_rgba(17,31,29,0.3)] backdrop-blur-xl">
         {menu && data.organizations.length > 1 && (
           <div className="absolute bottom-full left-0 mb-3 w-64 rounded-[16px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-2 shadow-xl motion-safe:animate-[anops-menu-in_180ms_var(--ease-out)_both]">
             <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Switch organization</p>

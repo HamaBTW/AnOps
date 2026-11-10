@@ -1,6 +1,6 @@
-const PAGES_CACHE = "anops-pages-v6";     // Full HTML navigation responses only
-const RSC_CACHE = "anops-rsc-v6";         // RSC flight payloads (for client-side router)
-const ASSETS_CACHE = "anops-assets-v6";  // JS chunks, CSS, fonts, images
+const PAGES_CACHE = "anops-pages-v7";     // Full HTML navigation responses only
+const RSC_CACHE = "anops-rsc-v7";         // RSC flight payloads (for client-side router)
+const ASSETS_CACHE = "anops-assets-v7";  // JS chunks, CSS, fonts, images
 
 const ALL_CACHES = [PAGES_CACHE, RSC_CACHE, ASSETS_CACHE];
 const OFFLINE_URL = "/offline";

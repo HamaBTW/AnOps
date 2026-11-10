@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -41,8 +42,8 @@ export function SocialAccounts({
       window.location.assign(result.data.authorizationUrl);
     });
 
-  const disconnect = (account: SocialAccountDto) => {
-    if (!window.confirm(`Disconnect "${account.displayName}"? Scheduled posts for this page will be cancelled.`)) return;
+  const disconnect = async (account: SocialAccountDto) => {
+    if (!(await confirmAction({ title: `Disconnect "${account.displayName}"?`, message: "Scheduled posts for this page will be cancelled.", tone: "warning", confirmLabel: "Disconnect" }))) return;
     startTransition(async () => {
       const result = await disconnectSocialAccountAction(account.id, { expectedVersion: account.version });
       if (!result.ok) return toast.fromError(result.error);

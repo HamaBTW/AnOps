@@ -33,10 +33,7 @@ export default async function GetStartedPage({ searchParams }: { searchParams: P
       <div aria-hidden="true" className="portal-grid pointer-events-none absolute inset-x-0 top-0 h-[360px] [mask-image:radial-gradient(ellipse_at_top_left,black_10%,transparent_70%)]" />
       <div className={`${container} relative grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.25fr_0.75fr] lg:gap-14`}>
         <div className="motion-safe:animate-[anops-rise_600ms_var(--ease-out)_both]">
-          <Link href={`/trial?apps=${verdict.appIds.join(",")}`} className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:underline">
-            ← Change applications
-          </Link>
-          <Eyebrow className="mt-6">Get started</Eyebrow>
+          <Eyebrow>Get started</Eyebrow>
           <h1 className="mt-4 font-[family-name:var(--font-heading)] text-[34px] leading-[1.08] tracking-[-0.04em] text-[var(--color-text-primary)] sm:text-[46px]">
             Create your workspace.
           </h1>
@@ -48,7 +45,15 @@ export default async function GetStartedPage({ searchParams }: { searchParams: P
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start motion-safe:animate-[anops-rise_700ms_var(--ease-out)_both]">
           <div className="portal-ink rounded-[20px] p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Your selection</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Your selection</p>
+              <Link
+                href={`/trial?apps=${verdict.appIds.join(",")}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border-subtle)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                <span aria-hidden="true">←</span> Change applications
+              </Link>
+            </div>
             <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-semibold tracking-[-0.03em]">
               {verdict.kind === "free" ? "Permanent Free" : `${TRIAL_DAYS}-day free trial`}
             </p>

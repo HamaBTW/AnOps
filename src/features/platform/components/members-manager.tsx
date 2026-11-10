@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -100,7 +101,15 @@ export function MembersManager({
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => window.confirm(`Cancel the invitation for ${inv.email}? The link will stop working.`) && run("Invitation cancelled", () => revokeInvitationAction(orgId, inv.id))}
+                  onClick={() =>
+                    void confirmAction({
+                      title: "Cancel this invitation?",
+                      message: `The link sent to ${inv.email} will stop working.`,
+                      tone: "warning",
+                      confirmLabel: "Cancel invitation",
+                      cancelLabel: "Keep invitation",
+                    }).then((ok) => ok && run("Invitation cancelled", () => revokeInvitationAction(orgId, inv.id)))
+                  }
                   className="min-h-[36px] rounded-[8px] px-3 text-sm font-medium text-[var(--color-status-error-fg)] hover:bg-[var(--color-status-error-bg)] disabled:opacity-60"
                 >
                   Cancel
@@ -186,7 +195,14 @@ export function MembersManager({
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => window.confirm(`Remove ${m.name} from this organization? Their records stay; they lose access immediately.`) && run("Member removed", () => removeMemberAction(orgId, m.id))}
+                      onClick={() =>
+                        void confirmAction({
+                          title: `Remove ${m.name}?`,
+                          message: "Their records stay, but they lose access to this organization immediately.",
+                          tone: "danger",
+                          confirmLabel: "Remove member",
+                        }).then((ok) => ok && run("Member removed", () => removeMemberAction(orgId, m.id)))
+                      }
                       className="text-xs font-semibold text-[var(--color-status-error-fg)] underline underline-offset-2"
                     >
                       Remove
@@ -228,15 +244,23 @@ export function MembersManager({
             type="button"
             disabled={pending}
             onClick={() =>
-              window.confirm("Leave this organization? You will lose access to its applications and data.") &&
-              start(async () => {
-                const result = await leaveOrganizationAction(orgId);
-                if (result.ok) {
-                  toast.success("You left the organization");
-                  router.push("/anops");
-                  router.refresh();
-                } else toast.fromError(result.error);
-              })
+              void confirmAction({
+                title: "Leave this organization?",
+                message: "You will lose access to its applications and data.",
+                tone: "danger",
+                confirmLabel: "Leave organization",
+              }).then(
+                (ok) =>
+                  ok &&
+                  start(async () => {
+                    const result = await leaveOrganizationAction(orgId);
+                    if (result.ok) {
+                      toast.success("You left the organization");
+                      router.push("/anops");
+                      router.refresh();
+                    } else toast.fromError(result.error);
+                  })
+              )
             }
             className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-status-error-fg)]/50 px-5 text-sm font-semibold text-[var(--color-status-error-fg)] transition-colors hover:bg-[var(--color-status-error-bg)] disabled:opacity-60"
           >

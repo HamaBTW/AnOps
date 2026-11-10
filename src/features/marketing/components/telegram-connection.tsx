@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
@@ -76,8 +77,8 @@ export function TelegramConnection({
     }
   };
 
-  const disconnect = () => {
-    if (!window.confirm("Disconnect this contact from Telegram? Campaigns will skip them until they connect again.")) return;
+  const disconnect = async () => {
+    if (!(await confirmAction({ title: "Disconnect from Telegram?", message: "Campaigns will skip this contact until they connect again.", tone: "warning", confirmLabel: "Disconnect" }))) return;
     startTransition(async () => {
       const result = await disconnectTelegramAction(contactId);
       if (!result.ok) return toast.fromError(result.error);

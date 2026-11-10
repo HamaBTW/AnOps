@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import {
   Search,
@@ -62,11 +63,15 @@ export function EmployeeTable({
 
   const [departureEmployee, setDepartureEmployee] = useState<Employee | null>(null);
 
-  const handleToggleStatus = (id: string, name: string, currentStatus: "active" | "inactive") => {
-    const actionName = currentStatus === "active" ? "désactiver" : "activer";
-    if (!confirm(`Voulez-vous vraiment ${actionName} ${name} ?`)) {
-      return;
-    }
+  const handleToggleStatus = async (id: string, name: string, currentStatus: "active" | "inactive") => {
+    const deactivating = currentStatus === "active";
+    const confirmed = await confirmAction({
+      title: deactivating ? `Deactivate ${name}?` : `Activate ${name}?`,
+      message: deactivating ? "They can no longer request leave or receive monthly payroll." : "They can request leave and receive monthly payroll again.",
+      tone: deactivating ? "warning" : "default",
+      confirmLabel: deactivating ? "Deactivate" : "Activate",
+    });
+    if (!confirmed) return;
 
     const empObj = employees.find((e) => e.id === id);
 

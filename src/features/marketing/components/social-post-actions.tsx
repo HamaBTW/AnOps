@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -64,8 +65,8 @@ export function SocialPostActions({ post, integrationReady }: { post: SocialPost
           <Button variant="danger" disabled={pending} onClick={() => run(() => cancelSocialPostAction(post.id, { expectedVersion: post.version }), "Scheduled post cancelled.")}>Cancel schedule</Button>
         )}
         {post.actions.canDelete && (
-          <Button variant="danger" disabled={pending} onClick={() => {
-            if (!window.confirm("Delete this post?")) return;
+          <Button variant="danger" disabled={pending} onClick={async () => {
+            if (!(await confirmAction({ title: "Delete this post?", message: "The post is permanently removed.", tone: "danger", confirmLabel: "Delete post" }))) return;
             startTransition(async () => {
               const result = await deleteSocialPostAction(post.id);
               if (!result.ok) return toast.fromError(result.error);

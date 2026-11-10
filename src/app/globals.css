@@ -745,3 +745,70 @@ html {
     transition: none;
   }
 }
+
+/* Inline field validation (see FieldValidationHost) */
+.anops-field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--color-status-error);
+  animation: anops-field-error-in 160ms var(--ease-out, ease-out) both;
+}
+.anops-field-error svg { flex-shrink: 0; margin-top: 2px; }
+[data-invalid="true"] {
+  border-color: var(--color-status-error) !important;
+}
+[data-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-error) 25%, transparent);
+}
+@keyframes anops-field-error-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anops-field-error { animation: none; }
+}
+
+/* Checkboxes use the brand action colour. In the base layer so any utility class on a checkbox still wins. */
+@layer base {
+  input[type="checkbox"]:not(.sr-only):not(.peer) {
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1.5px solid var(--color-border-control);
+    border-radius: 6px;
+    background-color: var(--color-bg-surface);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 78%;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  }
+  input[type="checkbox"]:not(.sr-only):not(.peer):hover:not(:disabled) {
+    border-color: var(--color-text-primary);
+  }
+  input[type="checkbox"]:not(.sr-only):not(.peer):checked {
+    background-color: var(--color-action-primary);
+    border-color: var(--color-action-primary);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23111F1D' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5'/%3E%3C/svg%3E");
+  }
+  input[type="checkbox"]:not(.sr-only):not(.peer):indeterminate {
+    background-color: var(--color-action-primary);
+    border-color: var(--color-action-primary);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23111F1D' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+  }
+  input[type="checkbox"]:not(.sr-only):not(.peer):focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+  input[type="checkbox"]:not(.sr-only):not(.peer):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}

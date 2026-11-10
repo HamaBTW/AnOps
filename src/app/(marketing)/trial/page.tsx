@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function TrialPage({ searchParams }: { searchParams: Promise<{ apps?: string }> }) {
   const params = await searchParams;
-  const initial = [...new Set((params.apps ?? "").split(",").filter(isApplicationId))].slice(0, MAX_TRIAL_APPS) as ApplicationId[];
+  const initial = [...new Set((params.apps ?? "").split(",").filter(isApplicationId).filter((id) => id !== "ai"))].slice(0, MAX_TRIAL_APPS) as ApplicationId[];
 
   return (
     <div className="relative">

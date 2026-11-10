@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { chooseOneOpsAction, openBillingPortalAction, setCancelAtPeriodEndAction, startCheckoutAction } from "@/features/platform/actions/billing.action";
@@ -152,8 +153,13 @@ export function BillingCenter({ data }: { data: BillingData }) {
                 type="button"
                 disabled={pending}
                 onClick={() =>
-                  window.confirm(`Cancel at the end of the current period (${date(data.currentPeriodEnd)})? You keep access until then and your data is preserved.`) &&
-                  act(() => setCancelAtPeriodEndAction(data.orgId, true), () => (toast.success("Cancellation scheduled"), router.refresh()))
+                  void confirmAction({
+                    title: "Cancel your subscription?",
+                    message: `It ends on ${date(data.currentPeriodEnd)}. You keep access until then and your data is preserved.`,
+                    tone: "warning",
+                    confirmLabel: "Cancel subscription",
+                    cancelLabel: "Keep subscription",
+                  }).then((ok) => ok && act(() => setCancelAtPeriodEndAction(data.orgId, true), () => (toast.success("Cancellation scheduled"), router.refresh())))
                 }
                 className="min-h-[40px] rounded-[8px] px-4 text-sm font-semibold text-[var(--color-status-error-fg)] hover:bg-[var(--color-status-error-bg)] disabled:opacity-60"
               >
@@ -304,7 +310,14 @@ export function BillingCenter({ data }: { data: BillingData }) {
                 key={id}
                 type="button"
                 disabled={pending}
-                onClick={() => window.confirm(`Keep ${getApplication(id).name} free forever? This cannot be changed later.`) && act(() => chooseOneOpsAction(data.orgId, id), () => (toast.success(`${getApplication(id).name} is now your free application`), router.refresh()))}
+                onClick={() =>
+                  void confirmAction({
+                    title: `Keep ${getApplication(id).name} free forever?`,
+                    message: "This choice is permanent and cannot be changed later.",
+                    tone: "warning",
+                    confirmLabel: "Keep it free",
+                  }).then((ok) => ok && act(() => chooseOneOpsAction(data.orgId, id), () => (toast.success(`${getApplication(id).name} is now your free application`), router.refresh())))
+                }
                 className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[var(--color-border-control)] py-1 pl-1 pr-4 text-sm font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] disabled:opacity-60"
               >
                 <AnimatedIcon icon={getApplication(id).icon} size={32} play="never" />

@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import {
   X, Plus, Trash2, Briefcase, Search, Loader2,
@@ -150,8 +151,8 @@ export function JobTitlesModal({
     });
   };
 
-  const handleDelete = (item: JobTitle) => {
-    if (!confirm(`Remove the job title "${item.title}"?`)) return;
+  const handleDelete = async (item: JobTitle) => {
+    if (!(await confirmAction({ title: `Remove "${item.title}"?`, message: "This job title is removed from the list.", tone: "danger", confirmLabel: "Remove" }))) return;
     setError(null);
     setSuccess(null);
     startTransition(async () => {

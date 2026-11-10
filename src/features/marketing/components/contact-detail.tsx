@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
@@ -187,8 +188,8 @@ export function ContactDetail({
               <Button
                 variant="danger"
                 disabled={pending}
-                onClick={() => {
-                  if (!window.confirm("Delete this contact permanently?")) return;
+                onClick={async () => {
+                  if (!(await confirmAction({ title: "Delete this contact?", message: "The contact and their history are permanently removed.", tone: "danger", confirmLabel: "Delete contact" }))) return;
                   startTransition(async () => {
                     const result = await deleteContactAction(contact.id);
                     if (!result.ok) return toast.fromError(result.error);

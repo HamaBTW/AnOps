@@ -59,7 +59,7 @@ describe("trial selection", () => {
     expect(validateTrialSelection([]).ok).toBe(false);
     expect(validateTrialSelection("finance").ok).toBe(false);
     expect(validateTrialSelection(["ai"]).ok).toBe(false);
-    expect(validateTrialSelection(["ai", "finance"]).ok).toBe(true);
+    expect(validateTrialSelection(["ai", "finance"]).ok).toBe(false);
   });
 });
 

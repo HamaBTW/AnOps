@@ -1,5 +1,6 @@
 "use client";
 
+import { noticeAction } from "@/shared/components/ui/confirm-dialog";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { WifiOff, Wifi, RefreshCw } from "lucide-react";
 
@@ -85,10 +86,10 @@ export function OfflineIndicator() {
                 if (res.ok) {
                   window.location.reload();
                 } else {
-                  alert("Still offline. Please check your connection.");
+                  void noticeAction({ title: "Still offline", message: "Please check your connection and try again.", tone: "warning", okLabel: "Close" });
                 }
               } catch {
-                alert("Still offline. Please check your connection.");
+                void noticeAction({ title: "Still offline", message: "Please check your connection and try again.", tone: "warning", okLabel: "Close" });
               }
             }}
             className="flex items-center gap-1.5 text-xs bg-amber-900/80 hover:bg-amber-950 text-white font-semibold px-3 py-1 rounded transition-colors"

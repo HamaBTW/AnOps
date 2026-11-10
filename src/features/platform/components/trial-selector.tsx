@@ -14,7 +14,7 @@ function readStored(): ApplicationId[] {
   try {
     const raw = sessionStorage.getItem(TRIAL_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-    return Array.isArray(parsed) ? (parsed.filter((id) => APPLICATIONS.some((a) => a.id === id)) as ApplicationId[]).slice(0, MAX_TRIAL_APPS) : [];
+    return Array.isArray(parsed) ? (parsed.filter((id) => APPLICATIONS.some((a) => a.id === id && !a.aiNative)) as ApplicationId[]).slice(0, MAX_TRIAL_APPS) : [];
   } catch {
     return [];
   }
@@ -28,7 +28,7 @@ export function TrialSelector({ initial }: { initial: ApplicationId[] }) {
     if (initial.length > 0) return;
     const stored = readStored();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from browser storage after hydration
-    if (stored.length > 0) setSelected(stored);
+    if (stored.length > 0) setSelected(stored.filter((id) => !getApplication(id).aiNative));
   }, [initial.length]);
 
   useEffect(() => {
@@ -73,7 +73,8 @@ export function TrialSelector({ initial }: { initial: ApplicationId[] }) {
         {APPLICATIONS.map((app, index) => {
           const isSelected = selected.includes(app.id);
           const unavailable = app.status !== "available";
-          const disabled = unavailable || (!isSelected && full);
+          const maxOpsOnly = app.aiNative;
+          const disabled = unavailable || maxOpsOnly || (!isSelected && full);
           return (
             <li key={app.id} className="motion-safe:animate-[anops-rise_500ms_var(--ease-out)_both]" style={{ animationDelay: `${index * 35}ms` }}>
               <button
@@ -104,6 +105,7 @@ export function TrialSelector({ initial }: { initial: ApplicationId[] }) {
                 </div>
                 <span className="mt-4 flex items-center gap-2 text-lg font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
                   {app.name}
+                  {maxOpsOnly && <span className="rounded-full bg-[var(--color-status-neutral-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-status-neutral)]">MaxOps only</span>}
                   {unavailable && <span className="rounded-full bg-[var(--color-status-neutral-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-status-neutral)]">Coming soon</span>}
                 </span>
                 <span className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)]">{app.tagline}</span>
@@ -115,7 +117,7 @@ export function TrialSelector({ initial }: { initial: ApplicationId[] }) {
                     </li>
                   ))}
                 </ul>
-                {app.aiNative && <span className="mt-4 text-xs text-[var(--color-text-secondary)]">Needs AI features: available in the {TRIAL_DAYS}-day trial and in MaxOps.</span>}
+                {app.aiNative && <span className="mt-4 text-xs text-[var(--color-text-secondary)]">Only available with the MaxOps plan.</span>}
               </button>
             </li>
           );

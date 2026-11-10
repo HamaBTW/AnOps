@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -52,8 +53,8 @@ export function TemplateList({ templates, canManage }: { templates: TemplateDto[
                 <Button
                   variant="danger"
                   disabled={pending}
-                  onClick={() => {
-                    if (!window.confirm(`Delete "${template.name}"? This cannot be undone.`)) return;
+                  onClick={async () => {
+                    if (!(await confirmAction({ title: `Delete "${template.name}"?`, message: "This template is permanently removed. This cannot be undone.", tone: "danger", confirmLabel: "Delete template" }))) return;
                     run(() => deleteTemplateAction(template.id), "Template deleted.");
                   }}
                 >

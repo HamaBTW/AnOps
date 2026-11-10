@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useAiFeatures } from "@/features/platform/components/ai-features";
 import { useState, useTransition } from "react";
 import type { BlogPost, ContentCategory } from "@/features/community/types";
@@ -79,8 +80,8 @@ export function BlogSection({
     });
   };
 
-  const handleDeletePost = (postId: string) => {
-    if (!confirm("Are you sure you want to delete this article?")) return;
+  const handleDeletePost = async (postId: string) => {
+    if (!(await confirmAction({ title: "Delete this article?", message: "The article is permanently removed. This cannot be undone.", tone: "danger", confirmLabel: "Delete article" }))) return;
     startTransition(async () => {
       const res = await deleteBlogPostAction(postId);
       if (res.success) {

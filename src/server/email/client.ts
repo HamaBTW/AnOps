@@ -1,6 +1,26 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
-import { env, isEmailConfigured } from "@/config/env";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { env, getAppUrl, isEmailConfigured, isLocalOnlyUrl } from "@/config/env";
+
+const LOGO_CID = "anops-logo";
+const LOGO_PATH = path.join(process.cwd(), "public", "brand-kit", "01-brand-identity", "logos", "anops-logo-horizontal-raster.png");
+const LOGO_PUBLIC_PATH = "/brand-kit/01-brand-identity/logos/anops-logo-horizontal-raster.png";
+let logoFile: Buffer | null | undefined;
+
+/**
+ * Messages reference the logo as cid:anops-logo. The PNG is attached inline, so it displays in every mail client
+ * whether the app runs on localhost or in production. If the file cannot be read, the reference becomes a public URL.
+ */
+async function withInlineLogo(html: string | undefined): Promise<{ html: string | undefined; attachments?: { filename: string; content: Buffer; cid: string; contentType: string; contentDisposition: "inline" }[] }> {
+  if (!html || !html.includes(`cid:${LOGO_CID}`)) return { html };
+  if (logoFile === undefined) logoFile = await readFile(LOGO_PATH).catch(() => null);
+  if (logoFile) return { html, attachments: [{ filename: "anops-logo.png", content: logoFile, cid: LOGO_CID, contentType: "image/png", contentDisposition: "inline" }] };
+  const base = getAppUrl();
+  const fallback = isLocalOnlyUrl(base) ? "https://i.ibb.co/dwVPDPVh/anops-horizontal-logo.png" : `${base}${LOGO_PUBLIC_PATH}`;
+  return { html: html.replaceAll(`cid:${LOGO_CID}`, fallback) };
+}
 
 export type MailInput = {
   to: string;
@@ -67,12 +87,14 @@ export async function sendSmtpMessage(input: SmtpMessageInput): Promise<SmtpMess
   const transport = getMailTransporter();
   if (!transport) throw new Error("SMTP is not configured");
 
+  const rendered = await withInlineLogo(input.html);
   const info = await transport.sendMail({
     from: env.EMAIL_FROM,
     to: input.to,
     subject: input.subject,
     text: input.text,
-    html: input.html,
+    html: rendered.html,
+    attachments: rendered.attachments,
     messageId: input.messageId,
   });
 

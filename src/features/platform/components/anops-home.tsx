@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
@@ -44,13 +45,16 @@ const PLAN_LABEL: Record<AccessKind, string> = {
 };
 
 function useCountdown(target: string | null) {
-  const [now, setNow] = useState(() => Date.now());
+  // null until mounted: the server and the first client render must match, so the live time starts after hydration.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     if (!target) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starts the clock after hydration
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [target]);
-  if (!target) return null;
+  if (!target || now === null) return null;
   const ms = Math.max(0, new Date(target).getTime() - now);
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
@@ -150,17 +154,21 @@ function ActivationNotice({ data }: { data: HomeData }) {
 
   if (!expanded) {
     return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="mx-auto mb-6 flex w-full max-w-[1100px] items-center gap-3 rounded-[14px] border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-4 py-3 text-left text-sm text-[var(--color-warning-text)]"
-      >
-        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-warning-border)] live-dot" />
-        <span className="flex-1">
-          <strong>Activate your organization</strong> · {remaining ? `${remaining.label} left` : ""} · check {activation.email}
-        </span>
-        <span className="font-semibold underline">Details</span>
-      </button>
+      <div className="pointer-events-none sticky top-0 z-40 mx-auto w-full max-w-[1100px] px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))] sm:px-6">
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="pointer-events-auto flex w-full items-center gap-3 rounded-[14px] border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-4 py-2.5 text-left text-sm text-[var(--color-warning-text)] shadow-[0_10px_30px_-14px_rgba(17,31,29,0.35)] transition-shadow hover:shadow-[0_14px_34px_-14px_rgba(17,31,29,0.45)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] motion-safe:animate-[anops-rise_400ms_var(--ease-out)_both]"
+        >
+          <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-warning-border)] live-dot" />
+          <span className="min-w-0 flex-1 leading-snug">
+            <strong>Activate your organization</strong>
+            <span className="hidden sm:inline"> · {remaining ? `${remaining.label} left · ` : ""}check {activation.email}</span>
+            <span className="block text-xs sm:hidden">{remaining ? `${remaining.label} left · ` : ""}check {activation.email}</span>
+          </span>
+          <span className="shrink-0 font-semibold underline underline-offset-2">Details</span>
+        </button>
+      </div>
     );
   }
 
@@ -293,7 +301,12 @@ function PlanGate({ data }: { data: HomeData }) {
                     type="button"
                     disabled={pending}
                     onClick={() => {
-                      if (window.confirm(`Keep ${getApplication(id).name} as your permanent free application? This cannot be changed later.`)) fallback(id);
+                      void confirmAction({
+                        title: `Keep ${getApplication(id).name} free forever?`,
+                        message: "It becomes your permanent free application. This choice cannot be changed later.",
+                        tone: "warning",
+                        confirmLabel: "Keep it free",
+                      }).then((ok) => ok && fallback(id));
                     }}
                     className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] py-1 pl-1 pr-4 text-sm font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] disabled:opacity-60"
                   >

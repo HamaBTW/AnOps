@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useToast } from "@/shared/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -112,8 +113,9 @@ export function AudienceBuilder({
       }
     });
 
-  const remove = () => {
-    if (!audience || !window.confirm(`Delete the audience "${audience.name}"?`)) return;
+  const remove = async () => {
+    if (!audience) return;
+    if (!(await confirmAction({ title: `Delete "${audience.name}"?`, message: "The audience is permanently removed.", tone: "danger", confirmLabel: "Delete audience" }))) return;
     startTransition(async () => {
       const result = await deleteAudienceAction(audience.id);
       if (!result.ok) return toast.fromError(result.error);

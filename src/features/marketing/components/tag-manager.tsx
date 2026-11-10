@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -83,8 +84,8 @@ export function TagManager({ tags, canManage }: { tags: TagDto[]; canManage: boo
   const [pending, startTransition] = useTransition();
   const toast = useToast();
 
-  const remove = (tag: TagDto) => {
-    if (!window.confirm(`Delete the tag "${tag.name}"? It will be removed from ${tag.contactCount} contact(s).`)) return;
+  const remove = async (tag: TagDto) => {
+    if (!(await confirmAction({ title: `Delete the tag "${tag.name}"?`, message: `It will be removed from ${tag.contactCount} contact(s).`, tone: "danger", confirmLabel: "Delete tag" }))) return;
     startTransition(async () => {
       const result = await deleteTagAction(tag.id);
       if (!result.ok) return toast.fromError(result.error);

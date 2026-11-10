@@ -246,8 +246,8 @@ export function validateTrialSelection(raw: unknown): TrialSelection {
   if (unavailable.length > 0) {
     return { ok: false, message: `${unavailable.map((id) => getApplication(id).name).join(" and ")} ${unavailable.length > 1 ? "are" : "is"} coming soon and cannot be selected yet.` };
   }
-  if (ids.length === 1 && ids[0] === "ai") {
-    return { ok: false, message: "AnOps AI needs AI features, which the free plan does not include. Add another application to start a 15-day trial." };
+  if (ids.includes("ai")) {
+    return { ok: false, message: "AnOps AI is only available with the MaxOps plan and cannot be selected for a trial or the free plan." };
   }
   return { ok: true, kind: ids.length === 1 ? "free" : "trial", appIds: ids as ApplicationId[] };
 }

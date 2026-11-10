@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction, promptAction, noticeAction } from "@/shared/components/ui/confirm-dialog";
 import { Fragment, useState, useTransition, useMemo, useEffect } from "react";
 import {
   Calendar,
@@ -151,27 +152,35 @@ export function LeaveSection({
     });
   };
 
-  const handleCancelRequest = (requestId: string) => {
-    const reason = window.prompt("Reason for cancelling this request:", "Schedule change");
+  const handleCancelRequest = async (requestId: string) => {
+    const reason = await promptAction({
+      title: "Cancel this leave request?",
+      message: "The employee's balance is restored. Add a short reason for the record.",
+      label: "Reason",
+      defaultValue: "Schedule change",
+      tone: "warning",
+      confirmLabel: "Cancel request",
+      cancelLabel: "Keep request",
+    });
     if (!reason) return;
 
     startTransition(async () => {
       const res = await cancelLeaveRequestAction(requestId, reason);
       if (res.error) {
-        alert(res.error);
+        void noticeAction({ title: "Something went wrong", message: res.error, tone: "danger", okLabel: "Close" });
       } else {
         onRefresh();
       }
     });
   };
 
-  const handleRunAccrual = () => {
-    if (!confirm("Run the monthly leave accrual for the current month?")) return;
+  const handleRunAccrual = async () => {
+    if (!(await confirmAction({ title: "Run the monthly accrual?", message: "Leave days are credited to every active employee for the current month.", confirmLabel: "Run accrual" }))) return;
 
     startTransition(async () => {
       const res = await runMonthlyAccrualAction();
       if (res.error) {
-        alert(res.error);
+        void noticeAction({ title: "Something went wrong", message: res.error, tone: "danger", okLabel: "Close" });
       } else if (res.data) {
         if (res.data.accruedEmployees.length > 0) {
           setAccrualSuccess(`Monthly accrual complete: ${res.data.accruedEmployees.length} employee(s) credited.`);

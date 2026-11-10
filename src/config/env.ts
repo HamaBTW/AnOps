@@ -88,7 +88,9 @@ export const env = loadEnv();
  * normalized to have no trailing slash, because callers append paths.
  */
 export function resolveAppUrl(input: { appUrl?: string; nextAuthUrl?: string } = { appUrl: env.APP_URL, nextAuthUrl: env.NEXTAUTH_URL }): string {
-  const chosen = input.appUrl?.trim() || input.nextAuthUrl?.trim() || "http://localhost:3000";
+  // Order: APP_URL, NEXTAUTH_URL, the host the platform assigns (Vercel), then local development.
+  const platformHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  const chosen = input.appUrl?.trim() || input.nextAuthUrl?.trim() || (platformHost ? `https://${platformHost}` : "") || "http://localhost:3000";
   return chosen.replace(/\/+$/, "");
 }
 

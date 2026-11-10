@@ -175,7 +175,7 @@ export function RegistrationForm({ apps, defaultCurrency }: { apps: ApplicationI
       </fieldset>
 
       <label className="flex items-start gap-3 text-sm text-[var(--color-text-secondary)]">
-        <input type="checkbox" name="acceptTerms" required className="mt-0.5 h-5 w-5 shrink-0 rounded accent-[#111F1D]" />
+        <input type="checkbox" name="acceptTerms" required className="mt-0.5 h-5 w-5 shrink-0 " />
         <span>
           I accept the{" "}
           <Link href="/terms" target="_blank" className="font-semibold text-[var(--color-text-primary)] underline underline-offset-4">

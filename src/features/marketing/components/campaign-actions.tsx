@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useToast } from "@/shared/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -79,8 +80,8 @@ export function CampaignActions({
           </Button>
         )}
         {actions.canDelete && (
-          <Button variant="danger" disabled={pending} onClick={() => {
-            if (!window.confirm("Delete this draft? This cannot be undone.")) return;
+          <Button variant="danger" disabled={pending} onClick={async () => {
+            if (!(await confirmAction({ title: "Delete this draft?", message: "The draft is permanently removed. This cannot be undone.", tone: "danger", confirmLabel: "Delete draft" }))) return;
             startTransition(async () => {
               const result = await deleteCampaignAction(campaign.id);
               if (!result.ok) return toast.fromError(result.error);
@@ -92,8 +93,8 @@ export function CampaignActions({
           </Button>
         )}
         {actions.canCancel && (
-          <Button variant="danger" disabled={pending} onClick={() => {
-            if (!window.confirm("Cancel this campaign? Recipients will not be contacted.")) return;
+          <Button variant="danger" disabled={pending} onClick={async () => {
+            if (!(await confirmAction({ title: "Cancel this campaign?", message: "Recipients will not be contacted.", tone: "warning", confirmLabel: "Cancel campaign", cancelLabel: "Keep campaign" }))) return;
             run(() => cancelCampaignAction(campaign.id, { expectedVersion: version }), "Campaign cancelled.");
           }}>
             Cancel campaign

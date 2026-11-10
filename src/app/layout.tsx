@@ -3,6 +3,8 @@ import Script from "next/script";
 import { headers } from "next/headers";
 import "./globals.css";
 import { PwaRegister } from "@/shared/components/pwa-register";
+import { ConfirmHost } from "@/shared/components/ui/confirm-dialog";
+import { FieldValidationHost } from "@/shared/components/ui/field-validation";
 import { OfflineIndicator } from "@/shared/components/offline-indicator";
 import { OfflineSyncManager } from "@/shared/components/offline-sync-manager";
 import { HydrationMarker } from "@/shared/components/hydration-marker";
@@ -25,7 +27,7 @@ export const metadata: Metadata = {
       { url: "/brand-kit/02-app-icons/anops-favicon-24x24.png", sizes: "24x24", type: "image/png" },
     ],
     shortcut: "/favicon.ico",
-    apple: { url: "/brand-kit/02-app-icons/anops-app-icon-ios-192x192.png", sizes: "192x192", type: "image/png" },
+    apple: { url: "/brand-kit/02-app-icons/anops-app-icon-dark-180.png", sizes: "180x180", type: "image/png" },
   },
 };
 
@@ -180,6 +182,8 @@ export default async function RootLayout({
         )}
         <HydrationMarker />
         <PwaRegister />
+        <ConfirmHost />
+        <FieldValidationHost />
         <OfflineIndicator />
         <OfflineSyncManager />
         {children}

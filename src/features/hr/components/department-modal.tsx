@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmAction } from "@/shared/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import {
   X, Plus, Building2, Loader2, Users, Edit3, Trash2,
@@ -127,12 +128,12 @@ export function DepartmentModal({
     });
   };
 
-  const handleDelete = (dept: Department) => {
+  const handleDelete = async (dept: Department) => {
     if ((dept.employeeCount ?? 0) > 0) {
       setError(`Cannot delete "${dept.name}" — it has ${dept.employeeCount} employee(s). Reassign them first.`);
       return;
     }
-    if (!confirm(`Permanently delete department "${dept.name}"? This cannot be undone.`)) return;
+    if (!(await confirmAction({ title: `Delete ${dept.name}?`, message: "The department is permanently removed. This cannot be undone.", tone: "danger", confirmLabel: "Delete department" }))) return;
     setError(null);
 
     startTransition(async () => {

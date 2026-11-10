@@ -26,6 +26,8 @@ ENV PORT=3000
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/next.config.ts ./next.config.ts
+# next.config.ts imports this at startup (redirects for retired app slugs).
+COPY --from=builder --chown=node:node /app/src/shared/config/catalog.ts ./src/shared/config/catalog.ts
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next ./.next
 USER node

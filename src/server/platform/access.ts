@@ -28,7 +28,7 @@ export type OrgAccess = {
   entitlements: Entitlements;
   /** Applications this person may open right now (organization entitlement ∩ member access). */
   apps: ApplicationId[];
-  organization: { id: string; name: string; activationStatus: "pending" | "active"; activationDeadline: string | null; currency: string };
+  organization: { id: string; name: string; logoUrl: string | null; activationStatus: "pending" | "active"; activationDeadline: string | null; currency: string };
 };
 
 async function loadMember(db: Db, companyId: ObjectId, userId: ObjectId): Promise<MemberAccess | null> {
@@ -42,7 +42,7 @@ async function build(ctx: WorkspaceContext): Promise<OrgAccess> {
   const [member, entitlements, company] = await Promise.all([
     loadMember(ctx.db, ctx.companyId, ctx.userId),
     getEntitlements(ctx.db, ctx.companyId),
-    ctx.db.collection("companies").findOne({ _id: ctx.companyId }, { projection: { name: 1, activationStatus: 1, activationDeadline: 1, currency: 1 } }),
+    ctx.db.collection("companies").findOne({ _id: ctx.companyId }, { projection: { name: 1, activationStatus: 1, activationDeadline: 1, currency: 1, logoUrl: 1 } }),
   ]);
   if (!member || !company) throw new AppError("NO_COMPANY", "Create or join a company to continue.");
   return {
@@ -55,6 +55,7 @@ async function build(ctx: WorkspaceContext): Promise<OrgAccess> {
     organization: {
       id: ctx.companyId.toHexString(),
       name: String(company.name ?? ""),
+      logoUrl: typeof company.logoUrl === "string" ? company.logoUrl : null,
       activationStatus: company.activationStatus === "pending" ? "pending" : "active",
       activationDeadline: company.activationDeadline instanceof Date ? company.activationDeadline.toISOString() : null,
       currency: String(company.currency ?? "TND"),

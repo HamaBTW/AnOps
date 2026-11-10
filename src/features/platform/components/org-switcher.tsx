@@ -6,16 +6,10 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { switchCompanyAction } from "@/features/company/actions/company.action";
 import { CreateCompanyModal } from "@/features/company/components/create-company-modal";
 import { IconCheck, IconChevronDown } from "@/shared/components/ui/brand-icons";
+import { OrgAvatar } from "@/shared/components/ui/org-avatar";
 import { cn } from "@/shared/lib/utils";
 
-export type SwitcherOrg = { id: string; name: string; role: string; plan: string };
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "O";
+export type SwitcherOrg = { id: string; name: string; role: string; plan: string; logoUrl?: string | null };
 
 /**
  * Organization switcher (multi-tenancy). Selecting an organization makes it the active workspace on the server
@@ -65,7 +59,7 @@ export function OrgSwitcher({ organizations, currentId, className }: { organizat
         disabled={pending}
         className="flex min-h-[44px] max-w-full items-center gap-2.5 rounded-[14px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] py-1.5 pl-1.5 pr-3 text-left transition-colors hover:border-[var(--color-border-control)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] disabled:opacity-70"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[var(--color-action-primary)] text-xs font-bold text-[#111F1D]">{initials(current?.name ?? "")}</span>
+        <OrgAvatar name={current?.name ?? ""} logoUrl={current?.logoUrl} className="h-8 w-8 rounded-[10px] bg-[var(--color-action-primary)] text-xs font-bold text-[#111F1D]" />
         <span className="min-w-0">
           <span className="block max-w-[150px] truncate text-sm font-semibold text-[var(--color-text-primary)] sm:max-w-[200px]">{current?.name}</span>
           <span className="block text-[11px] text-[var(--color-text-secondary)]">{organizations.length > 1 ? `${organizations.length} organizations` : "Your organization"}</span>
@@ -84,7 +78,7 @@ export function OrgSwitcher({ organizations, currentId, className }: { organizat
                   onClick={() => select(org.id)}
                   className={cn("flex min-h-[48px] w-full items-center gap-3 rounded-[12px] px-2.5 py-2 text-left transition-colors", org.id === currentId ? "bg-[var(--color-bg-subtle)]" : "hover:bg-[var(--color-bg-subtle)]")}
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[var(--color-text-primary)] text-xs font-bold text-[var(--color-bg-canvas)]">{initials(org.name)}</span>
+                  <OrgAvatar name={org.name} logoUrl={org.logoUrl} className="h-8 w-8 rounded-[10px] bg-[var(--color-text-primary)] text-xs font-bold text-[var(--color-bg-canvas)]" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-[var(--color-text-primary)]">{org.name}</span>
                     <span className="block truncate text-xs text-[var(--color-text-secondary)]">

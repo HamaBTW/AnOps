@@ -6,14 +6,8 @@ import { useState, useTransition } from "react";
 import { switchCompanyAction } from "@/features/company/actions/company.action";
 import { CreateCompanyModal } from "@/features/company/components/create-company-modal";
 import type { MyOrganization } from "@/server/platform/organization.service";
+import { OrgAvatar } from "@/shared/components/ui/org-avatar";
 import { cn } from "@/shared/lib/utils";
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "O";
 
 /** All organizations of the signed-in person: open management, make one the active workspace, or create a new one. */
 export function OrganizationsList({ organizations }: { organizations: MyOrganization[] }) {
@@ -60,7 +54,7 @@ export function OrganizationsList({ organizations }: { organizations: MyOrganiza
               )}
             >
               <div className="flex items-start gap-4">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-[var(--color-action-primary)] font-[family-name:var(--font-heading)] text-xl font-bold text-[#111F1D]">{initials(org.name)}</span>
+                <OrgAvatar name={org.name} logoUrl={org.logoUrl} className="h-14 w-14 items-center justify-center rounded-[16px] bg-[var(--color-action-primary)] font-[family-name:var(--font-heading)] text-xl font-bold text-[#111F1D]" />
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-lg font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{org.name}</h2>
                   <p className="truncate text-xs text-[var(--color-text-secondary)]">

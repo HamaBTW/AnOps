@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { AnimatedIcon } from "@/shared/components/portal/animated-icon";
 import { IconArrowRight, IconCheck, IconSettings } from "@/shared/components/ui/brand-icons";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
+import { OrgAvatar } from "@/shared/components/ui/org-avatar";
 import { LogoutButton } from "@/features/platform/components/logout-button";
 import { AppSwitcher } from "@/features/platform/components/app-switcher";
 import { chooseFreeFallbackAction, resendActivationAction } from "@/features/platform/actions/workspace.action";
@@ -17,7 +18,7 @@ import { cn } from "@/shared/lib/utils";
 
 export type HomeData = {
   user: { firstName: string; name: string; email: string; initials: string };
-  organization: { id: string; name: string; initials: string; role: string };
+  organization: { id: string; name: string; logoUrl: string | null; initials: string; role: string };
   organizations: { id: string; name: string }[];
   access: { kind: AccessKind; plan: PlanId | null; trialDaysLeft: number | null; accessEndsAt: string | null; needsPlanSelection: boolean; aiFeatures: boolean };
   allowedApps: ApplicationId[];
@@ -363,12 +364,12 @@ function Dock({ data }: { data: HomeData }) {
         <span aria-hidden="true" className="mx-1 h-8 w-px bg-[var(--color-border-subtle)]" />
         {data.organizations.length > 1 ? (
           <button type="button" onClick={() => setMenu((v) => !v)} aria-expanded={menu} aria-label={`Organization: ${data.organization.name}`} className={item}>
-            <span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#111F1D] text-sm font-bold text-[#C8F03E]">{data.organization.initials}</span>
+            <OrgAvatar name={data.organization.name} logoUrl={data.organization.logoUrl} className="h-11 w-11 rounded-[12px] bg-[#111F1D] text-sm font-bold text-[#C8F03E]" />
             <span className={tip}>{data.organization.name}</span>
           </button>
         ) : (
           <Link href={`/organization/${data.organization.id}`} aria-label={`Organization: ${data.organization.name}`} className={item}>
-            <span className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#111F1D] text-sm font-bold text-[#C8F03E]">{data.organization.initials}</span>
+            <OrgAvatar name={data.organization.name} logoUrl={data.organization.logoUrl} className="h-11 w-11 rounded-[12px] bg-[#111F1D] text-sm font-bold text-[#C8F03E]" />
             <span className={tip}>{data.organization.name}</span>
           </Link>
         )}

@@ -3,19 +3,13 @@ import { OrgNav } from "@/features/platform/components/org-nav";
 import { ToastProvider } from "@/shared/components/ui/toast";
 import { ThemeToggle } from "@/shared/components/theme-toggle";
 import { cookies } from "next/headers";
+import { OrgAvatar } from "@/shared/components/ui/org-avatar";
 import { OrgSwitcher } from "@/features/platform/components/org-switcher";
 import { ActivateOrgBanner } from "@/features/platform/components/activate-org-banner";
 import { listMyOrganizations } from "@/server/platform/organization.service";
 import { ACTIVE_COMPANY_COOKIE } from "@/server/tenant/context";
 import { getPageOrganization, isOrgManager } from "@/server/platform/access";
 import { PLANS } from "@/shared/domain/plans";
-
-const initials = (text: string) =>
-  text
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("") || "A";
 
 export default async function OrganizationLayout({ children, params }: { children: React.ReactNode; params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
@@ -50,9 +44,7 @@ export default async function OrganizationLayout({ children, params }: { childre
             <div aria-hidden="true" className="portal-grid pointer-events-none absolute inset-0 opacity-70 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]" />
             <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[var(--color-action-primary)] opacity-[0.14] blur-3xl" />
             <div className="relative flex items-center gap-4 sm:gap-5">
-              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[20px] bg-[var(--color-action-primary)] font-[family-name:var(--font-heading)] text-2xl font-bold text-[#111F1D] shadow-[0_14px_30px_-14px_var(--color-action-primary)] sm:h-20 sm:w-20 sm:text-3xl">
-                {initials(access.organization.name)}
-              </span>
+              <OrgAvatar name={access.organization.name} logoUrl={access.organization.logoUrl} className="h-16 w-16 shrink-0 items-center justify-center rounded-[20px] bg-[var(--color-action-primary)] font-[family-name:var(--font-heading)] text-2xl font-bold text-[#111F1D] shadow-[0_14px_30px_-14px_var(--color-action-primary)] sm:h-20 sm:w-20 sm:text-3xl" />
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-secondary)]">Organization</p>
                 <h1 className="mt-0.5 line-clamp-2 break-words font-[family-name:var(--font-heading)] text-[26px] leading-[1.1] tracking-[-0.035em] text-[var(--color-text-primary)] sm:text-[36px]">

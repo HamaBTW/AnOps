@@ -20,6 +20,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
   // index to existing data could fail on duplicates and stop the app from starting. Default index names are kept so
   // databases that already ran the migration do not hit a name conflict.
   users: [{ key: { email: 1 } }],
+  // One logo generation at a time per organization; stale locks leave by TTL.
+  organization_logo_locks: [{ key: { expiresAt: 1 }, expireAfterSeconds: 0 }],
   employees: [{ key: { companyId: 1, email: 1 } }, { key: { email: 1 } }, { key: { companyId: 1, departmentId: 1, status: 1 } }],
   departments: [{ key: { companyId: 1, name: 1 } }],
   job_titles: [{ key: { companyId: 1, isPredefined: -1, title: 1 } }],

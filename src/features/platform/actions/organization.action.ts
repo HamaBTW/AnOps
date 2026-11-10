@@ -7,6 +7,7 @@ import { auth } from "@/server/auth";
 import clientPromise from "@/server/db/client";
 import { toActionError } from "@/server/actions/run-action";
 import { resolveOrganizationById, type OrgAccess } from "@/server/platform/access";
+import { generateLogoCandidate, setOrganizationLogo } from "@/server/platform/organization-logo.service";
 import { resendInvitation, revokeInvitation } from "@/server/platform/invitation.service";
 import { changeMemberRole, leaveOrganization, removeMember, setMemberAppAccess, setMemberSuspended, updateOrganizationProfile } from "@/server/platform/organization.service";
 import { changePassword, updateUserProfile } from "@/server/platform/profile.service";
@@ -43,6 +44,16 @@ export const updateBillingContactAction = async (orgId: string, email: string) =
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || value.length > 254) throw new AppError("VALIDATION_ERROR", "Enter a valid billing email.");
     await setBillingPreferences(a.ctx.db, a.ctx.companyId, { billingEmail: value });
   });
+
+/** Brand identity. The owner check, plan check and limits live in the service; nothing here trusts the client. */
+export const generateLogoAction = async (orgId: string, input: unknown) => runOrg(orgId, "org.logo.generate", (a) => generateLogoCandidate(a, input));
+export const setOrganizationLogoAction = async (orgId: string, image: string) => runOrg(orgId, "org.logo.save", async (a) => {
+  const result = await setOrganizationLogo(a, image);
+  // The app launcher, Dock and switchers read the logo from the layout/home data.
+  revalidatePath("/anops");
+  revalidatePath("/organization");
+  return result;
+});
 
 // ───────────────────────── Personal profile (no organization involved) ─────────────────────────
 

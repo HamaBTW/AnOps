@@ -40,7 +40,7 @@ export default async function AnopsPage({ searchParams }: { searchParams: Promis
 
   const data: HomeData = {
     user: { firstName, name, email: String(user?.email ?? ""), initials: initials(name) },
-    organization: { id: access.organization.id, name: access.organization.name, initials: initials(access.organization.name), role: access.companyRole },
+    organization: { id: access.organization.id, name: access.organization.name, logoUrl: access.organization.logoUrl, initials: initials(access.organization.name), role: access.companyRole },
     organizations: organizations.map((org) => ({ id: org.id, name: org.name })),
     access: {
       kind: access.entitlements.kind,

@@ -237,6 +237,7 @@ export type MyOrganization = {
   currency: string;
   active: boolean;
   pendingActivation: boolean;
+  logoUrl: string | null;
 };
 
 /** Every organization the person actively belongs to, with their role and the organization's current plan. */
@@ -259,6 +260,7 @@ export async function listMyOrganizations(db: Db, userId: ObjectId, activeId: st
         currency: company.currency,
         active: company.id === activeId,
         pendingActivation: company.activationStatus === "pending",
+        logoUrl: company.logoUrl ?? null,
       };
     })
   );

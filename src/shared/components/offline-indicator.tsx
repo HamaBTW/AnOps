@@ -26,18 +26,17 @@ export function useOnlineStatus() {
 
 export function OfflineIndicator() {
   const isOnline = useOnlineStatus();
-  const [previouslyOffline, setPreviouslyOffline] = useState(false);
-  const [showRestored, setShowRestored] = useState(false);
+  // idle → offline → restored (shown for 4 s) → idle. The phase follows the connection during render; only the timer is an effect.
+  const [phase, setPhase] = useState<"idle" | "offline" | "restored">("idle");
+  if (!isOnline && phase !== "offline") setPhase("offline");
+  else if (isOnline && phase === "offline") setPhase("restored");
+  const showRestored = phase === "restored";
 
   useEffect(() => {
-    if (!isOnline) {
-      setPreviouslyOffline(true);
-    } else if (previouslyOffline) {
-      setShowRestored(true);
-      const timer = setTimeout(() => setShowRestored(false), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [isOnline, previouslyOffline]);
+    if (phase !== "restored") return;
+    const timer = setTimeout(() => setPhase("idle"), 4000);
+    return () => clearTimeout(timer);
+  }, [phase]);
 
   if (isOnline && !showRestored) return null;
 

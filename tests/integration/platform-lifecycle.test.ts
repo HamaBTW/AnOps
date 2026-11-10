@@ -4,6 +4,9 @@ import { createHarness, type TestHarness } from "../helpers/workspace";
 
 const shared = vi.hoisted(() => ({ db: null as unknown, sent: [] as Array<{ to: string; subject: string; html: string; text: string }> }));
 vi.mock("@/server/db/client", () => ({ default: Promise.resolve({ db: () => shared.db }) }));
+vi.mock("@/server/auth", () => ({ auth: async () => null }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+vi.mock("next/navigation", () => ({ redirect: () => undefined }));
 vi.mock("@/server/tenant/context", () => ({ getActiveTenant: async () => null }));
 vi.mock("@/server/email/client", () => ({ sendMail: async (m: (typeof shared.sent)[number]) => (shared.sent.push(m), { delivered: true }) }));
 
@@ -12,6 +15,8 @@ const { activateOrganization, resendActivation } = await import("@/server/platfo
 const { runLifecycleMaintenance } = await import("@/server/platform/cleanup.service");
 const { inviteMembers, acceptInvitation, previewInvitation, revokeInvitation } = await import("@/server/platform/invitation.service");
 const { chooseFreeFallback, getEntitlements, getSubscriptionDoc } = await import("@/server/platform/subscription.service");
+const { allowAuthAttempt } = await import("@/server/security/auth-throttle");
+const { assertAppAccessFor, assertAiEntitled } = await import("@/server/platform/access");
 const { listMyOrganizations, leaveOrganization } = await import("@/server/platform/organization.service");
 const { resolveAiAccess } = await import("@/server/ai/access/access.service");
 const { effectiveApps } = await import("@/shared/domain/plans");
@@ -272,5 +277,70 @@ describe("multi-organization", () => {
     await leaveOrganization(access(member, "employee"));
     expect(await h.db.collection("company_members").countDocuments({ companyId: owner.companyId, userId: member })).toBe(0);
     expect(await h.db.collection("company_members").countDocuments({ companyId: owner.companyId, role: "owner" })).toBe(1);
+  });
+});
+
+describe("server-side application access", () => {
+  it("refuses applications outside the plan or outside a member's own access, on every call", async () => {
+    const owner = await registerOrganization(h.db, form(["finance", "inventory"]), meta());
+    await activateOrganization(h.db, tokenFrom(shared.sent.at(-1)!.text, "/activate"), "req");
+    // Owner: both trial applications work, others are refused.
+    await expect(assertAppAccessFor(h.db, owner.companyId, owner.userId, "finance")).resolves.toBeUndefined();
+    await expect(assertAppAccessFor(h.db, owner.companyId, owner.userId, "inventory")).resolves.toBeUndefined();
+    await expect(assertAppAccessFor(h.db, owner.companyId, owner.userId, "purchasing")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    // A member limited to Finance cannot use Inventory even though the organization has it.
+    const member = new ObjectId();
+    await h.db.collection("company_members").insertOne({ companyId: owner.companyId, userId: member, role: "manager", status: "active", appAccess: ["finance"], createdAt: new Date(), updatedAt: new Date() });
+    await expect(assertAppAccessFor(h.db, owner.companyId, member, "finance")).resolves.toBeUndefined();
+    await expect(assertAppAccessFor(h.db, owner.companyId, member, "inventory")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    // Employees never open Finance, Purchasing or Marketing even when the organization has them.
+    const employee = new ObjectId();
+    await h.db.collection("company_members").insertOne({ companyId: owner.companyId, userId: employee, role: "employee", status: "active", createdAt: new Date(), updatedAt: new Date() });
+    await expect(assertAppAccessFor(h.db, owner.companyId, employee, "finance")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(assertAppAccessFor(h.db, owner.companyId, employee, "inventory")).resolves.toBeUndefined();
+    // Strangers and suspended members are refused outright.
+    await expect(assertAppAccessFor(h.db, owner.companyId, new ObjectId(), "finance")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("sign-in throttling", () => {
+  it("stops repeated attempts for one address and account, without locking out other people", async () => {
+    const limits = { pair: 3, account: 5, ip: 50 };
+    for (let i = 0; i < 3; i++) expect(await allowAuthAttempt(h.db, "login", "1.1.1.1", "victim@example.test", limits)).toBe(true);
+    expect(await allowAuthAttempt(h.db, "login", "1.1.1.1", "victim@example.test", limits)).toBe(false);
+    // The same account from another address still has account-level room; another account from the first address is unaffected.
+    expect(await allowAuthAttempt(h.db, "login", "2.2.2.2", "victim@example.test", limits)).toBe(true);
+    expect(await allowAuthAttempt(h.db, "login", "1.1.1.1", "someone.else@example.test", limits)).toBe(true);
+    // A distributed run still hits the account ceiling (3 + 1 so far, 5 allowed).
+    expect(await allowAuthAttempt(h.db, "login", "3.3.3.3", "victim@example.test", limits)).toBe(true);
+    expect(await allowAuthAttempt(h.db, "login", "4.4.4.4", "victim@example.test", limits)).toBe(false);
+  });
+});
+
+describe("AI availability by plan (what the AI health endpoint and every AI action rely on)", () => {
+  it("AI is open only for trial, MaxOps and Custom with the AI add-on; never for OneOps or AllOps", async () => {
+    const owner = await registerOrganization(h.db, form(["finance", "inventory"]), meta());
+    await activateOrganization(h.db, tokenFrom(shared.sent.at(-1)!.text, "/activate"), "req");
+    const subs = h.db.collection("organization_subscriptions");
+    const set = (patch: Record<string, unknown>) => subs.updateOne({ companyId: owner.companyId }, { $set: { legacy: false, status: "active", cancelAtPeriodEnd: false, currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000), ...patch } });
+    const ai = () => assertAiEntitled(h.db, owner.companyId);
+
+    await expect(ai()).resolves.toBeUndefined(); // trial includes AI
+    await set({ status: "free", plan: "oneops", freeAppId: "finance" });
+    await expect(ai()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await set({ status: "active", plan: "allops", aiAddon: false });
+    await expect(ai()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(assertAppAccessFor(h.db, owner.companyId, owner.userId, "hr-payroll")).resolves.toBeUndefined(); // all other apps stay
+    await set({ status: "active", plan: "maxops" });
+    await expect(ai()).resolves.toBeUndefined();
+    await set({ status: "active", plan: "custom", customAppIds: ["finance", "inventory"], aiAddon: false });
+    await expect(ai()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(assertAppAccessFor(h.db, owner.companyId, owner.userId, "purchasing")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await set({ status: "active", plan: "custom", customAppIds: ["finance", "inventory"], aiAddon: true });
+    await expect(ai()).resolves.toBeUndefined();
+    // Subscription lapses: everything closes at once, no matter the plan that was active.
+    await set({ status: "canceled", plan: "maxops", currentPeriodEnd: new Date(Date.now() - 1000) });
+    await expect(ai()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(assertAppAccessFor(h.db, owner.companyId, owner.userId, "finance")).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getFinanceService } from "@/server/services/finance.service";
+import { assertWorkspaceAppAccess } from "@/server/platform/access";
 import { resolveWorkspace } from "@/server/tenancy/workspace";
 import { applyReceiptToExpense, scanReceipt, type ReceiptScan } from "@/server/finance/receipt-ocr.service";
 import { MAX_RECEIPT_BYTES } from "@/server/finance/receipt-storage";
@@ -23,6 +24,7 @@ function message(error: unknown, fallback: string): string {
 export async function scanReceiptAction(formData: FormData): Promise<ActionResult<ReceiptScan>> {
   try {
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "finance");
     const files = formData.getAll("receipt").filter((f): f is File => f instanceof File && f.size > 0);
     if (files.length > MAX_FILES_PER_SCAN) return { error: "Scan one receipt at a time." };
     const file = files[0];
@@ -52,6 +54,7 @@ export async function applyReceiptAction(
     const parsed = expenseCreateSchema.safeParse(values);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message || "Invalid input" };
     const ctx = await resolveWorkspace();
+    await assertWorkspaceAppAccess(ctx, "finance");
     const result = await applyReceiptToExpense(ctx, extractionId, parsed.data, { submit: !!opts.submit });
     revalidatePath("/finance/receipts");
     revalidatePath("/finance/expenses");

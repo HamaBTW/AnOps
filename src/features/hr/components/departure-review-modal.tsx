@@ -6,6 +6,7 @@ import type { Employee } from "@/features/hr/types";
 import { getDepartureReviewAction, confirmDepartureCompensationAction } from "@/features/hr/actions/leave.action";
 import { Portal } from "@/shared/components/ui/portal";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
+import { useDialog } from "@/shared/hooks/use-dialog";
 
 type DepartureReviewModalProps = {
   isOpen: boolean;
@@ -26,26 +27,30 @@ export function DepartureReviewModal({
     potentialCompensationDays: number;
     warning: string;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Which employee the loaded data belongs to; loading is simply "open and not loaded yet".
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useScrollLock(isOpen);
+  const dialogRef = useDialog<HTMLDivElement>(isOpen, onClose);
+
+  if (!isOpen && loadedFor !== null) setLoadedFor(null); // reopening always reloads
+  const loading = isOpen && loadedFor !== employee.id;
 
   useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      setError(null);
-      getDepartureReviewAction(employee.id).then((res) => {
-        if (res.error) {
-          setError(res.error);
-        } else if (res.data) {
-          setData(res.data);
-        }
-        setLoading(false);
-      });
-    }
+    if (!isOpen) return;
+    let cancelled = false;
+    getDepartureReviewAction(employee.id).then((res) => {
+      if (cancelled) return;
+      setError(res.error ?? null);
+      if (res.data) setData(res.data);
+      setLoadedFor(employee.id);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, employee.id]);
 
   const handleConfirmCompensation = (e: React.FormEvent) => {
@@ -77,7 +82,7 @@ export function DepartureReviewModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div role="dialog" ref={dialogRef} tabIndex={-1} aria-modal="true" aria-label="Departure review" className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
         <div
           className="relative w-full max-w-lg rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl"
           onClick={(e) => e.stopPropagation()}

@@ -6,5 +6,5 @@ import { supplierExportQuerySchema } from "@/features/exports/schemas/export.sch
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
-  return handleExport(request, "suppliers", supplierExportQuerySchema, exportSuppliers);
+  return handleExport(request, "purchasing", "suppliers", supplierExportQuerySchema, exportSuppliers);
 }

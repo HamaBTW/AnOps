@@ -120,8 +120,8 @@ function CustomerForm({
           />
         </div>
         <div className="sm:col-span-2 space-y-1">
-          <label className="text-sm font-medium text-[var(--color-text-secondary)]">Notes (Optional)</label>
-          <textarea
+          <label htmlFor="customer-notes" className="text-sm font-medium text-[var(--color-text-secondary)]">Notes (Optional)</label>
+          <textarea id="customer-notes"
             rows={2}
             className={textareaClass}
             placeholder="Payment terms, special discounts, billing contact notes..."

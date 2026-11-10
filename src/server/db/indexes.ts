@@ -15,6 +15,18 @@ import { PLATFORM_INDEXES } from "@/server/platform/collections";
  * Tenant-scoped indexes lead with companyId because every query filters on it.
  */
 const INDEXES: Record<string, IndexDescription[]> = {
+  // Accounts and the original HR collections. These were only ever indexed by a one-off migration script, so a fresh
+  // database scanned them on every sign-in and every HR or Finance request. Non-unique on purpose: adding a unique
+  // index to existing data could fail on duplicates and stop the app from starting. Default index names are kept so
+  // databases that already ran the migration do not hit a name conflict.
+  users: [{ key: { email: 1 } }],
+  employees: [{ key: { companyId: 1, email: 1 } }, { key: { email: 1 } }, { key: { companyId: 1, departmentId: 1, status: 1 } }],
+  departments: [{ key: { companyId: 1, name: 1 } }],
+  job_titles: [{ key: { companyId: 1, isPredefined: -1, title: 1 } }],
+  leave_types: [{ key: { companyId: 1, code: 1 } }],
+  leave_policies: [{ key: { companyId: 1, isActive: 1, employeeCategory: 1 } }],
+  public_holidays: [{ key: { companyId: 1, date: 1 } }],
+  leave_transactions: [{ key: { companyId: 1, employeeId: 1, effectiveDate: -1 } }],
   // Tenant boundary. The slug index is partial so legacy documents without a slug do not collide.
   [COLLECTIONS.companies]: [
     { key: { slug: 1 }, name: "company_slug_unique", unique: true, partialFilterExpression: { slug: { $exists: true } } },

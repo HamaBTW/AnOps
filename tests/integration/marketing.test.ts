@@ -505,7 +505,7 @@ describe("permission boundaries", () => {
     await expectCode(createContact(viewer, parsed(contactCreateSchema, contactInput({ firstName: "Nope" }))), "FORBIDDEN");
     await expectCode(createTemplate(viewer, parsed(templateInputSchema, { name: "Nope", channel: "sms", subject: "", body: "x", isActive: true })), "FORBIDDEN");
     await expectCode(createTag(viewer, parsed(tagInputSchema, { name: "Nope", color: "#1f7a5c" })), "FORBIDDEN");
-    const scheduled = await listContacts(viewer, parsed((await import("@/features/marketing/schemas/marketing.schema")).contactListQuerySchema, {}));
-    expect(scheduled.items.length).toBeGreaterThan(0);
+    // Employees do not read the contact list at all (personal data of customers and leads).
+    await expectCode(listContacts(viewer, parsed((await import("@/features/marketing/schemas/marketing.schema")).contactListQuerySchema, {})), "FORBIDDEN");
   });
 });

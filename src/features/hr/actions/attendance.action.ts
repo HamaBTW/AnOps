@@ -14,7 +14,7 @@ import { requireAuthUser } from "@/server/auth/rbac";
 
 export async function checkInAction(employeeId: string): Promise<ActionResult<AttendanceRecord>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const effectiveEmployeeId = !authUser.isAdmin && authUser.employee ? authUser.employee.id : employeeId;
 
     if (!effectiveEmployeeId) {
@@ -31,7 +31,7 @@ export async function checkInAction(employeeId: string): Promise<ActionResult<At
 
 export async function checkOutAction(employeeId: string): Promise<ActionResult<AttendanceRecord>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const effectiveEmployeeId = !authUser.isAdmin && authUser.employee ? authUser.employee.id : employeeId;
 
     if (!effectiveEmployeeId) {
@@ -48,7 +48,7 @@ export async function checkOutAction(employeeId: string): Promise<ActionResult<A
 
 export async function getTodayAttendanceAction(): Promise<ActionResult<TodayAttendanceSummary>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const summary = await getTodayAttendance(authUser.companyId);
     return { success: true, data: summary };
   } catch (err: unknown) {
@@ -63,7 +63,7 @@ export async function getAttendanceHistoryAction(filter: {
   endDate?: string;
 }): Promise<ActionResult<AttendanceRecord[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const effectiveFilter = !authUser.isAdmin && authUser.employee
       ? { ...filter, employeeId: authUser.employee.id }
       : filter;

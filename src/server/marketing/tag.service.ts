@@ -2,7 +2,7 @@ import "server-only";
 import { ObjectId, type Db } from "mongodb";
 import { MARKETING_COLLECTIONS, type AudienceDoc, type ContactDoc, type ContactTagDoc, type TagDoc } from "@/server/marketing/documents";
 import { recordAudit } from "@/server/audit/audit.service";
-import { withTransaction } from "@/server/db/transactions";
+import { withTransaction, isDuplicateKeyError } from "@/server/db/transactions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import type { TagInput } from "@/features/marketing/schemas/marketing.schema";
@@ -21,10 +21,6 @@ function toTagDto(doc: TagDoc, contactCount: number): TagDto {
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
-}
-
-function isDuplicateKey(error: unknown): boolean {
-  return (error as { code?: number }).code === 11000;
 }
 
 const DUPLICATE_TAG = () =>
@@ -59,7 +55,7 @@ export async function createTag(ctx: WorkspaceContext, input: TagInput): Promise
   try {
     await ctx.db.collection<TagDoc>(MARKETING_COLLECTIONS.tags).insertOne(doc);
   } catch (error) {
-    if (isDuplicateKey(error)) throw DUPLICATE_TAG();
+    if (isDuplicateKeyError(error)) throw DUPLICATE_TAG();
     throw error;
   }
   return toTagDto(doc, 0);
@@ -87,7 +83,7 @@ export async function updateTag(ctx: WorkspaceContext, tagIdRaw: string, input: 
       .countDocuments({ ...scopeOf(ctx), tagId });
     return toTagDto(result, count);
   } catch (error) {
-    if (isDuplicateKey(error)) throw DUPLICATE_TAG();
+    if (isDuplicateKeyError(error)) throw DUPLICATE_TAG();
     throw error;
   }
 }

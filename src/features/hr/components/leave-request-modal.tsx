@@ -4,6 +4,7 @@ import { useState, useTransition, useMemo } from "react";
 import { X, Calendar, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { Employee, LeaveType } from "@/features/hr/types";
 import { useScrollLock } from "@/shared/hooks/use-scroll-lock";
+import { useDialog } from "@/shared/hooks/use-dialog";
 import { Portal } from "@/shared/components/ui/portal";
 import { submitLeaveRequestAction } from "@/features/hr/actions/leave.action";
 
@@ -46,6 +47,7 @@ export function LeaveRequestModal({
   const [isPaid, setIsPaid] = useState<boolean>(true);
 
   useScrollLock(isOpen);
+  const dialogRef = useDialog<HTMLDivElement>(isOpen, onClose);
 
   // Automatically adjust isPaid default when leaveType changes
   const handleLeaveTypeChange = (type: LeaveType) => {
@@ -137,7 +139,7 @@ export function LeaveRequestModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div role="dialog" ref={dialogRef} tabIndex={-1} aria-modal="true" aria-label="Leave request" className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center sm:items-center overflow-hidden p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
         <div
           className="relative w-full max-w-lg max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto rounded-t-[calc(var(--radius-card)+6px)] sm:rounded-[var(--radius-card)] border-t sm:border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-4 sm:p-6 shadow-2xl pb-[max(1rem,env(safe-area-inset-bottom))]"
           onClick={(e) => e.stopPropagation()}

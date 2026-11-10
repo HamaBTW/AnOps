@@ -34,6 +34,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     if (error instanceof AuthError) {
       const code = (error as AuthError & { code?: string }).code;
       if (code === "banned") redirect("/banned");
+      if (code === "rate_limited") return { error: "Too many sign-in attempts. Please wait 15 minutes and try again." };
       if (code === "unverified") {
         redirect(`/unverified?email=${encodeURIComponent(email)}`);
       }

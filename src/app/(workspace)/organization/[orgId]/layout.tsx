@@ -43,7 +43,7 @@ export default async function OrganizationLayout({ children, params }: { childre
             </div>
           </div>
         </header>
-        <div className="mx-auto w-full max-w-[1200px] px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+        <main id="main" className="mx-auto w-full max-w-[1200px] px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
           {activeId && activeId !== orgId && <div className="mb-5"><ActivateOrgBanner orgId={orgId} orgName={access.organization.name} /></div>}
           {/* Identity */}
           <section className="relative overflow-hidden rounded-[24px] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 sm:p-7" aria-label="Organization">
@@ -75,7 +75,7 @@ export default async function OrganizationLayout({ children, params }: { childre
             </aside>
             <div className="min-w-0">{children}</div>
           </div>
-        </div>
+        </main>
       </div>
     </ToastProvider>
   );

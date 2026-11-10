@@ -249,7 +249,9 @@ describe("AI-assisted entry declarations", () => {
 describe("capability ceiling", () => {
   it("viewers can only ever view; operators cannot approve what they cannot approve elsewhere", () => {
     const viewer = permissionsForRole("viewer");
-    for (const m of AI_MODULES) for (const op of AI_OPERATIONS) expect(roleAllows(viewer, m, op)).toBe(op === "view");
+    // Employees view team data only; finance, purchasing and marketing are not part of their role at all.
+    const teamModules = new Set(["hr", "inventory", "manufacturing", "community"]);
+    for (const m of AI_MODULES) for (const op of AI_OPERATIONS) expect(roleAllows(viewer, m, op)).toBe(op === "view" && teamModules.has(m));
     const operator = permissionsForRole("operator");
     expect(roleAllows(operator, "purchasing", "approve")).toBe(false);
     expect(roleAllows(operator, "inventory", "approve")).toBe(false);

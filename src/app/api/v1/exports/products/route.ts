@@ -6,5 +6,5 @@ import { productExportQuerySchema } from "@/features/exports/schemas/export.sche
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
-  return handleExport(request, "products", productExportQuerySchema, exportProducts);
+  return handleExport(request, "inventory", "products", productExportQuerySchema, exportProducts);
 }

@@ -60,6 +60,6 @@ export async function changePassword(db: Db, userId: ObjectId, raw: unknown, req
   if (!user?.password || !(await bcrypt.compare(parsed.data.currentPassword, String(user.password)))) {
     throw new AppError("VALIDATION_ERROR", "Your current password is incorrect.", { currentPassword: "Incorrect password." });
   }
-  await db.collection("users").updateOne({ _id: userId }, { $set: { password: await bcrypt.hash(parsed.data.password, 12), forcePasswordReset: false, passwordChangedAt: new Date(), updatedAt: new Date() } });
+  await db.collection("users").updateOne({ _id: userId }, { $set: { password: await bcrypt.hash(parsed.data.password, 12), forcePasswordReset: false, passwordChangedAt: new Date(), updatedAt: new Date() }, $unset: { passwordResetTokenHash: "", passwordResetToken: "", passwordResetExpires: "" } });
   await recordAudit(db, { companyId: null, actorUserId: userId, action: "user.password_changed", entityType: "user", entityId: userId.toHexString(), requestId });
 }

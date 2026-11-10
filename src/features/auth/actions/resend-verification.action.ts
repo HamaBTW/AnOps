@@ -1,6 +1,8 @@
 "use server";
 
 import clientPromise from "@/server/db/client";
+import { allowAuthAttempt, requestIp } from "@/server/security/auth-throttle";
+import { maskEmail } from "@/server/auth/reset-token";
 import { forgotPasswordSchema } from "@/features/auth/schemas/auth.schema";
 import {
   issueVerificationEmail,
@@ -26,26 +28,30 @@ export async function resendVerificationAction(
   }
 
   const email = parsed.data.email.toLowerCase().trim();
-  console.info(`[auth] verification resend requested for ${email}`);
+  console.info(`[auth] verification resend requested for ${maskEmail(email)}`);
 
   try {
     const client = await clientPromise;
     const db = client.db();
     const users = db.collection("users");
 
+    if (!(await allowAuthAttempt(db, "verify-resend", await requestIp(), email, { pair: 5, account: 8, ip: 30, windowMs: 60 * 60_000 }))) {
+      return { success: GENERIC_SUCCESS };
+    }
+
     const user = await users.findOne({ email });
     if (!user) {
-      console.warn(`[auth] verification resend: no user found for ${email} — no email sent`);
+      console.warn(`[auth] verification resend: no user found for ${maskEmail(email)} — no email sent`);
       return { success: GENERIC_SUCCESS };
     }
 
     if (user.status === "banned") {
-      console.warn(`[auth] verification resend: ${email} is banned — no email sent`);
+      console.warn(`[auth] verification resend: ${maskEmail(email)} is banned — no email sent`);
       return { success: GENERIC_SUCCESS };
     }
 
     if (user.status === "active" || user.emailVerified) {
-      console.info(`[auth] verification resend: ${email} is already verified — no email sent`);
+      console.info(`[auth] verification resend: ${maskEmail(email)} is already verified — no email sent`);
       return { success: GENERIC_SUCCESS };
     }
 

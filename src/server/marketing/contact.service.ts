@@ -3,7 +3,7 @@ import { ObjectId, type Db, type Filter, type Sort } from "mongodb";
 import { MARKETING_COLLECTIONS, type ContactDoc, type ContactTagDoc, type TagDoc } from "@/server/marketing/documents";
 import type { ContactSource, LifecycleStage } from "@/features/marketing/types/constants";
 import { recordAudit } from "@/server/audit/audit.service";
-import { withTransaction, type Tx } from "@/server/db/transactions";
+import { withTransaction, type Tx, isDuplicateKeyError } from "@/server/db/transactions";
 import type { WorkspaceContext } from "@/server/tenancy/workspace";
 import { AppError } from "@/shared/lib/errors";
 import type { ContactCreateInput, ContactListQuery, ContactUpdateInput } from "@/features/marketing/schemas/marketing.schema";
@@ -83,10 +83,6 @@ function duplicateEmailError(): AppError {
   return new AppError("CONFLICT", "A contact with this email address already exists", {
     email: "This email address is already a contact in your company",
   });
-}
-
-function isDuplicateKey(error: unknown): boolean {
-  return (error as { code?: number }).code === 11000;
 }
 
 /** Builds the list filter. Every clause is typed; user text is escaped and length-capped before use. */
@@ -253,7 +249,7 @@ export async function createContact(ctx: WorkspaceContext, input: ContactCreateI
       );
     });
   } catch (error) {
-    if (isDuplicateKey(error)) throw duplicateEmailError();
+    if (isDuplicateKeyError(error)) throw duplicateEmailError();
     throw error;
   }
   return toContactDto(doc);
@@ -290,7 +286,7 @@ export async function updateContact(ctx: WorkspaceContext, contactIdRaw: string,
           { returnDocument: "after", session: tx.session }
         );
       } catch (error) {
-        if (isDuplicateKey(error)) throw duplicateEmailError();
+        if (isDuplicateKeyError(error)) throw duplicateEmailError();
         throw error;
       }
       if (!result) {
@@ -327,7 +323,7 @@ export async function updateContact(ctx: WorkspaceContext, contactIdRaw: string,
       return toContactDto(result);
     });
   } catch (error) {
-    if (isDuplicateKey(error)) throw duplicateEmailError();
+    if (isDuplicateKeyError(error)) throw duplicateEmailError();
     throw error;
   }
 }

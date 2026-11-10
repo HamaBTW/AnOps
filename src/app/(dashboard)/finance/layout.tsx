@@ -7,6 +7,8 @@ export default async function FinanceLayout({ children }: { children: React.Reac
   return (
     <>
       {children}
+      {/* The floating Copilot button covers the bottom-right corner, so give the page room to scroll clear of it. */}
+      {access.entitlements.aiFeatures && <div aria-hidden="true" className="h-20 print:hidden" />}
       {access.entitlements.aiFeatures && <FinanceCopilot />}
     </>
   );

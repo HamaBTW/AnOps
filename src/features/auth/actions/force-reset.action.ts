@@ -55,6 +55,7 @@ export async function forceResetPasswordAction(data: unknown): Promise<ForceRese
         $unset: {
           forcePasswordReset: "",
           passwordResetToken: "",
+          passwordResetTokenHash: "",
           passwordResetExpires: "",
         },
       }

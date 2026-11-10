@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local AI-assistant tooling (skills, plugins, helper scripts): vendored, not part of this application.
+    ".agents/**",
+    ".claude/**",
+    ".opencode/**",
   ]),
 ]);
 

@@ -2,11 +2,22 @@ import "server-only";
 import { randomUUID } from "crypto";
 import type { ZodType } from "zod";
 import { resolveWorkspace, type WorkspaceContext } from "@/server/tenancy/workspace";
+import { assertWorkspaceAppAccess } from "@/server/platform/access";
+import { isApplicationId, type ApplicationId } from "@/shared/domain/applications";
 import { consumeSharedRateLimit } from "@/server/security/shared-rate-limit";
 import { AppError, isAppError, type ActionError, type ActionResult } from "@/shared/lib/errors";
 import { toFieldErrors } from "@/shared/lib/validation";
 
 type RateLimit = { limit: number; windowMs: number };
+
+/**
+ * Operation names are "<application>.<entity>.<verb>". The application prefix decides which plan feature the
+ * call needs, so no action module can forget the check. ("ai" is gated separately by resolveAiAccess.)
+ */
+function appOfOperation(name: string): ApplicationId | null {
+  const prefix = name.split(".")[0];
+  return prefix !== "ai" && isApplicationId(prefix) ? prefix : null;
+}
 
 /**
  * Runs an authenticated, tenant-resolved operation for a server action. Every
@@ -21,6 +32,8 @@ export async function runAction<T>(
   const requestId = randomUUID();
   try {
     const ctx = await resolveWorkspace(requestId);
+    const app = appOfOperation(name);
+    if (app) await assertWorkspaceAppAccess(ctx, app);
     if (options.rateLimit) {
       await consumeSharedRateLimit(ctx.db, `user:${ctx.userId.toHexString()}:${name}`, options.rateLimit.limit, options.rateLimit.windowMs);
     }

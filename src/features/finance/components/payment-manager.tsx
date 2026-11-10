@@ -9,6 +9,7 @@ import type { MatchSuggestion } from "@/features/finance/utils/insights";
 import { Button } from "@/shared/components/ui/button";
 import { StatusBadge } from "@/shared/components/data-display/status-badge";
 import { FormMessage } from "@/shared/components/ui/form-message";
+import { DialogOverlay } from "@/shared/components/ui/dialog-overlay";
 
 type PaymentItem = {
   id: string;
@@ -227,6 +228,8 @@ export function PaymentManager({
               ) : (
                 payments.map((p) => {
                   const isUnallocated = p.unallocatedAmount > 0;
+                  // Nothing allocated yet is "Unallocated"; only a payment with some of it matched is "Partially allocated".
+                  const allocation = !isUnallocated ? "Fully allocated" : p.unallocatedAmount >= p.amount ? "Unallocated" : "Partially allocated";
                   return (
                     <tr key={p.id} className="hover:bg-[var(--color-bg-subtle)]/40 transition-colors">
                       <td className="py-3 px-4 text-xs text-[var(--color-text-primary)] whitespace-nowrap">
@@ -240,7 +243,7 @@ export function PaymentManager({
                       </td>
                       <td className="py-3 px-4">
                         <StatusBadge
-                          label={isUnallocated ? "Partially Allocated" : "Fully Allocated"}
+                          label={allocation}
                           tone={isUnallocated ? "warning" : "success"}
                         />
                       </td>
@@ -288,7 +291,7 @@ export function PaymentManager({
 
       {/* Allocation Modal */}
       {allocatingPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <DialogOverlay label="Allocate payment" onClose={() => setAllocatingPayment(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3">
               <div>
@@ -392,7 +395,7 @@ export function PaymentManager({
               </form>
             )}
           </div>
-        </div>
+        </DialogOverlay>
       )}
     </div>
   );

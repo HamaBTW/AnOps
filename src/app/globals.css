@@ -4,14 +4,14 @@
 
 @font-face {
   font-family: 'Manrope';
-  src: url('https://fonts.gstatic.com/s/manrope/v15/xn7gYHE41ni1AdIRggexSg.woff2') format('woff2');
+  src: url('/fonts/manrope-var.woff2') format('woff2');
   font-weight: 700 800;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'Inter';
-  src: url('https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA.woff2') format('woff2');
+  src: url('/fonts/inter-var.woff2') format('woff2');
   font-weight: 400 500 600;
   font-display: swap;
 }

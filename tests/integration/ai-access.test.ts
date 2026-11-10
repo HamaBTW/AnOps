@@ -117,10 +117,12 @@ describe("granting access", () => {
   });
 
   it("a read-only grant works for a viewer and never exposes writes", async () => {
-    await saveMemberGrant(actorOf(h, T.A.owner), T.A.employee.userId.toHexString(), grant({ inventory: READ, finance: READ }), 0);
+    await saveMemberGrant(actorOf(h, T.A.owner), T.A.employee.userId.toHexString(), grant({ inventory: READ }), 0);
     const access = await resolveAiAccess(actorOf(h, T.A.employee));
     expect(access.can("inventory", "view")).toBe(true);
     expect(access.can("inventory", "create")).toBe(false);
+    // Employees have no finance role at all, so AI cannot be granted it for them either.
+    expect(await code(saveMemberGrant(actorOf(h, T.A.owner), T.A.employee.userId.toHexString(), grant({ inventory: READ, finance: READ }), 1))).toBe("VALIDATION_ERROR");
   });
 
   it("an admin can grant managers and employees but not owners, other admins or themselves", async () => {

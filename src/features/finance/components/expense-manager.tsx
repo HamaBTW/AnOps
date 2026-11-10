@@ -16,6 +16,7 @@ import { StatusBadge, type BadgeTone } from "@/shared/components/data-display/st
 import { FormMessage } from "@/shared/components/ui/form-message";
 import type { ExpenseFlag } from "@/features/finance/utils/insights";
 import { Paperclip } from "lucide-react";
+import { DialogOverlay } from "@/shared/components/ui/dialog-overlay";
 
 type ExpenseItem = {
   id: string;
@@ -435,7 +436,7 @@ export function ExpenseManager({
 
       {/* Rejection Modal */}
       {rejectingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <DialogOverlay label="Reject expense" onClose={() => setRejectingId(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-xl space-y-4">
             <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
               Reject Expense
@@ -445,10 +446,10 @@ export function ExpenseManager({
             </p>
             <form onSubmit={handleRejectSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+                <label htmlFor="reject-reason" className="text-sm font-medium text-[var(--color-text-secondary)]">
                   Rejection Reason *
                 </label>
-                <textarea
+                <textarea id="reject-reason"
                   required
                   rows={3}
                   value={rejectionReason}
@@ -467,7 +468,7 @@ export function ExpenseManager({
               </div>
             </form>
           </div>
-        </div>
+        </DialogOverlay>
       )}
     </div>
   );

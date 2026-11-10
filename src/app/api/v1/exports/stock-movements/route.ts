@@ -6,5 +6,5 @@ import { stockMovementExportQuerySchema } from "@/features/exports/schemas/expor
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
-  return handleExport(request, "stock-movements", stockMovementExportQuerySchema, exportStockMovements);
+  return handleExport(request, "inventory", "stock-movements", stockMovementExportQuerySchema, exportStockMovements);
 }

@@ -36,3 +36,13 @@ export async function getAiHealth(db: Db): Promise<AiHealth> {
     problems,
   };
 }
+
+/**
+ * What an organization's owner or admin may see: whether AI can run right now. No provider names, no variable names,
+ * no limits or database facts: those are for the platform operator (use getAiHealth in scripts, never over HTTP).
+ */
+export type TenantAiHealth = { available: boolean; paused: boolean };
+
+export function toTenantHealth(health: AiHealth): TenantAiHealth {
+  return { available: health.anyProviderConfigured && !health.killSwitchOn, paused: health.killSwitchOn };
+}

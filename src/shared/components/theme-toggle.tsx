@@ -1,16 +1,24 @@
 "use client";
 
 import { IconMoon, IconSun } from "@/shared/components/ui/brand-icons";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  const stored = localStorage.getItem("anops:theme");
-  if (stored === "light" || stored === "dark") return stored;
-  if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
-  return "light";
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+/** The theme script in the root layout has already applied the stored or system theme to <html> before hydration. */
+function readTheme(): Theme {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
 function applyTheme(theme: Theme) {
@@ -24,34 +32,25 @@ function applyTheme(theme: Theme) {
   }
 }
 
+const noopSubscribe = () => () => {};
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const initial = getInitialTheme();
-    setTheme(initial);
-    applyTheme(initial);
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    applyTheme(theme);
-    localStorage.setItem("anops:theme", theme);
-  }, [theme, mounted]);
+  const theme = useSyncExternalStore(subscribe, readTheme, () => "light" as Theme);
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   const toggle = () => {
-    setTheme((current) => (current === "dark" ? "light" : "dark"));
+    const next: Theme = readTheme() === "dark" ? "light" : "dark";
+    applyTheme(next);
+    try {
+      localStorage.setItem("anops:theme", next);
+    } catch {
+      // Private mode or blocked storage: the theme still changes for this visit.
+    }
+    listeners.forEach((listener) => listener());
   };
 
-  if (!mounted) {
-    return (
-      <div
-        className="h-10 w-10 rounded-[var(--radius-control)]"
-        aria-hidden="true"
-      />
-    );
+  if (!hydrated) {
+    return <div className="h-10 w-10 rounded-[var(--radius-control)]" aria-hidden="true" />;
   }
 
   return (

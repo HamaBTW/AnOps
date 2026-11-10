@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentAuthUser } from "@/server/auth/rbac";
 import { gatedChat } from "@/server/ai/gate";
 import { resolveWorkspace } from "@/server/tenancy/workspace";
+import { isAppError } from "@/shared/lib/errors";
 import { getLeaveRecommendation } from "@/server/services/hr-advisor.service";
 
 const paramsSchema = z.object({ id: z.string().regex(/^[a-f\d]{24}$/i) });
@@ -14,7 +15,14 @@ function errorResponse(code: string, message: string, status: number) {
 }
 
 async function respond(context: RouteContext, refresh: boolean) {
-  const user = await getCurrentAuthUser();
+  let user: Awaited<ReturnType<typeof getCurrentAuthUser>>;
+  try {
+    user = await getCurrentAuthUser("hr-payroll");
+  } catch (error) {
+    // The application is not in the plan, or this member's access excludes it.
+    if (isAppError(error) && error.code === "FORBIDDEN") return errorResponse("FORBIDDEN", error.message, 403);
+    throw error;
+  }
   if (!user) return errorResponse("UNAUTHENTICATED", "Please log in to continue.", 401);
   if (!user.isAdmin) return errorResponse("FORBIDDEN", "Only HR administrators can view the Approval Advisor.", 403);
 

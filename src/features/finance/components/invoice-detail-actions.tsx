@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createCreditNoteAction, deleteInvoiceDraftAction, duplicateInvoiceAction, postInvoiceAction, voidInvoiceAction } from "@/features/finance/actions/finance.actions";
 import { Button } from "@/shared/components/ui/button";
 import { FormMessage } from "@/shared/components/ui/form-message";
+import { DialogOverlay } from "@/shared/components/ui/dialog-overlay";
 
 export function InvoiceDetailActions({
   invoiceId,
@@ -217,7 +218,7 @@ export function InvoiceDetailActions({
 
       {/* Void Reason Modal */}
       {showVoidModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 print:hidden backdrop-blur-sm">
+        <DialogOverlay label="Void invoice" onClose={() => setShowVoidModal(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 print:hidden backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-6 shadow-xl space-y-4">
             <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
               Void Invoice: {invoiceNumber}
@@ -227,10 +228,10 @@ export function InvoiceDetailActions({
             </p>
             <form onSubmit={handleVoid} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+                <label htmlFor="void-reason" className="text-sm font-medium text-[var(--color-text-secondary)]">
                   Reason for Voiding *
                 </label>
-                <textarea
+                <textarea id="void-reason"
                   required
                   rows={3}
                   value={voidReason}
@@ -254,7 +255,7 @@ export function InvoiceDetailActions({
               </div>
             </form>
           </div>
-        </div>
+        </DialogOverlay>
       )}
     </div>
   );

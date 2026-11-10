@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "crypto";
+import { cache } from "react";
 import { ObjectId, type Db } from "mongodb";
 import { redirect } from "next/navigation";
 import { getEntitlements } from "@/server/platform/subscription.service";
@@ -7,7 +8,7 @@ import { getPageWorkspace, resolveWorkspace, isEmailTrusted, type WorkspaceConte
 import { auth } from "@/server/auth";
 import clientPromise from "@/server/db/client";
 import { ensureIndexes } from "@/server/db/indexes";
-import { permissionsForRole, workspaceRoleFor } from "@/server/security/permissions";
+import { permissionsForRole, roleMayOpenApp, workspaceRoleFor } from "@/server/security/permissions";
 import { APPLICATION_IDS, isApplicationId, type ApplicationId } from "@/shared/domain/applications";
 import { effectiveApps, type Entitlements } from "@/shared/domain/plans";
 import type { CompanyRole } from "@/features/company/types";
@@ -49,7 +50,8 @@ async function build(ctx: WorkspaceContext): Promise<OrgAccess> {
     companyRole: member.companyRole,
     member,
     entitlements,
-    apps: effectiveApps(entitlements, member),
+    // Plan ∩ the member's own application access ∩ what their role may read at all (employees do not open Finance/Marketing/Purchasing).
+    apps: effectiveApps(entitlements, member).filter((id) => roleMayOpenApp(ctx.permissions, id)),
     organization: {
       id: ctx.companyId.toHexString(),
       name: String(company.name ?? ""),
@@ -60,10 +62,10 @@ async function build(ctx: WorkspaceContext): Promise<OrgAccess> {
   };
 }
 
-/** Active-company access for pages (redirects like getPageWorkspace). */
-export async function getPageOrgAccess(): Promise<OrgAccess> {
+/** Active-company access for pages (redirects like getPageWorkspace). Shared by every layout and page of one render. */
+export const getPageOrgAccess = cache(async function getPageOrgAccess(): Promise<OrgAccess> {
   return build(await getPageWorkspace());
-}
+});
 
 export async function resolveOrgAccess(requestId: string = randomUUID()): Promise<OrgAccess> {
   return build(await resolveWorkspace(requestId));
@@ -94,6 +96,28 @@ export async function requireAiFeatures(appHome: string): Promise<OrgAccess> {
 /** Throws FORBIDDEN when the application is not available (for server actions and route handlers). */
 export function assertAppAccess(access: OrgAccess, appId: ApplicationId): void {
   if (!access.apps.includes(appId)) throw new AppError("FORBIDDEN", "This application is not included in your organization's plan or your access.");
+}
+
+/**
+ * Server-side application guard for actions, services and route handlers. Page layouts only protect
+ * navigation: anything callable by URL or action ID must verify the plan (trial, subscription, free app)
+ * and the member's own application restriction here, on every call.
+ */
+export async function assertAppAccessFor(db: Db, companyId: ObjectId, userId: ObjectId, appId: ApplicationId): Promise<void> {
+  const [member, entitlements] = await Promise.all([loadMember(db, companyId, userId), getEntitlements(db, companyId)]);
+  const permissions = member ? permissionsForRole(workspaceRoleFor(member.companyRole)) : null;
+  if (!member || !permissions || !effectiveApps(entitlements, member).includes(appId) || !roleMayOpenApp(permissions, appId)) {
+    throw new AppError("FORBIDDEN", "This application is not included in your organization's plan or your access.");
+  }
+}
+
+/** AI features (not a single application): trial, MaxOps and Custom with the AI add-on. Checked on every AI call that is not tied to an app page. */
+export async function assertAiEntitled(db: Db, companyId: ObjectId): Promise<void> {
+  if (!(await getEntitlements(db, companyId)).aiFeatures) throw new AppError("FORBIDDEN", "AI features are not included in this organization's plan.");
+}
+
+export function assertWorkspaceAppAccess(ctx: WorkspaceContext, appId: ApplicationId): Promise<void> {
+  return assertAppAccessFor(ctx.db, ctx.companyId, ctx.userId, appId);
 }
 
 /**

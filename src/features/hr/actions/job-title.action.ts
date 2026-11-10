@@ -18,7 +18,7 @@ import { requireAdminUser } from "@/server/auth/rbac";
 
 export async function createJobTitleAction(title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = jobTitleSchema.safeParse({ title, departmentId });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid job title." };
@@ -35,7 +35,7 @@ export async function createJobTitleAction(title: string, departmentId?: string)
 
 export async function updateJobTitleAction(id: string, title: string, departmentId?: string): Promise<ActionResult<JobTitle>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = jobTitleSchema.safeParse({ title, departmentId });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid job title." };
@@ -52,7 +52,7 @@ export async function updateJobTitleAction(id: string, title: string, department
 
 export async function deleteJobTitleAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     await deleteJobTitle(id, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: { id } };
@@ -64,7 +64,7 @@ export async function deleteJobTitleAction(id: string): Promise<ActionResult<{ i
 
 export async function fetchJobTitlesAction(): Promise<ActionResult<JobTitle[]>> {
   try {
-    const user = await requireAuthUser();
+    const user = await requireAuthUser("hr-payroll");
     const titles = await getJobTitles(user.companyId);
     return { success: true, data: titles };
   } catch (err: unknown) {
@@ -75,7 +75,7 @@ export async function fetchJobTitlesAction(): Promise<ActionResult<JobTitle[]>> 
 
 export async function reseedDefaultsAction(): Promise<ActionResult<boolean>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     await seedHrDefaultsForCompany(admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: true };
@@ -87,7 +87,7 @@ export async function reseedDefaultsAction(): Promise<ActionResult<boolean>> {
 
 export async function fetchJobTitleStaffAction(title: string): Promise<ActionResult<Employee[]>> {
   try {
-    const user = await requireAuthUser();
+    const user = await requireAuthUser("hr-payroll");
     // Colleagues' names only: salary is stripped for everyone but HR administrators.
     const all = await getEmployeesByJobTitle(title, user.companyId);
     const employees = user.isAdmin ? all : all.filter((e) => e.status === "active").map((e) => ({ ...e, baseSalary: 0, dateOfBirth: undefined }));

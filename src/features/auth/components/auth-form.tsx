@@ -11,7 +11,7 @@ export function AuthCard({
   description?: string;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg-canvas)]">
+    <main id="main" className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg-canvas)]">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center justify-center mb-6">
@@ -33,7 +33,7 @@ export function AuthCard({
           {children}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 

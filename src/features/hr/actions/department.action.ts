@@ -16,7 +16,7 @@ import { requireAdminUser, requireAuthUser } from "@/server/auth/rbac";
 
 export async function createDepartmentAction(name: string, description?: string): Promise<ActionResult<Department>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = departmentSchema.safeParse({ name, description });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid department name." };
@@ -33,7 +33,7 @@ export async function createDepartmentAction(name: string, description?: string)
 
 export async function updateDepartmentAction(id: string, name: string, description?: string): Promise<ActionResult<Department>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     const parsed = departmentSchema.safeParse({ name, description });
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message || "Invalid department name." };
@@ -50,7 +50,7 @@ export async function updateDepartmentAction(id: string, name: string, descripti
 
 export async function deleteDepartmentAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    const admin = await requireAdminUser();
+    const admin = await requireAdminUser("hr-payroll");
     await deleteDepartment(id, admin.companyId);
     revalidatePath("/hr");
     return { success: true, data: { id } };
@@ -62,7 +62,7 @@ export async function deleteDepartmentAction(id: string): Promise<ActionResult<{
 
 export async function fetchDepartmentsAction(): Promise<ActionResult<Department[]>> {
   try {
-    const user = await requireAuthUser();
+    const user = await requireAuthUser("hr-payroll");
     const departments = await getDepartments(user.companyId);
     return { success: true, data: departments };
   } catch (err: unknown) {
@@ -73,7 +73,7 @@ export async function fetchDepartmentsAction(): Promise<ActionResult<Department[
 
 export async function fetchDepartmentStaffAction(departmentId: string): Promise<ActionResult<Employee[]>> {
   try {
-    const user = await requireAuthUser();
+    const user = await requireAuthUser("hr-payroll");
     const employees = await getEmployeesByDepartment(departmentId, user.companyId);
     return { success: true, data: employees };
   } catch (err: unknown) {

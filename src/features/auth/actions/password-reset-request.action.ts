@@ -1,9 +1,10 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import clientPromise from "@/server/db/client";
 import { forgotPasswordSchema } from "@/features/auth/schemas/auth.schema";
 import { sendPasswordResetEmail } from "@/server/email";
+import { allowAuthAttempt, requestIp } from "@/server/security/auth-throttle";
+import { generateResetToken, hashResetToken, maskEmail, RESET_TOKEN_TTL_MS } from "@/server/auth/reset-token";
 
 export type ForgotPasswordResult = {
   ok: boolean;
@@ -26,16 +27,21 @@ export async function requestPasswordReset(data: unknown): Promise<ForgotPasswor
   }
 
   const email = parsed.data.email.toLowerCase().trim();
-  console.info(`[auth] password reset requested for ${email}`);
+  console.info(`[auth] password reset requested for ${maskEmail(email)}`);
 
   try {
     const client = await clientPromise;
     const db = client.db();
     const users = db.collection("users");
 
+    // Same answer whether the account exists or the limit was hit: nothing to learn from the response.
+    if (!(await allowAuthAttempt(db, "password-reset", await requestIp(), email, { pair: 3, account: 5, ip: 20, windowMs: 60 * 60_000 }))) {
+      return { ok: true, message: "If an account exists, a reset link has been sent.", emailAttempted: false, emailDelivered: false };
+    }
+
     const user = await users.findOne({ email });
     if (!user) {
-      console.warn(`[auth] password reset: no user found for ${email} — no email sent`);
+      console.warn(`[auth] password reset: no user found for ${maskEmail(email)} — no email sent`);
       return {
         ok: true,
         message: "If an account exists, a reset link has been sent.",
@@ -44,15 +50,17 @@ export async function requestPasswordReset(data: unknown): Promise<ForgotPasswor
       };
     }
 
-    const token = randomBytes(32).toString("hex");
+    const token = generateResetToken();
     await users.updateOne(
       { _id: user._id },
       {
         $set: {
-          passwordResetToken: token,
-          passwordResetExpires: new Date(Date.now() + 1000 * 60 * 60),
+          // Only the hash is stored; the raw token exists in the email alone.
+          passwordResetTokenHash: hashResetToken(token),
+          passwordResetExpires: new Date(Date.now() + RESET_TOKEN_TTL_MS),
           updatedAt: new Date(),
         },
+        $unset: { passwordResetToken: "" },
       }
     );
 
@@ -62,7 +70,7 @@ export async function requestPasswordReset(data: unknown): Promise<ForgotPasswor
       const mailResult = await sendPasswordResetEmail(email, name, token);
       if (!mailResult.delivered) {
         console.error(
-          `[auth] Password reset email NOT delivered to ${email} (reason=${mailResult.reason ?? "unknown"}${mailResult.error ? `, error=${mailResult.error}` : ""})`
+          `[auth] Password reset email NOT delivered to ${maskEmail(email)} (reason=${mailResult.reason ?? "unknown"}${mailResult.error ? `, error=${mailResult.error}` : ""})`
         );
         return {
           ok: true,

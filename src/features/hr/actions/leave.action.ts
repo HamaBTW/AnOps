@@ -33,7 +33,7 @@ import { requireAuthUser } from "@/server/auth/rbac";
 
 export async function submitLeaveRequestAction(rawData: unknown): Promise<ActionResult<LeaveRequest>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const parsed = leaveRequestSchema.safeParse(rawData);
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message || "Invalid leave request parameters.";
@@ -59,7 +59,7 @@ export async function reviewLeaveRequestAction(
   reviewerName?: string
 ): Promise<ActionResult<LeaveRequest>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (authUser.role !== "hr_admin" && authUser.role !== "manager") {
       return { error: "Forbidden: Only HR administrators or managers can review leave requests." };
     }
@@ -82,7 +82,7 @@ export async function reviewLeaveRequestAction(
 
 export async function getLeaveBalanceAction(employeeId: string): Promise<ActionResult<LeaveBalance>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     // Non-admin can only inspect their own leave balance
     if (!authUser.isAdmin && authUser.employee && employeeId !== authUser.employee.id) {
       return { error: "Forbidden: You may only view your own leave balance." };
@@ -101,7 +101,7 @@ export async function fetchLeaveRequestsAction(filter: {
   status?: string;
 }): Promise<ActionResult<LeaveRequest[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     // Non-admin can only fetch their own leave requests
     const effectiveFilter = !authUser.isAdmin && authUser.employee
       ? { ...filter, employeeId: authUser.employee.id }
@@ -117,7 +117,7 @@ export async function fetchLeaveRequestsAction(filter: {
 
 export async function getSoldeDeCongeAction(employeeId?: string): Promise<ActionResult<SoldeDeConge>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const targetEmpId = employeeId || authUser.employee?.id;
     if (!targetEmpId) {
       return { error: "Employee context not found." };
@@ -140,7 +140,7 @@ export async function fetchLeaveTransactionsAction(filter: {
   leaveTypeId?: string;
 }): Promise<ActionResult<LeaveTransactionRecord[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const targetEmpId = !authUser.isAdmin && authUser.employee ? authUser.employee.id : filter.employeeId;
 
     const txs = await getLeaveTransactions({ ...filter, employeeId: targetEmpId }, authUser.companyId);
@@ -153,7 +153,7 @@ export async function fetchLeaveTransactionsAction(filter: {
 
 export async function createManualAdjustmentAction(rawData: unknown): Promise<ActionResult<LeaveTransactionRecord>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (authUser.role !== "hr_admin" && authUser.role !== "manager") {
       return { error: "Forbidden: Only HR administrators can create manual leave adjustments." };
     }
@@ -178,7 +178,7 @@ export async function reverseLeaveTransactionAction(
   reason: string
 ): Promise<ActionResult<LeaveTransactionRecord>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (authUser.role !== "hr_admin") {
       return { error: "Forbidden: Only HR administrators can reverse transactions." };
     }
@@ -201,7 +201,7 @@ export async function cancelLeaveRequestAction(
   reason: string
 ): Promise<ActionResult<LeaveRequest>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
 
     // HR admins may cancel any request in their company. Everyone else, only their own.
     if (!authUser.isAdmin) {
@@ -225,7 +225,7 @@ export async function cancelLeaveRequestAction(
 
 export async function runMonthlyAccrualAction(periodDateStr?: string): Promise<ActionResult<{ processed: number; accruedEmployees: string[] }>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (authUser.role !== "hr_admin") {
       return { error: "Forbidden: Only HR administrators can run leave accruals." };
     }
@@ -242,7 +242,7 @@ export async function runMonthlyAccrualAction(periodDateStr?: string): Promise<A
 
 export async function fetchLeaveTypesAction(): Promise<ActionResult<LeaveTypeRecord[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const types = await getLeaveTypes(authUser.companyId);
     return { success: true, data: types };
   } catch (err: unknown) {
@@ -253,7 +253,7 @@ export async function fetchLeaveTypesAction(): Promise<ActionResult<LeaveTypeRec
 
 export async function fetchLeavePoliciesAction(): Promise<ActionResult<LeavePolicyRecord[]>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     const policies = await getLeavePolicies(authUser.companyId);
     return { success: true, data: policies };
   } catch (err: unknown) {
@@ -264,7 +264,7 @@ export async function fetchLeavePoliciesAction(): Promise<ActionResult<LeavePoli
 
 export async function getDepartureReviewAction(employeeId: string) {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (authUser.role !== "hr_admin") {
       return { error: "Forbidden: Only HR administrators can review departure compensations." };
     }
@@ -282,7 +282,7 @@ export async function confirmDepartureCompensationAction(
   reason: string
 ): Promise<ActionResult<LeaveTransactionRecord>> {
   try {
-    const authUser = await requireAuthUser();
+    const authUser = await requireAuthUser("hr-payroll");
     if (authUser.role !== "hr_admin") {
       return { error: "Forbidden: Only HR administrators can confirm departure compensations." };
     }

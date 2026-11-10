@@ -29,7 +29,7 @@ export async function createCompany(
   const db = await getDb();
   const trimmedName = data.name.trim();
 
-  let baseSlug = slugify(trimmedName) || "company";
+  const baseSlug = slugify(trimmedName) || "company";
   let uniqueSlug = baseSlug;
   let counter = 1;
 

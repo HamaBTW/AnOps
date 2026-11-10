@@ -26,8 +26,10 @@ import { COLLECTIONS } from "@/server/db/documents";
 import { productExportQuerySchema, purchaseOrderExportQuerySchema } from "@/features/exports/schemas/export.schema";
 
 /** Resolves the tenant the route handler uses. Each test sets it, so no test depends on another. */
-const { resolveMock } = vi.hoisted(() => ({ resolveMock: vi.fn() }));
+const { resolveMock, appGuardMock } = vi.hoisted(() => ({ resolveMock: vi.fn(), appGuardMock: vi.fn() }));
 vi.mock("@/server/tenancy/workspace", () => ({ resolveWorkspace: resolveMock }));
+/** The plan/app guard is covered by platform-lifecycle.test.ts; here it only needs to be switchable per test. */
+vi.mock("@/server/platform/access", () => ({ assertWorkspaceAppAccess: appGuardMock }));
 
 import { GET as productsRoute } from "@/app/api/v1/exports/products/route";
 import { GET as movementsRoute } from "@/app/api/v1/exports/stock-movements/route";
@@ -135,6 +137,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   resolveMock.mockReset();
+  appGuardMock.mockReset();
+  appGuardMock.mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -320,6 +324,15 @@ describe("HTTP route handlers", () => {
     const body = await response.json();
     expect(body.error.code).toBe("UNAUTHENTICATED");
     expect(JSON.stringify(body)).not.toMatch(/stack|mongodb|at /i);
+  });
+
+  it("refuses an export when the organization's plan or the member's access does not include the application", async () => {
+    resolveMock.mockResolvedValueOnce(h.ctx());
+    appGuardMock.mockRejectedValueOnce(new AppError("FORBIDDEN", "This application is not included in your organization's plan or your access."));
+    const response = await productsRoute(new Request("http://localhost/api/v1/exports/products"));
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.code).toBe("FORBIDDEN");
+    expect(appGuardMock).toHaveBeenCalledWith(expect.anything(), "inventory");
   });
 
   it("rejects unknown or invalid filters with 400", async () => {

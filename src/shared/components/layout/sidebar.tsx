@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   IconGrid,
   IconSettings,
@@ -118,13 +118,12 @@ export function Sidebar({
   const permissionSet = new Set(permissions);
   const installed = APPLICATIONS.filter((app) => allowedApps.includes(app.id));
 
-  useEffect(() => {
+  // The app switcher closes when the page or the mobile drawer changes (state adjusted during render, not in an effect).
+  const [seen, setSeen] = useState({ pathname, mobileOpen });
+  if (seen.pathname !== pathname || seen.mobileOpen !== mobileOpen) {
+    setSeen({ pathname, mobileOpen });
     setOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    setOpen(false);
-  }, [mobileOpen]);
+  }
 
   return (
     <aside

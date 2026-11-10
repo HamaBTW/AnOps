@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useId } from "react";
 import Link from "next/link";
 import { createInvoiceDraftAction, updateInvoiceDraftAction } from "@/features/finance/actions/finance.actions";
 import { Button, selectClass } from "@/shared/components/ui/button";
@@ -52,6 +52,7 @@ export function InvoiceBuilderForm({
   preselectedCustomerId?: string;
   initialInvoice?: InvoiceDraftValues;
 }) {
+  const uid = useId();
   const editing = !!initialInvoice;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -217,7 +218,7 @@ export function InvoiceBuilderForm({
           {/* Customer Selection */}
           <div className="space-y-1 sm:col-span-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)]">
+              <label htmlFor={`${uid}-customer`} className="text-sm font-medium text-[var(--color-text-secondary)]">
                 Bill To Customer *
               </label>
               <Link
@@ -239,6 +240,7 @@ export function InvoiceBuilderForm({
               </div>
             ) : (
               <select
+                id={`${uid}-customer`}
                 value={customerId}
                 onChange={(e) => setCustomerId(e.target.value)}
                 required
@@ -265,8 +267,8 @@ export function InvoiceBuilderForm({
 
           {/* Currency */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Currency</label>
-            <select
+            <label htmlFor={`${uid}-0`} className="text-sm font-medium text-[var(--color-text-secondary)]">Currency</label>
+            <select id={`${uid}-0`}
               value={currency}
               onChange={(e) => setCurrency(e.target.value as Currency)}
               className={selectClass}
@@ -280,8 +282,8 @@ export function InvoiceBuilderForm({
 
           {/* Issue Date */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Issue Date *</label>
-            <input
+            <label htmlFor={`${uid}-1`} className="text-sm font-medium text-[var(--color-text-secondary)]">Issue Date *</label>
+            <input id={`${uid}-1`}
               type="date"
               required
               value={issueDate}
@@ -292,8 +294,8 @@ export function InvoiceBuilderForm({
 
           {/* Due Date */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">Due Date</label>
-            <input
+            <label htmlFor={`${uid}-2`} className="text-sm font-medium text-[var(--color-text-secondary)]">Due Date</label>
+            <input id={`${uid}-2`}
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
@@ -329,10 +331,10 @@ export function InvoiceBuilderForm({
                 {/* Product catalog selector (optional) */}
                 {products.length > 0 && (
                   <div className="sm:col-span-4 space-y-1">
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)]">
+                    <label htmlFor={`${uid}-line${index}-3`} className="text-xs font-medium text-[var(--color-text-secondary)]">
                       Catalog Item (Optional)
                     </label>
-                    <select
+                    <select id={`${uid}-line${index}-3`}
                       value={line.productId || ""}
                       onChange={(e) => handleProductSelect(index, e.target.value)}
                       className="w-full min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-2 text-xs text-[var(--color-text-primary)]"
@@ -349,10 +351,10 @@ export function InvoiceBuilderForm({
 
                 {/* Description */}
                 <div className={products.length > 0 ? "sm:col-span-8" : "sm:col-span-12"}>
-                  <label className="text-xs font-medium text-[var(--color-text-secondary)]">
+                  <label htmlFor={`${uid}-line${index}-4`} className="text-xs font-medium text-[var(--color-text-secondary)]">
                     Item Description *
                   </label>
-                  <input
+                  <input id={`${uid}-line${index}-4`}
                     type="text"
                     required
                     value={line.description}
@@ -366,8 +368,8 @@ export function InvoiceBuilderForm({
               <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 items-end">
                 {/* Quantity */}
                 <div className="sm:col-span-3 space-y-1">
-                  <label className="text-xs font-medium text-[var(--color-text-secondary)]">Qty *</label>
-                  <input
+                  <label htmlFor={`${uid}-line${index}-5`} className="text-xs font-medium text-[var(--color-text-secondary)]">Qty *</label>
+                  <input id={`${uid}-line${index}-5`}
                     type="number"
                     min="1"
                     step="1"
@@ -380,10 +382,10 @@ export function InvoiceBuilderForm({
 
                 {/* Unit Price */}
                 <div className="sm:col-span-3 space-y-1">
-                  <label className="text-xs font-medium text-[var(--color-text-secondary)]">
+                  <label htmlFor={`${uid}-line${index}-6`} className="text-xs font-medium text-[var(--color-text-secondary)]">
                     Unit Price ({currency}) *
                   </label>
-                  <input
+                  <input id={`${uid}-line${index}-6`}
                     type="number"
                     min="0"
                     step="0.001"
@@ -396,8 +398,8 @@ export function InvoiceBuilderForm({
 
                 {/* Tax Rate % */}
                 <div className="sm:col-span-3 space-y-1">
-                  <label className="text-xs font-medium text-[var(--color-text-secondary)]">VAT / Tax %</label>
-                  <select
+                  <label htmlFor={`${uid}-line${index}-7`} className="text-xs font-medium text-[var(--color-text-secondary)]">VAT / Tax %</label>
+                  <select id={`${uid}-line${index}-7`}
                     value={line.taxRate}
                     onChange={(e) => updateLine(index, "taxRate", parseFloat(e.target.value) || 0)}
                     className="w-full min-h-[38px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-bg-surface)] px-2 text-sm text-[var(--color-text-primary)] text-right"
@@ -464,8 +466,8 @@ export function InvoiceBuilderForm({
       {/* Notes and Terms */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
-          <label className="text-sm font-medium text-[var(--color-text-secondary)]">Payment Terms</label>
-          <input
+          <label htmlFor={`${uid}-8`} className="text-sm font-medium text-[var(--color-text-secondary)]">Payment Terms</label>
+          <input id={`${uid}-8`}
             type="text"
             value={terms}
             onChange={(e) => setTerms(e.target.value)}
@@ -473,8 +475,8 @@ export function InvoiceBuilderForm({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-sm font-medium text-[var(--color-text-secondary)]">Notes (Displayed on Invoice)</label>
-          <input
+          <label htmlFor={`${uid}-9`} className="text-sm font-medium text-[var(--color-text-secondary)]">Notes (Displayed on Invoice)</label>
+          <input id={`${uid}-9`}
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

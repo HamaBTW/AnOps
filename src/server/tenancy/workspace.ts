@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "crypto";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { ObjectId, type Db } from "mongodb";
 import { auth } from "@/server/auth";
@@ -75,8 +76,12 @@ export function isEmailTrusted(user: Record<string, unknown>, now = new Date()):
   return user.provisionalUntil instanceof Date && user.provisionalUntil > now;
 }
 
-/** Page-level variant: visitors go to login; users without a company go to onboarding. */
-export async function getPageWorkspace(): Promise<WorkspaceContext> {
+/**
+ * Page-level variant: visitors go to login; users without a company go to onboarding.
+ * Memoized for one render: the layout, nested layouts and the page all ask for it, and it is read-only, so they
+ * share one set of identity and membership lookups instead of repeating them (actions use resolveWorkspace directly).
+ */
+export const getPageWorkspace = cache(async function getPageWorkspace(): Promise<WorkspaceContext> {
   try {
     return await resolveWorkspace();
   } catch (error) {
@@ -84,4 +89,4 @@ export async function getPageWorkspace(): Promise<WorkspaceContext> {
     if (isAppError(error) && error.code === "NO_COMPANY") redirect("/onboarding");
     throw error;
   }
-}
+});

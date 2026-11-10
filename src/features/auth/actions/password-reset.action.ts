@@ -2,6 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import clientPromise from "@/server/db/client";
+import { hashResetToken } from "@/server/auth/reset-token";
 import { resetPasswordSchema } from "@/features/auth/schemas/auth.schema";
 
 export type ResetPasswordResult = {
@@ -22,10 +23,12 @@ export async function resetPassword(data: unknown): Promise<ResetPasswordResult>
     const db = client.db();
     const users = db.collection("users");
 
-    const user = await users.findOne({
-      passwordResetToken: token,
-      passwordResetExpires: { $gt: new Date() },
-    });
+    // Look up by hash and consume in the same atomic step: a token works once, even if two requests race.
+    const user = await users.findOneAndUpdate(
+      { passwordResetTokenHash: hashResetToken(token), passwordResetExpires: { $gt: new Date() } },
+      { $unset: { passwordResetTokenHash: "", passwordResetToken: "", passwordResetExpires: "" } },
+      { returnDocument: "before", projection: { _id: 1 } }
+    );
 
     if (!user) {
       return { ok: false, message: "Invalid or expired reset token" };
@@ -40,10 +43,8 @@ export async function resetPassword(data: unknown): Promise<ResetPasswordResult>
           password: hashedPassword,
           updatedAt: new Date(),
         },
-        $unset: {
-          passwordResetToken: "",
-          passwordResetExpires: "",
-        },
+        // Any other reset link still outstanding for this account dies with the password change.
+        $unset: { passwordResetTokenHash: "", passwordResetToken: "", passwordResetExpires: "", forcePasswordReset: "" },
       }
     );
 
